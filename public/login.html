@@ -81,8 +81,8 @@
               type="email" 
               id="login-email" 
               required 
-              placeholder="admin@centraltower.kr" 
-              value="admin@centraltower.kr" 
+              placeholder="admin@fms.kr" 
+              value="admin@fms.kr" 
               class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors"
             >
           </div>
@@ -122,9 +122,9 @@
               <span class="block font-bold text-white text-[11px]">슈퍼관리자</span>
               <span class="text-[10px] text-[#13B5EA]">통합 관제</span>
             </button>
-            <button type="button" onclick="fillAccount('admin@centraltower.kr')" class="py-2 px-1 border border-[#005B82] rounded-lg bg-[#002B41] hover:border-[#13B5EA] text-center transition-colors">
+            <button type="button" onclick="fillAccount('admin@fms.kr')" class="py-2 px-1 border border-[#005B82] rounded-lg bg-[#002B41] hover:border-[#13B5EA] text-center transition-colors">
               <span class="block font-bold text-white text-[11px]">센트럴 마스터</span>
-              <span class="text-[10px] text-[#13B5EA]">회사 관제</span>
+              <span class="text-[10px] text-[#13B5EA]">admin@fms.kr</span>
             </button>
             <button type="button" onclick="fillAccount('kang.elec@fms.kr')" class="py-2 px-1 border border-[#005B82] rounded-lg bg-[#002B41] hover:border-[#13B5EA] text-center transition-colors">
               <span class="block font-bold text-white text-[11px]">현장 실무자</span>
@@ -236,6 +236,13 @@
           btn.disabled = false;
           btn.textContent = '로그인';
           return;
+        }
+
+        if (data.user) {
+          try {
+            localStorage.setItem('fielder_user', JSON.stringify(data.user));
+            sessionStorage.setItem('fielder_user', JSON.stringify(data.user));
+          } catch(e) {}
         }
 
         location.href = data.redirect_url;

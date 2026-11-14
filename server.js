@@ -744,7 +744,7 @@ const server = http.createServer(async (req, res) => {
         FROM users u 
         LEFT JOIN custom_roles r ON u.custom_role_id = r.id 
         WHERE u.company_id = ?
-        ORDER BY u.created_at DESC
+        ORDER BY (u.role = 'ADMIN') DESC, u.created_at DESC
       `).all(companyId);
       return sendJSON(res, 200, users);
     }
@@ -752,13 +752,38 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const companyId = resolveCompanyId(parsedUrl, body);
       const { name, email, password, phone, role, custom_role_id } = body;
-      if (!name) return sendJSON(res, 400, { error: '이름을 입력하세요.' });
-      if (!email) return sendJSON(res, 400, { error: '로그인 아이디(이메일)를 입력하세요.' });
+      if (!name || !name.trim()) return sendJSON(res, 400, { error: '이름을 입력하세요.' });
+      if (!email || !email.trim()) return sendJSON(res, 400, { error: '로그인 아이디(이메일)를 입력하세요.' });
+      
+      const cleanName = name.trim();
+      const cleanEmail = email.trim().toLowerCase();
+
+      // ⭐️ 동일 이메일 계정이 존재하는 경우 새로 중복 생성하지 않고 기존 계정 정보를 똑똑하게 갱신
+      const existing = db.prepare('SELECT id, role FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
+      if (existing) {
+        db.prepare(`
+          UPDATE users
+          SET name = ?, phone = ?, role = ?, custom_role_id = ?, password = CASE WHEN ? != '' THEN ? ELSE password END
+          WHERE id = ?
+        `).run(cleanName, phone || '', role || 'WORKER', custom_role_id || null, password || '', password || '', existing.id);
+
+        if (role === 'ADMIN' || existing.role === 'ADMIN' || existing.id === 'user_admin') {
+          db.prepare('UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = ?').run(cleanName, cleanEmail, companyId);
+        }
+        broadcastSSE('USER_UPDATED', { action: 'UPDATE', id: existing.id, name: cleanName, email: cleanEmail });
+        return sendJSON(res, 200, { success: true, id: existing.id, message: `기존 계정 [${cleanName}] 정보가 정상적으로 업데이트되었습니다.` });
+      }
+
       const id = 'user_' + Date.now();
       db.prepare(`
         INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, companyId, role || 'WORKER', name, email, password || '1234', phone || '', custom_role_id || null);
+      `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, password || '1234', phone || '', custom_role_id || null);
+
+      if (role === 'ADMIN') {
+        db.prepare('UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = "")').run(cleanName, companyId);
+      }
+
       broadcastSSE('USER_UPDATED', { action: 'CREATE', id });
       return sendJSON(res, 201, { success: true, id, message: '사용자가 등록되었습니다.' });
     }
@@ -771,12 +796,30 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/users\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const userId = pathname.split('/')[3];
       const { name, email, password, phone, role, custom_role_id } = await parseBody(req);
+      
+      const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+      if (!targetUser) return sendJSON(res, 404, { error: '사용자를 찾을 수 없습니다.' });
+
+      const newName = (name && name.trim()) ? name.trim() : targetUser.name;
+      const newEmail = (email && email.trim()) ? email.trim().toLowerCase() : targetUser.email;
+
       db.prepare(`
         UPDATE users
-        SET name = ?, email = COALESCE(?, email), password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?
+        SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?
         WHERE id = ?
-      `).run(name, email || null, password || '', password || '', phone || '', role || 'WORKER', custom_role_id || null, userId);
-      broadcastSSE('USER_UPDATED', { action: 'UPDATE', id: userId });
+      `).run(newName, newEmail, password || '', password || '', phone || '', role || 'WORKER', custom_role_id || null, userId);
+
+      // ⭐️ 관리자(ADMIN)이거나 user_admin인 경우 companies 테이블의 admin_name 및 admin_email 도 즉시 동기화!
+      if (targetUser.role === 'ADMIN' || userId === 'user_admin' || role === 'ADMIN') {
+        db.prepare(`
+          UPDATE companies
+          SET admin_name = COALESCE(?, admin_name),
+              admin_email = COALESCE(?, admin_email)
+          WHERE id = ?
+        `).run(newName, newEmail, targetUser.company_id);
+      }
+
+      broadcastSSE('USER_UPDATED', { action: 'UPDATE', id: userId, name: newName, email: newEmail });
       return sendJSON(res, 200, { success: true, message: '사용자 정보가 수정되었습니다.' });
     }
     if (pathname.match(/^\/api\/users\/([^/]+)\/reset-password$/) && method === 'POST') {
@@ -1449,21 +1492,25 @@ const server = http.createServer(async (req, res) => {
 
       // 2) 회사 마스터 관리자 (companies 테이블 admin_email)
       let companyAdmin = db.prepare('SELECT * FROM companies WHERE LOWER(admin_email) = ?').get(email);
-      if (!companyAdmin && (email === 'admin@central.kr' || email === 'admin@fms.kr')) {
+      if (!companyAdmin && (email === 'admin@central.kr' || email === 'admin@fms.kr' || email === 'admin@centraltower.kr')) {
         companyAdmin = db.prepare('SELECT * FROM companies WHERE subdomain = ?').get('central');
       }
       if (companyAdmin) {
-        const adminUser = db.prepare("SELECT password FROM users WHERE company_id = ? AND (LOWER(email) = ? OR role = 'ADMIN') LIMIT 1").get(companyAdmin.id, email);
+        // users 테이블에서 최신 사용자 정보 조회 (동일 이메일 우선 -> ADMIN 계정)
+        const adminUser = db.prepare("SELECT * FROM users WHERE company_id = ? AND (LOWER(email) = ? OR role = 'ADMIN') ORDER BY (LOWER(email) = ?) DESC, created_at ASC LIMIT 1").get(companyAdmin.id, email, email);
         const expectedPw = (adminUser && adminUser.password) ? adminUser.password : '1234';
         if (password !== expectedPw) {
           return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
         }
+        const effectiveName = (adminUser && adminUser.name) ? adminUser.name : (companyAdmin.admin_name || '마스터 관리자');
+        const effectiveEmail = (adminUser && adminUser.email) ? adminUser.email : (companyAdmin.admin_email || email);
         return sendJSON(res, 200, {
           success: true,
           role: 'COMPANY_ADMIN',
           user: {
-            name: companyAdmin.admin_name || '마스터 관리자',
-            email: companyAdmin.admin_email,
+            id: adminUser ? adminUser.id : 'user_admin',
+            name: effectiveName,
+            email: effectiveEmail,
             company_id: companyAdmin.id,
             company_name: companyAdmin.name,
             subdomain: companyAdmin.subdomain,

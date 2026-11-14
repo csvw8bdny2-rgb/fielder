@@ -66,12 +66,12 @@
       <!-- 우측: 프로필 아바타 -->
       <div class="flex items-center flex-shrink-0 ml-4">
         <div class="flex items-center space-x-2.5 py-1 pl-2 pr-0 rounded-lg hover:bg-white/10 transition cursor-pointer" onclick="location.href='/login'" title="클릭 시 로그인 화면으로 이동">
-          <div class="w-8 h-8 rounded-full bg-[#005B82] border border-[#13B5EA]/60 flex items-center justify-center font-bold text-xs text-white flex-shrink-0 shadow-xs">
-            김
+          <div class="w-8 h-8 rounded-full bg-[#005B82] border border-[#13B5EA]/60 flex items-center justify-center font-bold text-xs text-white flex-shrink-0 shadow-xs" id="header-user-avatar">
+            관
           </div>
           <div class="text-left hidden sm:block min-w-0">
-            <span class="text-xs font-bold text-white block leading-tight truncate" id="header-user-name">김관리 소장</span>
-            <span class="text-[10px] text-slate-300 block leading-tight">총괄 관리자</span>
+            <span class="text-xs font-bold text-white block leading-tight truncate" id="header-user-name">관리자</span>
+            <span class="text-[10px] text-slate-300 block leading-tight truncate" id="header-user-role">총괄 관리자</span>
           </div>
         </div>
       </div>
@@ -1411,7 +1411,7 @@
         </div>
 
         <!-- ⭐️ 2. 신규 사용자 등록 폼 (이메일 ID & 비밀번호 포함) -->
-        <div class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-4">
+        <div id="user-form-container" class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-4 transition-all duration-200">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-2">
               <span class="font-bold text-[#1E1F21] text-sm" id="user-form-title">신규 사용자 및 계정 등록</span>
@@ -1458,7 +1458,7 @@
               <select id="new-user-group" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white outline-none font-semibold text-[#1E1F21] focus:border-[#0084B4]"></select>
             </div>
             <div class="flex items-end justify-end space-x-2">
-              <button id="btn-user-cancel" type="button" onclick="cancelUserEdit()" class="h-10 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition">
+              <button id="btn-user-cancel" type="button" onclick="cancelUserEdit()" class="hidden h-10 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition">
                 수정 취소
               </button>
               <button id="btn-user-submit" type="button" onclick="submitNewUser()" class="h-10 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg hover:bg-[#001D2C] text-xs shadow-xs transition">
@@ -2104,7 +2104,26 @@
     let isCompletedExpanded = false;
     let droppedFile = null;
 
+    function initUserProfile(fallbackAdminName) {
+      let user = null;
+      try {
+        user = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || 'null');
+      } catch (e) {}
+
+      const displayName = (user && user.name) ? user.name : (fallbackAdminName || '관리자');
+      const displayRole = (user && user.role_title) ? user.role_title : '총괄 관리자';
+
+      const nameEl = document.getElementById('header-user-name');
+      const roleEl = document.getElementById('header-user-role');
+      const avatarEl = document.getElementById('header-user-avatar');
+
+      if (nameEl && displayName) nameEl.innerText = displayName;
+      if (roleEl && displayRole) roleEl.innerText = displayRole;
+      if (avatarEl && displayName) avatarEl.innerText = displayName.charAt(0);
+    }
+
     async function init() {
+      initUserProfile();
       try { await loadCompanySettings(); } catch (e) { console.warn('loadCompanySettings fallback:', e); }
       try { await loadRoles(); } catch (e) { console.warn('loadRoles fallback:', e); }
       try { await loadLocations(); } catch (e) { console.warn('loadLocations fallback:', e); }
@@ -2143,6 +2162,7 @@
       const pct = Math.min(100, Math.round((data.monthly_used_count / data.monthly_ticket_limit) * 100));
       document.getElementById('usage-bar').style.width = pct + '%';
       updateLogoPreview();
+      initUserProfile(data.admin_name);
 
       if (data.buildings_config && Object.keys(data.buildings_config).length > 0) {
         currentBuildingsConfig = data.buildings_config;
@@ -4063,13 +4083,16 @@
       filtered.forEach(u => {
         const isSelected = editingUserId === u.id;
         const tr = document.createElement('tr');
-        tr.className = `hover:bg-[#FAF9F8] text-xs transition ${isSelected ? 'bg-amber-50/50' : ''}`;
+        tr.className = `hover:bg-[#FAF9F8] text-xs transition ${isSelected ? 'bg-sky-50/80 border-l-4 border-l-[#0084B4]' : ''}`;
         tr.innerHTML = `
-          <td class="px-3.5 py-2.5 font-bold text-[#1E1F21] cursor-pointer hover:text-[#4573D2] truncate" onclick="editUser('${u.id}')" title="클릭하여 정보 수정">
-            ${u.name} ✏️
+          <td class="px-3.5 py-2.5 font-bold text-[#1E1F21] cursor-pointer hover:text-[#0084B4] truncate" onclick="editUser('${u.id}')" title="클릭하여 사용자 정보 수정">
+            <span class="inline-flex items-center space-x-1">
+              <span>${u.name}</span>
+              <span class="text-[10px] text-[#0084B4] opacity-70">✏️</span>
+            </span>
           </td>
           <td class="px-3.5 py-2.5 font-mono text-[11px] text-[#1E1F21] truncate font-semibold">
-            <span class="cursor-pointer hover:text-[#4573D2] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 이메일(아이디) 수정">${u.email || '-'}</span>
+            <span class="cursor-pointer hover:text-[#0084B4] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 계정 ID(이메일) 수정">${u.email || '-'}</span>
           </td>
           <td class="px-3.5 py-2.5 truncate">
             <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : 'bg-[#4573D2]/10 text-[#4573D2]'}">
@@ -4079,7 +4102,7 @@
           <td class="px-3.5 py-2.5 font-medium text-[#1E1F21] truncate">${u.role_name || '<i class="text-[#A0A1A2]">전체 총괄</i>'}</td>
           <td class="px-3.5 py-2.5 text-[#6D6E6F] truncate">${u.phone || '-'}</td>
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap space-x-1.5 pr-4">
-            <button onclick="editUser('${u.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold rounded text-[11px] shadow-2xs">수정</button>
+            <button onclick="editUser('${u.id}')" class="px-2.5 py-1 ${isSelected ? 'bg-[#0084B4] text-white font-bold' : 'bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold'} rounded text-[11px] shadow-2xs">${isSelected ? '수정 중 ✏️' : '수정'}</button>
             <button onclick="openPasswordResetModal('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email || ''}')" class="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-bold rounded text-[11px] shadow-2xs">비번 재설정</button>
             <button onclick="deleteUser('${u.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-medium text-[11px]">삭제</button>
           </td>
@@ -4140,6 +4163,12 @@
       document.getElementById('btn-user-update').classList.remove('hidden');
       document.getElementById('btn-user-cancel').classList.remove('hidden');
 
+      const formBox = document.getElementById('user-form-container');
+      if (formBox) {
+        formBox.classList.add('ring-2', 'ring-[#0084B4]', 'border-[#0084B4]', 'bg-sky-50/20');
+        formBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
       const pwLabel = document.getElementById('user-pw-label');
       if (pwLabel) pwLabel.innerHTML = `비밀번호 <span class="text-[10px] text-[#A0A1A2] font-normal">(변경 시에만)</span>`;
       const pwInp = document.getElementById('new-user-password');
@@ -4148,7 +4177,11 @@
       if (pwHelp) pwHelp.innerText = '미입력 시 기존 비밀번호가 그대로 유지됩니다.';
 
       renderFilteredUsers();
-      document.getElementById('new-user-email').focus();
+      const nameInput = document.getElementById('new-user-name');
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.select();
+      }
     }
 
     function cancelUserEdit() {
@@ -4158,6 +4191,11 @@
       if (document.getElementById('new-user-email')) document.getElementById('new-user-email').value = '';
       if (document.getElementById('new-user-password')) document.getElementById('new-user-password').value = '';
       document.getElementById('new-user-phone').value = '';
+
+      const formBox = document.getElementById('user-form-container');
+      if (formBox) {
+        formBox.classList.remove('ring-2', 'ring-[#0084B4]', 'border-[#0084B4]', 'bg-sky-50/20');
+      }
 
       document.getElementById('user-form-title').innerText = '신규 사용자 및 계정 등록';
       document.getElementById('user-edit-badge').classList.add('hidden');
@@ -4185,7 +4223,6 @@
 
       if (!name) { alert('이름을 입력하세요.'); return; }
       if (!email) { alert('이메일(로그인 ID)을 입력하세요.'); return; }
-      if (!email) { alert('로그인 아이디(이메일)를 입력하세요.'); return; }
 
       const res = await fetch('/api/users', {
         method: 'POST',
@@ -4199,9 +4236,29 @@
       if (document.getElementById('new-user-email')) document.getElementById('new-user-email').value = '';
       if (document.getElementById('new-user-password')) document.getElementById('new-user-password').value = '';
       document.getElementById('new-user-phone').value = '';
-      alert(`새 사용자 [${name}] 계정이 등록되었습니다. (아이디: ${email})`);
+
+      // 관리자 이름 동기화
+      if (role === 'ADMIN') {
+        let currentUser = null;
+        try { currentUser = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}'); } catch(e){}
+        if (!currentUser.id || currentUser.email === email || currentUser.role === 'ADMIN') {
+          currentUser.name = name;
+          currentUser.email = email;
+          try {
+            localStorage.setItem('fielder_user', JSON.stringify(currentUser));
+            sessionStorage.setItem('fielder_user', JSON.stringify(currentUser));
+          } catch(e){}
+          const nameEl = document.getElementById('header-user-name');
+          const avatarEl = document.getElementById('header-user-avatar');
+          if (nameEl) nameEl.innerText = name;
+          if (avatarEl) avatarEl.innerText = name.charAt(0);
+        }
+      }
+
+      alert(data.message || `사용자 [${name}] 계정이 등록되었습니다. (아이디: ${email})`);
       await loadUsers();
       await loadRoles();
+      await loadCompanySettings();
     }
 
     async function submitUpdateUser() {
@@ -4221,12 +4278,30 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, phone, role, custom_role_id: groupId || null })
       });
-      if (!res.ok) { alert('수정 중 오류가 발생했습니다.'); return; }
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || '수정 중 오류가 발생했습니다.'); return; }
+
+      // ⭐️ 현재 세션의 사용자 또는 관리자 정보도 즉시 갱신
+      let currentUser = null;
+      try { currentUser = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}'); } catch(e){}
+      if (!currentUser.id || currentUser.id === id || currentUser.email === email || role === 'ADMIN') {
+        currentUser.name = name;
+        currentUser.email = email;
+        try {
+          localStorage.setItem('fielder_user', JSON.stringify(currentUser));
+          sessionStorage.setItem('fielder_user', JSON.stringify(currentUser));
+        } catch(e){}
+        const nameEl = document.getElementById('header-user-name');
+        const avatarEl = document.getElementById('header-user-avatar');
+        if (nameEl) nameEl.innerText = name;
+        if (avatarEl) avatarEl.innerText = name.charAt(0);
+      }
 
       cancelUserEdit();
-      alert('사용자 정보가 수정되었습니다.');
+      alert(`사용자 [${name}]의 정보가 성공적으로 수정되었습니다.`);
       await loadUsers();
       await loadRoles();
+      await loadCompanySettings();
     }
 
     async function deleteUser(id) {
