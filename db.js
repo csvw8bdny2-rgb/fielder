@@ -246,6 +246,14 @@ function initDatabase() {
     db.prepare("UPDATE users SET email = ?, password = ? WHERE id = ? AND (email IS NULL OR email = '')").run(uc.email, uc.pw, uc.id);
   }
 
+  // 관리자 계정 이름 및 이메일 동기화 (기존 데이터 보정)
+  try {
+    const adminUser = db.prepare("SELECT name, email FROM users WHERE id = 'user_admin'").get();
+    if (adminUser) {
+      db.prepare("UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = 'comp_central_tower'").run(adminUser.name, adminUser.email);
+    }
+  } catch (e) {}
+
   // 기존 구역에 건물(본관) 기본값 설정
   db.exec("UPDATE locations SET building = '본관' WHERE building IS NULL OR building = '';");
 

@@ -47,15 +47,15 @@
             <span>작업지시</span>
           </button>
           <button onclick="navTo('process')" id="nav-process" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
-            <span>진행프로세스</span>
+            <span>진행중</span>
             <span id="badge-unresolved-count" class="hidden bg-[#FF5252] text-white font-bold px-2 py-0.5 rounded-full text-xs">0</span>
-          </button>
-          <button onclick="navTo('analytics')" id="nav-analytics" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
-            <span>통계 & 보고서</span>
           </button>
           <button onclick="navTo('inspections')" id="nav-inspections" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
             <span>현장 점검표</span>
             <span id="badge-inspection-count" class="hidden bg-[#13B5EA] text-[#002B41] font-bold px-2 py-0.5 rounded-full text-xs">0</span>
+          </button>
+          <button onclick="navTo('analytics')" id="nav-analytics" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
+            <span>통계 & 보고서</span>
           </button>
           <button onclick="navTo('settings')" id="nav-settings" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
             <span>설정</span>
@@ -472,10 +472,10 @@
           <table class="w-full table-fixed divide-y divide-[#EAE8E5] text-left">
             <colgroup>
               <col class="w-24">
-              <col class="w-[30%]">
+              <col class="w-[38%]">
               <col class="w-[18%]">
-              <col class="w-[15%]">
-              <col class="w-[23%]">
+              <col class="w-[12%]">
+              <col class="w-[20%]">
               <col class="w-24">
             </colgroup>
             <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-[11px] border-b border-[#D8D6D2] select-none whitespace-nowrap">
@@ -484,7 +484,7 @@
                   <div class="flex items-center space-x-1"><span class="whitespace-nowrap">진행상태</span><span id="sort-icon-status" class="text-[10px] text-[#A0A1A2]">↕</span></div>
                 </th>
                 <th onclick="toggleProcessHeaderSort('title')" class="px-3 py-2.5 cursor-pointer hover:bg-[#EAE8E5] transition whitespace-nowrap" title="클릭하여 오름차순/내림차순 정렬">
-                  <div class="flex items-center space-x-1"><span class="whitespace-nowrap">작업 제목</span><span id="sort-icon-title" class="text-[10px] text-[#A0A1A2]">↕</span></div>
+                  <div class="flex items-center space-x-1"><span class="whitespace-nowrap">작업 제목 (전체 표시)</span><span id="sort-icon-title" class="text-[10px] text-[#A0A1A2]">↕</span></div>
                 </th>
                 <th onclick="toggleProcessHeaderSort('floor')" class="px-3 py-2.5 cursor-pointer hover:bg-[#EAE8E5] transition whitespace-nowrap" title="클릭하여 오름차순/내림차순 정렬">
                   <div class="flex items-center space-x-1"><span class="whitespace-nowrap">위치/층수</span><span id="sort-icon-floor" class="text-[10px] text-[#A0A1A2]">↕</span></div>
@@ -493,7 +493,7 @@
                   <div class="flex items-center space-x-1"><span class="whitespace-nowrap">배정자</span><span id="sort-icon-assignee" class="text-[10px] text-[#A0A1A2]">↕</span></div>
                 </th>
                 <th onclick="toggleProcessHeaderSort('resolution')" class="px-3 py-2.5 cursor-pointer hover:bg-[#EAE8E5] transition whitespace-nowrap" title="클릭하여 오름차순/내림차순 정렬">
-                  <div class="flex items-center space-x-1"><span class="whitespace-nowrap">현장 처리상황</span><span id="sort-icon-resolution" class="text-[10px] text-[#A0A1A2]">↕</span></div>
+                  <div class="flex items-center space-x-1"><span class="whitespace-nowrap">현장 처리사항</span><span id="sort-icon-resolution" class="text-[10px] text-[#A0A1A2]">↕</span></div>
                 </th>
                 <th onclick="toggleProcessHeaderSort('created_at')" class="px-3 py-2.5 text-right cursor-pointer hover:bg-[#EAE8E5] transition whitespace-nowrap" title="클릭하여 오름차순/내림차순 정렬">
                   <div class="flex items-center justify-end space-x-1"><span class="whitespace-nowrap">조치/상태</span><span id="sort-icon-created_at" class="text-[10px] text-[#A0A1A2]">↕</span></div>
@@ -1854,6 +1854,47 @@
     </div>
   </div>
 
+  <!-- ⭐️ 3-1. 현장 처리사항 코멘트 확인 전용 모달 -->
+  <div id="modal-process-comment" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EDECEB] space-y-4 relative">
+      <div class="flex items-start justify-between border-b border-[#EDECEB] pb-3">
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <span id="comment-modal-badge" class="px-2 py-0.5 rounded text-[11px] font-extrabold bg-purple-100 text-purple-700">보고</span>
+            <span class="text-xs font-bold text-[#1E1F21]" id="comment-modal-type">현장 처리사항 코멘트</span>
+          </div>
+          <h3 id="comment-modal-title" class="text-sm font-bold text-[#1E1F21] line-clamp-2">작업 제목</h3>
+        </div>
+        <button onclick="closeCommentModal()" class="w-8 h-8 rounded-lg hover:bg-[#F2F1EF] text-[#6D6E6F] text-lg font-bold flex items-center justify-center">×</button>
+      </div>
+
+      <div class="bg-[#FAF9F8] border border-[#EAE8E5] rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between text-[11px] text-[#6D6E6F] border-b border-[#EDECEB] pb-2">
+          <span>작성자: <b id="comment-modal-author" class="text-[#1E1F21]">-</b></span>
+          <span class="text-[10px] text-[#A0A1A2]">현장 실무 조치 기록</span>
+        </div>
+        <div class="text-xs text-[#1E1F21] leading-relaxed font-medium break-words bg-white p-3 rounded-lg border border-[#EDECEB] shadow-2xs max-h-48 overflow-y-auto">
+          <p id="comment-modal-body" class="whitespace-pre-wrap"></p>
+        </div>
+        
+        <!-- 첨부 사진 (있을 경우) -->
+        <div id="comment-modal-photo-box" class="hidden pt-2 border-t border-[#EDECEB]">
+          <span class="text-[11px] font-bold text-[#6D6E6F] block mb-1.5">현장 첨부 사진</span>
+          <img id="comment-modal-photo" src="" alt="현장 사진" class="w-full max-h-60 object-cover rounded-lg border border-[#D5D3CF]">
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center pt-2 border-t border-[#EDECEB]">
+        <button id="comment-modal-btn-detail" type="button" class="px-3 py-2 bg-white border border-[#D5D3CF] text-[#1E1F21] font-bold rounded-lg text-xs hover:bg-[#F2F1EF] transition">
+          전체 상세 및 히스토리
+        </button>
+        <button type="button" onclick="closeCommentModal()" class="px-5 py-2 bg-[#0084B4] text-white font-bold rounded-lg text-xs hover:bg-[#006C9C] transition shadow-xs">
+          확인 완료
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ⭐️ 1. 현장 점검 결과 상세 내역 및 수정 모달 -->
   <div id="modal-inspection-detail" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8">
@@ -3184,29 +3225,57 @@
             openProcessDetail(t.id);
           }
         };
+        let resolutionHtml = '';
+        if (isUnresolved) {
+          resolutionHtml = `
+            <div class="flex items-center space-x-1.5 flex-wrap gap-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-red-100 text-red-700 border border-red-200 shadow-2xs">미해결</span>
+              <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '미해결 사유 및 현장 조치 내용', '${(t.unresolved_reason || '사유 미입력').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.unresolved_photo_url || ''}', 'UNRESOLVED', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.claimed_by_name || t.assignee_name || '실무자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-red-200 text-red-800 hover:bg-red-50 shadow-2xs transition">
+                <span>💬 코멘트 확인</span>
+              </button>
+            </div>
+          `;
+        } else if (isWaitingApproval) {
+          resolutionHtml = `
+            <div class="flex items-center space-x-1.5 flex-wrap gap-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-purple-100 text-purple-700 border border-purple-200 shadow-2xs">보고</span>
+              <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '현장 실무자 조치 보고 코멘트', '${(t.completion_notes || '조치 완료').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.completion_photo_url || ''}', 'WAITING_APPROVAL', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.completed_by_name || t.claimed_by_name || '실무자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-purple-200 text-purple-800 hover:bg-purple-50 shadow-2xs transition">
+                <span>💬 코멘트 확인</span>
+              </button>
+            </div>
+          `;
+        } else {
+          const commentContent = (t.instruction_notes && t.instruction_notes.trim()) || (t.description && t.description.trim()) || '';
+          const hasNotes = Boolean(commentContent);
+          resolutionHtml = `
+            <div class="flex items-center space-x-1.5 flex-wrap gap-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">진행중</span>
+              ${hasNotes ? `
+              <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '작업 지시 및 진행 메모', '${commentContent.replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.instruction_photo_url || t.photo_url || ''}', 'IN_PROGRESS', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.claimed_by_name || t.assignee_name || '실무자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-amber-200 text-amber-800 hover:bg-amber-50 shadow-2xs transition">
+                <span>💬 코멘트 확인</span>
+              </button>` : ''}
+            </div>
+          `;
+        }
+
         tr.innerHTML = `
-          <td class="px-3.5 py-3 whitespace-nowrap truncate">${statusBadge}</td>
-          <td class="px-3.5 py-3 whitespace-nowrap truncate text-[15px] font-bold text-[#111827] group-hover:text-[#0084B4]">
+          <td class="px-3.5 py-3 whitespace-nowrap">${statusBadge}</td>
+          <td class="px-3.5 py-3 text-sm font-bold text-[#111827] group-hover:text-[#0084B4] leading-snug break-words">
             ${t.instruction_title || t.title}
           </td>
           <td class="px-3.5 py-3 whitespace-nowrap text-[#007EA8] font-bold truncate">${t.location_building || '본관'} ${t.location_floor || '-'} · ${t.location_name || '-'}</td>
           <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#1E1F21] font-bold">
             ${t.claimed_by_name || t.completed_by_name || t.assignee_name || (t.target_group_name ? t.target_group_name : '미배정')}
           </td>
-          <td class="px-3.5 py-3 whitespace-nowrap truncate">
-            ${isUnresolved 
-              ? `<span class="text-[#F06A6A] font-bold truncate">[미해결] ${t.unresolved_reason || '자재부족'}</span>`
-              : isWaitingApproval 
-                ? `<span class="text-[#8250DF] font-bold truncate">[보고] ${t.completion_notes || '조치완료'}</span>`
-                : '<span class="text-[#6D6E6F] truncate">진행중</span>'
-            }
+          <td class="px-3.5 py-3">
+            ${resolutionHtml}
           </td>
           <td class="px-3.5 py-3 text-right whitespace-nowrap">${actionHtml}</td>
         `;
         progressTbody.appendChild(tr);
       });
 
-      // 2. 완료 리스트 (티켓번호 제거, 엄격한 1줄 유지)
+      // 2. 완료 리스트 (티켓번호 제거, 제목 전체 표시)
       if (completedTickets.length === 0) {
         completedTbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-xs text-[#A0A1A2]">검색 조건에 맞는 마감 완료 내역이 없습니다.</td></tr>';
       } else {
@@ -3220,13 +3289,19 @@
             }
           };
           tr.innerHTML = `
-            <td class="px-3.5 py-3 whitespace-nowrap text-[15px] font-bold text-[#111827] group-hover:text-[#0084B4] truncate">
+            <td class="px-3.5 py-3 text-sm font-bold text-[#111827] group-hover:text-[#0084B4] leading-snug break-words">
               ${t.title}
             </td>
             <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#6D6E6F] font-semibold">${t.location_building || '본관'} ${t.location_floor || '-'} · ${t.location_name || '-'}</td>
             <td class="px-3.5 py-3 whitespace-nowrap font-bold text-[#34A853] truncate">${t.completed_by_name || '관리자'}</td>
-            <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#1E1F21] font-medium">
-              ${t.admin_notes ? `<span class="text-[#007EA8] font-bold">[승인]</span> ${t.admin_notes}` : (t.completion_notes ? `<span class="text-[#34A853] font-bold">[조치]</span> ${t.completion_notes}` : '완료')}
+            <td class="px-3.5 py-3 text-xs">
+              <div class="flex items-center space-x-1.5 flex-wrap gap-1">
+                <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-200">완료</span>
+                ${(t.admin_notes || t.completion_notes) ? `
+                <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '완료 및 마감 승인 코멘트', '${((t.admin_notes ? `[관리자 승인] ${t.admin_notes}\n` : '') + (t.completion_notes ? `[현장 조치] ${t.completion_notes}` : '')).replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.completion_photo_url || ''}', 'COMPLETED', '${(t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.completed_by_name || '관리자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50 shadow-2xs transition">
+                  <span>💬 코멘트 확인</span>
+                </button>` : ''}
+              </div>
             </td>
             <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#A0A1A2]">${t.completed_at ? t.completed_at.substring(5, 16) : '-'}</td>
           `;
@@ -3395,6 +3470,49 @@
       await loadCompanySettings();
       await loadTickets();
       navTo('process');
+    }
+
+    // ⭐️ 현장 처리사항 코멘트 확인 모달 열기/닫기
+    function openCommentModal(ticketId, typeTitle, commentText, photoUrl, statusType, taskTitle, authorName) {
+      document.getElementById('comment-modal-type').innerText = typeTitle;
+      document.getElementById('comment-modal-title').innerText = taskTitle || '현장 작업 건';
+      document.getElementById('comment-modal-author').innerText = authorName || '현장 실무자';
+      document.getElementById('comment-modal-body').innerText = commentText || '등록된 현장 코멘트가 없습니다.';
+      
+      const badgeEl = document.getElementById('comment-modal-badge');
+      if (statusType === 'UNRESOLVED') {
+        badgeEl.className = 'px-2 py-0.5 rounded text-[11px] font-extrabold bg-red-100 text-red-700 border border-red-200';
+        badgeEl.innerText = '미해결';
+      } else if (statusType === 'WAITING_APPROVAL') {
+        badgeEl.className = 'px-2 py-0.5 rounded text-[11px] font-extrabold bg-purple-100 text-purple-700 border border-purple-200';
+        badgeEl.innerText = '보고';
+      } else if (statusType === 'COMPLETED') {
+        badgeEl.className = 'px-2 py-0.5 rounded text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200';
+        badgeEl.innerText = '완료';
+      } else {
+        badgeEl.className = 'px-2 py-0.5 rounded text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200';
+        badgeEl.innerText = '진행중';
+      }
+
+      const photoBox = document.getElementById('comment-modal-photo-box');
+      const photoImg = document.getElementById('comment-modal-photo');
+      if (photoUrl && photoUrl.trim() && photoUrl !== 'null' && photoUrl !== 'undefined') {
+        photoImg.src = photoUrl;
+        photoBox.classList.remove('hidden');
+      } else {
+        photoBox.classList.add('hidden');
+      }
+
+      document.getElementById('comment-modal-btn-detail').onclick = () => {
+        closeCommentModal();
+        openProcessDetail(ticketId);
+      };
+
+      document.getElementById('modal-process-comment').classList.remove('hidden');
+    }
+
+    function closeCommentModal() {
+      document.getElementById('modal-process-comment').classList.add('hidden');
     }
 
     // ⭐️ 진행프로세스 상세 내용 & 타임라인 히스토리 모달 열기
@@ -4013,6 +4131,25 @@
     async function loadUsers() {
       const res = await fetch('/api/users');
       currentUsers = await res.json();
+
+      // ⭐️ 관리자 계정 최신 이름을 상단 헤더 프로필에 즉시 자동 연동
+      const adminUser = currentUsers.find(u => u.role === 'ADMIN' || u.id === 'user_admin');
+      if (adminUser && adminUser.name) {
+        const nameEl = document.getElementById('header-user-name');
+        const roleEl = document.getElementById('header-user-role');
+        const avatarEl = document.getElementById('header-user-avatar');
+        if (nameEl) nameEl.innerText = adminUser.name;
+        if (roleEl) roleEl.innerText = '총괄 관리자';
+        if (avatarEl) avatarEl.innerText = adminUser.name.charAt(0);
+
+        try {
+          let u = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}');
+          u.name = adminUser.name;
+          u.email = adminUser.email;
+          localStorage.setItem('fielder_user', JSON.stringify(u));
+          sessionStorage.setItem('fielder_user', JSON.stringify(u));
+        } catch(e){}
+      }
 
       // 상단 미니 대시보드 KPI 갱신
       const total = currentUsers.length;

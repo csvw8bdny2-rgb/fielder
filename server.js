@@ -224,8 +224,15 @@ const server = http.createServer(async (req, res) => {
         if (company && company.floors) floors = JSON.parse(company.floors);
       } catch (e) {}
 
+      // ⭐️ users 테이블의 관리자 최신 이름을 항상 우선 반영하여 헤더와 완벽 동기화
+      const adminUser = db.prepare("SELECT name, email FROM users WHERE company_id = ? AND role = 'ADMIN' ORDER BY (id = 'user_admin') DESC, created_at ASC LIMIT 1").get(company.id);
+      const effectiveAdminName = adminUser?.name || company.admin_name || '관리자';
+      const effectiveAdminEmail = adminUser?.email || company.admin_email;
+
       return sendJSON(res, 200, {
         ...company,
+        admin_name: effectiveAdminName,
+        admin_email: effectiveAdminEmail,
         buildings: Object.keys(buildingsConfig),
         floors,
         buildings_config: buildingsConfig
