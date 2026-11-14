@@ -46,11 +46,11 @@
     <div class="max-w-6xl mx-auto flex items-center justify-between">
       <div class="flex items-center space-x-3 cursor-pointer" onclick="location.href='/'">
         <span style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
-          KFIRST
+          Fielder
         </span>
         <div class="leading-tight">
           <div class="flex items-center space-x-1 font-bold text-sm sm:text-base text-white">
-            <span>(주)케이퍼스트 통합시설운영본부</span>
+            <span>Fielder 통합시설운영본부</span>
             <span class="text-xs text-[#13B5EA]">▾</span>
           </div>
           <span class="text-[11px] text-slate-300 font-medium">종합 관제 센터</span>
@@ -181,11 +181,11 @@
             <div class="flex items-center">
               <input type="text" id="subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="central" onkeyup="updateDomainPreview(this.value)" class="flex-1 h-11 border border-[#005B82] rounded-l-xl px-4 text-sm font-mono font-bold outline-none focus:border-[#13B5EA] bg-[#001F30] text-white transition-colors">
               <span class="h-11 px-3 bg-[#001522] border border-l-0 border-[#005B82] rounded-r-xl flex items-center text-slate-400 font-mono text-xs">
-                .smartfms.kr
+                .fielder.kr
               </span>
             </div>
             <p class="text-[11px] text-slate-400 mt-1">
-              생성될 주소: <span class="text-[#13B5EA] font-mono font-semibold" id="domain-preview">https://central.smartfms.kr</span>
+              생성될 주소: <span class="text-[#13B5EA] font-mono font-semibold" id="domain-preview">https://central.fielder.kr</span>
             </p>
           </div>
 
@@ -220,7 +220,7 @@
           </div>
           <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
             <span class="text-slate-400">전용 웹 주소</span>
-            <a id="result-web-url" href="#" target="_blank" class="font-mono font-bold text-[#13B5EA] underline">https://-.smartfms.kr</a>
+            <a id="result-web-url" href="#" target="_blank" class="font-mono font-bold text-[#13B5EA] underline">https://-.fielder.kr</a>
           </div>
           <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
             <span class="text-slate-400">모바일 링크</span>
@@ -248,7 +248,7 @@
   <!-- 3. 푸터 -->
   <footer class="w-full bg-[#002B41] border-t border-[#001F30] py-4 px-6 text-center text-xs text-slate-400">
     <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-      <div>© (주)케이퍼스트 시설관리운영시스템</div>
+      <div>© Fielder 시설관리운영시스템</div>
       <div class="flex space-x-3">
         <a href="/login" class="hover:text-white">로그인</a>
         <span>·</span>
@@ -280,7 +280,7 @@
           <div class="w-6 h-6 rounded bg-[#00A3E0] text-[#002B41] flex items-center justify-center font-bold text-xs shrink-0">2</div>
           <div>
             <h4 class="font-bold text-white">회사 및 서브도메인 자동 배정</h4>
-            <p class="text-slate-300 text-[11px]">회사 전용 도메인(예: central.smartfms.kr) 및 데이터 영역 생성.</p>
+            <p class="text-slate-300 text-[11px]">회사 전용 도메인(예: central.fielder.kr) 및 데이터 영역 생성.</p>
           </div>
         </div>
 
@@ -363,7 +363,7 @@
 
     function updateDomainPreview(val) {
       const slug = (val || 'central').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      document.getElementById('domain-preview').textContent = `https://${slug || 'central'}.smartfms.kr`;
+      document.getElementById('domain-preview').textContent = `https://${slug || 'central'}.fielder.kr`;
     }
 
     async function handleFinalSignup(e) {
@@ -403,7 +403,7 @@
         }
 
         document.getElementById('result-company-name').textContent = data.company.name;
-        document.getElementById('result-web-url').textContent = `https://${data.company.subdomain}.smartfms.kr`;
+        document.getElementById('result-web-url').textContent = `https://${data.company.subdomain}.fielder.kr`;
         document.getElementById('result-web-url').href = data.company.web_url;
         document.getElementById('result-mobile-url').textContent = `/mobile?tenant=${data.company.subdomain}`;
         document.getElementById('result-mobile-url').href = data.company.mobile_url;

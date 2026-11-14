@@ -1302,7 +1302,7 @@ const server = http.createServer(async (req, res) => {
           admin_name, admin_email, admin_phone
         ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?)
       `).run(
-        id, name, slug, logo_url || 'FMS', plan || 'FREE',
+        id, name, slug, logo_url || 'Fielder', plan || 'FREE',
         limit, featStr, admin_name || '관리자', admin_email || '', admin_phone || ''
       );
 
@@ -1311,7 +1311,7 @@ const server = http.createServer(async (req, res) => {
       db.prepare(`
         INSERT OR IGNORE INTO users (id, company_id, role, name, phone, email, password)
         VALUES (?, ?, 'ADMIN', ?, ?, ?, '1234')
-      `).run(userId, id, admin_name || '관리자', admin_phone || '010-0000-0000', admin_email || `admin@${slug}.smartfms.kr`);
+      `).run(userId, id, admin_name || '관리자', admin_phone || '010-0000-0000', admin_email || `admin@${slug}.fielder.kr`);
 
       seedDefaultTenantData(id);
       const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
@@ -1389,7 +1389,7 @@ const server = http.createServer(async (req, res) => {
           monthly_ticket_limit, monthly_used_count,
           storage_limit_mb, storage_used_mb, enabled_features,
           admin_name, admin_email, admin_phone
-        ) VALUES (?, ?, ?, 'FMS', 'FREE', 'ACTIVE', 100, 0, 500, 5, '{"checklists":true,"realtime_sse":true,"public_qr":true,"outsource":true}', ?, ?, ?)
+        ) VALUES (?, ?, ?, 'Fielder', 'FREE', 'ACTIVE', 100, 0, 500, 5, '{"checklists":true,"realtime_sse":true,"public_qr":true,"outsource":true}', ?, ?, ?)
       `).run(companyId, company_name, slug, admin_name, admin_email, admin_phone || '');
 
       // 관리자 계정 생성
@@ -1431,7 +1431,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 1) 슈퍼 관리자 계정 체크
-      if (email === 'admin@smartfms.kr' || email === 'superadmin@smartfms.kr' || email === 'admin') {
+      if (email === 'admin@fielder.kr' || email === 'admin@smartfms.kr' || email === 'superadmin@smartfms.kr' || email === 'admin') {
         if (password !== '1234' && password !== 'admin1234') {
           return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
         }
@@ -1440,7 +1440,7 @@ const server = http.createServer(async (req, res) => {
           role: 'SUPER_ADMIN',
           user: {
             name: '최고 총괄 관리자',
-            email: 'admin@smartfms.kr',
+            email: 'admin@fielder.kr',
             role_title: '통합 슈퍼 관리자'
           },
           redirect_url: '/super-admin'

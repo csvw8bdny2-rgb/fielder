@@ -62,11 +62,11 @@
       <!-- KFIRST 헤더 브랜딩 -->
       <div class="px-5 py-4 border-b border-[#001F30] flex items-center space-x-3 cursor-pointer" onclick="showDashboardView()">
         <span style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
-          KFIRST
+          Fielder
         </span>
         <div class="leading-tight">
           <div class="flex items-center space-x-1 font-bold text-sm text-white">
-            <span>(주)케이퍼스트</span>
+            <span>Fielder</span>
             <span class="text-xs text-[#13B5EA]">▾</span>
           </div>
           <span class="text-[11px] text-slate-300 font-medium">통합 슈퍼 관리자 센터</span>
@@ -99,7 +99,7 @@
 
     <!-- 사이드바 푸터 -->
     <div class="p-4 border-t border-[#001F30] text-[11px] text-slate-400 space-y-1">
-      <div class="font-medium text-slate-300">(주)케이퍼스트 시설관리운영시스템</div>
+      <div class="font-medium text-slate-300">Fielder 시설관리운영시스템</div>
       <div class="text-[10px]">엔터프라이즈 멀티테넌트 통합 콘솔</div>
     </div>
   </aside>
@@ -304,7 +304,7 @@
             <div class="flex items-center">
               <input type="text" id="input-subdomain" placeholder="도메인" class="h-9 border border-slate-300 rounded-l px-3 text-xs font-mono font-bold outline-none focus:border-[#13B5EA]">
               <span class="h-9 px-2.5 bg-slate-100 border border-l-0 border-slate-300 rounded-r flex items-center text-slate-600 font-mono text-xs">
-                .smartfms.kr
+                .fielder.kr
               </span>
             </div>
             <button onclick="updateSubdomain()" class="h-9 px-3.5 bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs rounded transition-colors">
@@ -452,7 +452,7 @@
           <div class="w-6 h-6 rounded bg-[#00A3E0] text-[#002B41] flex items-center justify-center font-bold text-xs shrink-0">2</div>
           <div>
             <h4 class="font-bold text-white">회사 및 서브도메인 자동 배정</h4>
-            <p class="text-slate-300 text-[11px]">회사 전용 도메인(예: central.smartfms.kr) 및 데이터 영역 생성.</p>
+            <p class="text-slate-300 text-[11px]">회사 전용 도메인(예: central.fielder.kr) 및 데이터 영역 생성.</p>
           </div>
         </div>
 
@@ -554,7 +554,7 @@
             </td>
             <td class="py-3 px-4 font-mono font-medium text-slate-700">
               <a href="/?tenant=${c.subdomain}" target="_blank" class="hover:underline text-[#0084B4]">
-                ${c.subdomain}.smartfms.kr
+                ${c.subdomain}.fielder.kr
               </a>
             </td>
             <td class="py-3 px-4">
@@ -609,7 +609,7 @@
             </td>
             <td class="py-3 px-4 font-mono font-medium text-slate-700">
               <a href="/?tenant=${c.subdomain}" target="_blank" class="hover:underline text-[#0084B4]">
-                ${c.subdomain}.smartfms.kr
+                ${c.subdomain}.fielder.kr
               </a>
             </td>
             <td class="py-3 px-4">
@@ -804,7 +804,7 @@
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`도메인이 [${data.subdomain}.smartfms.kr]로 변경되었습니다.`);
+          alert(`도메인이 [${data.subdomain}.fielder.kr]로 변경되었습니다.`);
           loadCompanies();
         } else {
           alert('변경 실패: ' + data.error);

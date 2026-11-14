@@ -34,10 +34,10 @@
       <!-- 상단 헤더 & 계정 전환 (디자인 레퍼런스 다크 네이비 스타일) -->
       <div class="bg-[#002B41] px-5 py-3 border-b border-[#001F30] text-white flex items-center justify-between">
         <div class="flex items-center space-x-2.5">
-          <span id="mobile-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-7 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">KFIRST</span>
+          <span id="mobile-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-7 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">Fielder</span>
           <div>
             <span class="text-[10px] text-slate-300 block leading-tight" id="worker-group-label">전기/기계설비팀</span>
-            <select id="worker-select-switch" onchange="switchWorkerAccount()" class="text-xs font-bold text-white bg-transparent outline-none block cursor-pointer">
+            <select id="worker-select-switch" data-native="true" onchange="switchWorkerAccount()" class="text-xs font-bold text-white bg-transparent outline-none block cursor-pointer">
               <option value="user_worker_kang_e" class="bg-[#002B41] text-white" data-group="role_elec" data-group-name="전기/기계설비팀">강전기 기사</option>
               <option value="user_worker_choi" class="bg-[#002B41] text-white" data-group="role_maint" data-group-name="영선/시설보수팀">최영선 반장</option>
               <option value="user_worker_lee_m" class="bg-[#002B41] text-white" data-group="role_maint" data-group-name="영선/시설보수팀">이영선 기사</option>
