@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>회원가입 - 스마트 FMS 종합 관제 센터</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap">
+  <style>
+    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .btn-sky {
+      background-color: #13B5EA;
+      color: #002B41;
+      font-weight: 700;
+      transition: all 0.15s ease-in-out;
+    }
+    .btn-sky:hover {
+      background-color: #0EA5E9;
+      color: #001F30;
+      box-shadow: 0 4px 12px rgba(19, 181, 234, 0.3);
+    }
+    .btn-sky:disabled {
+      background-color: #003652;
+      color: #006B99;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn-navy-pill {
+      background-color: #001F30;
+      color: #FFFFFF;
+      border: 1px solid #004D73;
+      border-radius: 9999px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .btn-navy-pill:hover {
+      background-color: #002B41;
+      border-color: #13B5EA;
+    }
+  </style>
+</head>
+<body class="bg-[#001E2E] text-white min-h-screen flex flex-col justify-between antialiased">
+
+  <!-- 1. 헤더 (KFIRST 디자인 정책) -->
+  <header class="w-full bg-[#002B41] border-b border-[#001F30] py-3.5 px-6 sm:px-10 shadow-lg">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="location.href='/'">
+        <span style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
+          KFIRST
+        </span>
+        <div class="leading-tight">
+          <div class="flex items-center space-x-1 font-bold text-sm sm:text-base text-white">
+            <span>(주)케이퍼스트 통합시설운영본부</span>
+            <span class="text-xs text-[#13B5EA]">▾</span>
+          </div>
+          <span class="text-[11px] text-slate-300 font-medium">종합 관제 센터</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <button onclick="openProcessModal()" class="btn-navy-pill px-4 py-1.5 text-xs">
+          전체 진행 프로세스
+        </button>
+        <a href="/login" class="text-xs font-bold text-[#13B5EA] hover:underline">
+          로그인
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. 메인 컨테이너 (다크 네이비 테마 & 박스 내부 텍스트 화이트) -->
+  <main class="flex-1 flex flex-col items-center justify-center px-4 py-12 sm:py-16">
+    <div class="w-full max-w-[440px]">
+
+      <!-- ================= STEP 1 : 약관 동의 ================= -->
+      <section id="step-1" class="bg-[#002B41] border border-[#004D73] rounded-3xl p-7 sm:p-8 shadow-2xl space-y-6">
+        <div class="text-left space-y-1">
+          <h1 class="text-2xl font-bold text-white tracking-tight">회원가입</h1>
+          <p class="text-xs text-slate-300">서비스 이용을 위한 필수 약관에 동의해주세요.</p>
+        </div>
+
+        <div class="border border-[#005B82] rounded-xl p-4 space-y-3.5 bg-[#001F30]">
+          <!-- 모두 동의 -->
+          <label class="flex items-center space-x-3 cursor-pointer select-none">
+            <input type="checkbox" id="agree-all" onchange="toggleAgreeAll(this.checked)" class="w-4 h-4 rounded text-[#13B5EA] focus:ring-[#13B5EA] cursor-pointer">
+            <span class="font-bold text-sm text-white">모두 동의</span>
+          </label>
+
+          <div class="h-px bg-[#004D73] w-full"></div>
+
+          <!-- 개별 항목 -->
+          <div class="space-y-3 text-xs text-slate-300">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center space-x-2.5 cursor-pointer select-none">
+                <input type="checkbox" id="agree-terms" onchange="checkIndividual()" class="w-4 h-4 rounded text-[#13B5EA] focus:ring-[#13B5EA] cursor-pointer">
+                <span>[필수] 서비스 이용 약관</span>
+              </label>
+              <button type="button" onclick="alert('스마트 FMS 이용약관: 데이터 보안 및 서비스 품질 준수.')" class="text-slate-400 underline hover:text-white">보기</button>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <label class="flex items-center space-x-2.5 cursor-pointer select-none">
+                <input type="checkbox" id="agree-privacy" onchange="checkIndividual()" class="w-4 h-4 rounded text-[#13B5EA] focus:ring-[#13B5EA] cursor-pointer">
+                <span>[필수] 개인정보 수집 및 이용 동의</span>
+              </label>
+              <button type="button" onclick="alert('개인정보 수집 동의: 안전한 보안 관리 준수.')" class="text-slate-400 underline hover:text-white">보기</button>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <label class="flex items-center space-x-2.5 cursor-pointer select-none">
+                <input type="checkbox" id="agree-age" onchange="checkIndividual()" class="w-4 h-4 rounded text-[#13B5EA] focus:ring-[#13B5EA] cursor-pointer">
+                <span>[필수] 만 14세 이상입니다.</span>
+              </label>
+              <button type="button" onclick="alert('만 14세 이상 관리자용 시스템입니다.')" class="text-slate-400 underline hover:text-white">보기</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" id="btn-next-step1" onclick="goToStep(2)" disabled class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center shadow-md">
+          다음
+        </button>
+
+        <div class="text-center text-xs text-slate-300">
+          이미 가입하셨나요? <a href="/login" class="font-bold text-[#13B5EA] underline hover:text-[#0EA5E9] ml-1">로그인</a>
+        </div>
+      </section>
+
+      <!-- ================= STEP 2 : 계정 정보 입력 ================= -->
+      <section id="step-2" class="bg-[#002B41] border border-[#004D73] rounded-3xl p-7 sm:p-8 shadow-2xl space-y-6 hidden">
+        <div class="text-left space-y-1">
+          <h1 class="text-2xl font-bold text-white tracking-tight">계정 정보 입력</h1>
+          <p class="text-xs text-slate-300">관리자 계정으로 사용할 정보를 입력하세요.</p>
+        </div>
+
+        <form onsubmit="handleStep2Submit(event)" class="space-y-4">
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">성명</label>
+            <input type="text" id="user-name" required placeholder="성명 입력" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+          </div>
+
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">이메일 ID</label>
+            <input type="email" id="user-email" required placeholder="admin@company.kr" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+          </div>
+
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">비밀번호</label>
+            <input type="password" id="user-password" required minlength="4" placeholder="비밀번호 (최소 4자 이상)" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+          </div>
+
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">비밀번호 확인</label>
+            <input type="password" id="user-password-confirm" required minlength="4" placeholder="비밀번호 재입력" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+          </div>
+
+          <button type="submit" class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center mt-3 shadow-md">
+            다음
+          </button>
+        </form>
+
+        <div class="text-center text-xs text-slate-300">
+          이미 가입하셨나요? <a href="/login" class="font-bold text-[#13B5EA] underline hover:text-[#0EA5E9] ml-1">로그인</a>
+        </div>
+      </section>
+
+      <!-- ================= STEP 3 : 회사 및 도메인 개설 (100건 무료) ================= -->
+      <section id="step-3" class="bg-[#002B41] border border-[#004D73] rounded-3xl p-7 sm:p-8 shadow-2xl space-y-6 hidden">
+        <div class="text-left space-y-1">
+          <h1 class="text-2xl font-bold text-white tracking-tight">회사 및 도메인 설정</h1>
+          <p class="text-xs text-slate-300">독립된 관제 시스템 도메인이 자동 생성되며 100건 한도가 부여됩니다.</p>
+        </div>
+
+        <form onsubmit="handleFinalSignup(event)" class="space-y-4">
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">회사명 / 사업장명</label>
+            <input type="text" id="company-name" required placeholder="예: 센트럴타워 운영본부" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+          </div>
+
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">희망 서브도메인 (영문 주소)</label>
+            <div class="flex items-center">
+              <input type="text" id="subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="central" onkeyup="updateDomainPreview(this.value)" class="flex-1 h-11 border border-[#005B82] rounded-l-xl px-4 text-sm font-mono font-bold outline-none focus:border-[#13B5EA] bg-[#001F30] text-white transition-colors">
+              <span class="h-11 px-3 bg-[#001522] border border-l-0 border-[#005B82] rounded-r-xl flex items-center text-slate-400 font-mono text-xs">
+                .smartfms.kr
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">
+              생성될 주소: <span class="text-[#13B5EA] font-mono font-semibold" id="domain-preview">https://central.smartfms.kr</span>
+            </p>
+          </div>
+
+          <div class="space-y-1 text-left text-xs">
+            <label class="block font-semibold text-slate-200">담당자 연락처</label>
+            <input type="tel" id="admin-phone" placeholder="010-0000-0000" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+          </div>
+
+          <button type="submit" id="btn-submit-signup" class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center mt-3 shadow-md">
+            100건 무료로 스마트 FMS 시작하기
+          </button>
+        </form>
+
+        <div class="text-center">
+          <button type="button" onclick="goToStep(2)" class="text-xs text-slate-400 hover:text-white">
+            ← 계정 정보 다시 수정하기
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= STEP 4 : 가입 완료 ================= -->
+      <section id="step-4" class="bg-[#002B41] border border-[#004D73] rounded-3xl p-7 sm:p-8 shadow-2xl space-y-6 hidden text-center">
+        <div class="space-y-1">
+          <h1 class="text-2xl font-bold text-white">가입 완료</h1>
+          <p class="text-xs text-slate-300">회사 계정 및 100건 무료 리포트가 발급되었습니다.</p>
+        </div>
+
+        <div class="border border-[#005B82] rounded-xl p-4 bg-[#001F30] text-left space-y-2.5 text-xs">
+          <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
+            <span class="text-slate-400">고객사명</span>
+            <span class="font-bold text-white" id="result-company-name">-</span>
+          </div>
+          <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
+            <span class="text-slate-400">전용 웹 주소</span>
+            <a id="result-web-url" href="#" target="_blank" class="font-mono font-bold text-[#13B5EA] underline">https://-.smartfms.kr</a>
+          </div>
+          <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
+            <span class="text-slate-400">모바일 링크</span>
+            <a id="result-mobile-url" href="#" target="_blank" class="font-mono text-slate-300">/mobile?tenant=-</a>
+          </div>
+          <div class="flex justify-between items-center py-1">
+            <span class="text-slate-400">기본 혜택</span>
+            <span class="font-bold text-[#13B5EA]">100건 리포트 한도 지급</span>
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-2">
+          <button type="button" id="btn-enter-dashboard" class="btn-sky w-full h-11 rounded-xl text-sm flex items-center justify-center shadow-md">
+            관제 시스템 바로 접속하기
+          </button>
+          <a href="/login" class="block w-full h-10 border border-[#005B82] rounded-xl text-xs font-semibold text-slate-300 flex items-center justify-center hover:bg-[#001F30]">
+            로그인 화면으로 이동
+          </a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- 3. 푸터 -->
+  <footer class="w-full bg-[#002B41] border-t border-[#001F30] py-4 px-6 text-center text-xs text-slate-400">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div>© (주)케이퍼스트 시설관리운영시스템</div>
+      <div class="flex space-x-3">
+        <a href="/login" class="hover:text-white">로그인</a>
+        <span>·</span>
+        <a href="/super-admin" class="hover:text-white text-[#13B5EA] font-semibold">슈퍼 관리자 센터</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- 모달 : 전체 진행 프로세스 -->
+  <div id="process-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 hidden backdrop-blur-xs">
+    <div class="bg-[#002B41] border border-[#004D73] text-white rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl relative">
+      <button onclick="closeProcessModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg font-bold">✕</button>
+
+      <div class="space-y-1">
+        <h2 class="text-lg font-bold text-white">전체 진행 프로세스</h2>
+        <p class="text-xs text-slate-300">회원가입부터 현장 모바일 접수 및 통합 관제까지의 핵심 흐름입니다.</p>
+      </div>
+
+      <div class="space-y-2 text-xs">
+        <div class="flex items-start space-x-3 p-3 rounded-lg bg-[#001F30] border border-[#005B82]">
+          <div class="w-6 h-6 rounded bg-[#13B5EA] text-[#002B41] flex items-center justify-center font-bold text-xs shrink-0">1</div>
+          <div>
+            <h4 class="font-bold text-white">회원가입 및 약관 동의</h4>
+            <p class="text-slate-300 text-[11px]">성명, 이메일, 비밀번호 입력 후 즉시 가입.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start space-x-3 p-3 rounded-lg bg-[#001F30] border border-[#005B82]">
+          <div class="w-6 h-6 rounded bg-[#00A3E0] text-[#002B41] flex items-center justify-center font-bold text-xs shrink-0">2</div>
+          <div>
+            <h4 class="font-bold text-white">회사 및 서브도메인 자동 배정</h4>
+            <p class="text-slate-300 text-[11px]">회사 전용 도메인(예: central.smartfms.kr) 및 데이터 영역 생성.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start space-x-3 p-3 rounded-lg bg-[#001F30] border border-[#005B82]">
+          <div class="w-6 h-6 rounded bg-[#10B981] text-white flex items-center justify-center font-bold text-xs shrink-0">3</div>
+          <div>
+            <h4 class="font-bold text-white">100건 무료 리포트 자동 발급</h4>
+            <p class="text-slate-300 text-[11px]">가입 즉시 100건의 디지털 점검표 및 작업지시서 한도 지급.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start space-x-3 p-3 rounded-lg bg-[#001F30] border border-[#005B82]">
+          <div class="w-6 h-6 rounded bg-[#3B82F6] text-white flex items-center justify-center font-bold text-xs shrink-0">4</div>
+          <div>
+            <h4 class="font-bold text-white">현장 실무자 모바일 링크 배포</h4>
+            <p class="text-slate-300 text-[11px]">별도 앱 설치 없이 링크 또는 QR 접속으로 선착순 작업지시 접수.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start space-x-3 p-3 rounded-lg bg-[#001F30] border border-[#005B82]">
+          <div class="w-6 h-6 rounded bg-[#8B5CF6] text-white flex items-center justify-center font-bold text-xs shrink-0">5</div>
+          <div>
+            <h4 class="font-bold text-white">슈퍼 관리자 중앙 통제</h4>
+            <p class="text-slate-300 text-[11px]">전사 리포트 소진율 모니터링, +100건 추가 충전, 권한 On/Off 및 원격 지원.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-right">
+        <button onclick="closeProcessModal()" class="btn-sky px-5 py-2 rounded text-xs">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let signupData = { name: '', email: '', password: '', companyName: '', subdomain: '', phone: '' };
+
+    function toggleAgreeAll(checked) {
+      document.getElementById('agree-terms').checked = checked;
+      document.getElementById('agree-privacy').checked = checked;
+      document.getElementById('agree-age').checked = checked;
+      checkIndividual();
+    }
+
+    function checkIndividual() {
+      const t = document.getElementById('agree-terms').checked;
+      const p = document.getElementById('agree-privacy').checked;
+      const a = document.getElementById('agree-age').checked;
+      const allChecked = t && p && a;
+      document.getElementById('agree-all').checked = allChecked;
+      document.getElementById('btn-next-step1').disabled = !allChecked;
+    }
+
+    function goToStep(step) {
+      document.getElementById('step-1').classList.add('hidden');
+      document.getElementById('step-2').classList.add('hidden');
+      document.getElementById('step-3').classList.add('hidden');
+      document.getElementById('step-4').classList.add('hidden');
+      document.getElementById(`step-${step}`).classList.remove('hidden');
+      window.scrollTo(0, 0);
+    }
+
+    function handleStep2Submit(e) {
+      e.preventDefault();
+      const name = document.getElementById('user-name').value.trim();
+      const email = document.getElementById('user-email').value.trim();
+      const pwd = document.getElementById('user-password').value;
+      const pwdConfirm = document.getElementById('user-password-confirm').value;
+
+      if (pwd !== pwdConfirm) {
+        alert('비밀번호가 일치하지 않습니다.');
+        return;
+      }
+
+      signupData.name = name;
+      signupData.email = email;
+      signupData.password = pwd;
+      goToStep(3);
+    }
+
+    function updateDomainPreview(val) {
+      const slug = (val || 'central').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      document.getElementById('domain-preview').textContent = `https://${slug || 'central'}.smartfms.kr`;
+    }
+
+    async function handleFinalSignup(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-signup');
+      btn.disabled = true;
+      btn.textContent = '처리 중...';
+
+      const companyName = document.getElementById('company-name').value.trim();
+      const subdomain = document.getElementById('subdomain').value.trim().toLowerCase();
+      const phone = document.getElementById('admin-phone').value.trim();
+
+      signupData.companyName = companyName;
+      signupData.subdomain = subdomain;
+      signupData.phone = phone;
+
+      try {
+        const res = await fetch('/api/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company_name: signupData.companyName,
+            subdomain: signupData.subdomain,
+            admin_name: signupData.name,
+            admin_email: signupData.email,
+            admin_phone: signupData.phone,
+            password: signupData.password
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          alert('가입 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'));
+          btn.disabled = false;
+          btn.textContent = '100건 무료로 스마트 FMS 시작하기';
+          return;
+        }
+
+        document.getElementById('result-company-name').textContent = data.company.name;
+        document.getElementById('result-web-url').textContent = `https://${data.company.subdomain}.smartfms.kr`;
+        document.getElementById('result-web-url').href = data.company.web_url;
+        document.getElementById('result-mobile-url').textContent = `/mobile?tenant=${data.company.subdomain}`;
+        document.getElementById('result-mobile-url').href = data.company.mobile_url;
+
+        document.getElementById('btn-enter-dashboard').onclick = () => {
+          location.href = data.company.web_url;
+        };
+
+        goToStep(4);
+      } catch (err) {
+        alert('서버 오류: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = '100건 무료로 스마트 FMS 시작하기';
+      }
+    }
+
+    function openProcessModal() {
+      document.getElementById('process-modal').classList.remove('hidden');
+    }
+    function closeProcessModal() {
+      document.getElementById('process-modal').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>

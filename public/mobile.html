@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>스마트 FMS 모바일 현장 콘솔</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <script src="/ui-enhance.js"></script>
+  <style>
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  </style>
+</head>
+<body class="bg-[#F4F3F2] min-h-screen flex flex-col items-center justify-start p-2 sm:p-6 antialiased text-[#1E1F21]">
+
+  <!-- 상단 모드 전환 탭 -->
+  <div class="mb-4 bg-white p-1 rounded-xl shadow-xs border border-[#EDECEB] flex space-x-1 text-xs">
+    <button onclick="setMobileMode('worker')" id="btn-mode-worker" class="px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition">
+      실무자 현장 콘솔
+    </button>
+    <button onclick="setMobileMode('qr')" id="btn-mode-qr" class="px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition">
+      일반인 QR 접수 (문자인증)
+    </button>
+  </div>
+
+  <!-- 스마트폰 컨테이너 -->
+  <div class="w-full max-w-[380px] h-[750px] bg-white rounded-[36px] shadow-xl ring-1 ring-black/5 overflow-hidden flex flex-col relative border-2 border-[#EDECEB]">
+    
+    <!-- ============================================== -->
+    <!-- [MODE 1] 실무자 전용 (Worker) -->
+    <!-- ============================================== -->
+    <div id="view-worker" class="flex-1 flex flex-col h-full bg-[#FAF9F8]">
+      
+      <!-- 상단 헤더 & 계정 전환 (디자인 레퍼런스 다크 네이비 스타일) -->
+      <div class="bg-[#002B41] px-5 py-3 border-b border-[#001F30] text-white flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <span id="mobile-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-7 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">KFIRST</span>
+          <div>
+            <span class="text-[10px] text-slate-300 block leading-tight" id="worker-group-label">전기/기계설비팀</span>
+            <select id="worker-select-switch" onchange="switchWorkerAccount()" class="text-xs font-bold text-white bg-transparent outline-none block cursor-pointer">
+              <option value="user_worker_kang_e" class="bg-[#002B41] text-white" data-group="role_elec" data-group-name="전기/기계설비팀">강전기 기사</option>
+              <option value="user_worker_choi" class="bg-[#002B41] text-white" data-group="role_maint" data-group-name="영선/시설보수팀">최영선 반장</option>
+              <option value="user_worker_lee_m" class="bg-[#002B41] text-white" data-group="role_maint" data-group-name="영선/시설보수팀">이영선 기사</option>
+              <option value="user_worker_jung_c" class="bg-[#002B41] text-white" data-group="role_clean" data-group-name="환경/미화청결팀">정미화 조장</option>
+              <option value="user_worker_park_c" class="bg-[#002B41] text-white" data-group="role_clean" data-group-name="환경/미화청결팀">박청결 사원</option>
+              <option value="user_worker_park_s" class="bg-[#002B41] text-white" data-group="role_sec" data-group-name="보안/방재안전팀">박보안 대원</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="loadWorkerTasks()" class="text-[11px] text-slate-300 hover:text-white font-medium">새로고침</button>
+          <div id="worker-task-count" class="w-6 h-6 rounded-full bg-[#13B5EA] text-[#002B41] text-[11px] font-black flex items-center justify-center">
+            0
+          </div>
+        </div>
+      </div>
+
+      <!-- ⭐️ 1. 내 작업 탭 (수신된 작업 목록: 개인 배정 + 직무 그룹 선착순) -->
+      <div id="worker-tab-tasks" class="flex-1 overflow-y-auto p-4 space-y-2.5">
+        <div class="flex justify-between items-center text-[11px] font-semibold text-[#6D6E6F]">
+          <span>수신된 작업 목록</span>
+          <span class="text-[10px] text-[#34A853]">그룹 작업은 선착순 1명 완결</span>
+        </div>
+        <div id="worker-task-list" class="space-y-2.5"></div>
+      </div>
+
+      <!-- ⭐️ 2. 현장 순찰 탭 (체크리스트 + 건물/층수 선택 + 순찰 일지 등록 및 이력) -->
+      <div id="worker-tab-patrol" class="hidden flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        <div class="bg-white p-4 rounded-2xl border border-[#EDECEB] space-y-3 shadow-2xs">
+          <div class="flex items-center justify-between border-b border-[#F4F3F2] pb-2">
+            <span class="font-bold text-[#1E1F21] text-xs">층별 현장 순찰 점검표</span>
+            <span class="text-[10px] text-[#34A853] font-semibold">● 점검 기록 자동 집계</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-[#6D6E6F] font-semibold mb-1">순찰 건물동</label>
+              <select id="patrol-building" class="w-full h-9 border border-[#D5D3CF] bg-white rounded-lg px-2 text-xs font-bold text-[#1E1F21]">
+                <option value="본관" selected>본관 (Main)</option>
+                <option value="별관">별관 (Annex)</option>
+                <option value="신관">신관 (New)</option>
+                <option value="주차타워">주차타워</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] text-[#6D6E6F] font-semibold mb-1">순찰 층수</label>
+              <select id="patrol-floor" class="w-full h-9 border border-[#D5D3CF] bg-white rounded-lg px-2 text-xs font-bold text-[#1E1F21]">
+                <option value="B2">지하 2층 (B2)</option>
+                <option value="B1">지하 1층 (B1)</option>
+                <option value="1F" selected>1층 로비 (1F)</option>
+                <option value="2F">2층 (2F)</option>
+                <option value="3F">3층 (3F)</option>
+                <option value="4F">4층 (4F)</option>
+                <option value="5F">5층 (5F)</option>
+                <option value="6F">6층 (6F)</option>
+                <option value="7F">7층 (7F)</option>
+                <option value="8F">8층 임원실 (8F)</option>
+                <option value="RF">옥상정원 (RF)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-[#6D6E6F] font-semibold mb-1">점검표 양식 선택</label>
+            <select id="mobile-patrol-template-select" onchange="onMobileTemplateSelectChange()" class="w-full h-9 border border-[#D5D3CF] bg-white rounded-lg px-2 text-xs font-bold text-[#1E1F21] outline-none">
+              <option value="DEFAULT">기본 순찰 체크리스트</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-[#6D6E6F] font-semibold mb-1">세부 구역명</label>
+            <input type="text" id="patrol-loc-name" placeholder="예: 8층 임원실 복도, 1층 로비 출입구" class="w-full h-9 border border-[#D5D3CF] rounded-lg px-2.5 text-xs font-medium text-[#1E1F21] outline-none">
+          </div>
+
+          <!-- 동적 점검 항목 렌더링 영역 (6가지 유형 지원) -->
+          <div id="mobile-checklist-items-area" class="space-y-2 pt-1">
+            <span class="block text-[11px] font-bold text-[#1E1F21]" id="mobile-checklist-title">필수 순찰 점검 체크리스트</span>
+            <div id="mobile-checklist-items-body" class="space-y-1.5">
+              <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+                <input type="checkbox" id="chk-fire" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <span>[소방] 소화전 압력 정상 / 비상구 적치물 없음</span>
+              </label>
+              <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+                <input type="checkbox" id="chk-light" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <span>[조명] 복도 및 비상계단 LED 점등 상태 양호</span>
+              </label>
+              <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+                <input type="checkbox" id="chk-leak" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <span>[위생] 화장실 수전 누수 없음 / 악취 및 배수 양호</span>
+              </label>
+              <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+                <input type="checkbox" id="chk-door" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <span>[공용] 방화문 자동 도어클로저 및 승강기 정상</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-[#6D6E6F] font-semibold mb-1">순찰 특이사항 메모</label>
+            <textarea id="patrol-notes" rows="2" placeholder="특이사항이나 점검 결과를 기재하세요 (예: 전 구역 점검 완료, 이상 없음)" class="w-full border border-[#D5D3CF] rounded-lg p-2 text-xs outline-none"></textarea>
+          </div>
+
+          <button type="button" onclick="submitPatrolLog()" class="w-full py-2.5 bg-[#1E1F21] hover:bg-black text-white text-xs font-bold rounded-xl shadow-xs transition">
+            순찰 점검 일지 제출
+          </button>
+        </div>
+
+        <!-- 최근 순찰 기록 -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between text-xs font-bold text-[#1E1F21]">
+            <span>최근 순찰 점검 이력</span>
+            <button onclick="loadPatrolHistory()" class="text-[10px] text-[#4573D2] font-semibold">새로고침</button>
+          </div>
+          <div id="patrol-history-list" class="space-y-2 text-xs"></div>
+        </div>
+      </div>
+
+      <!-- ⭐️ 3. 내 정보 탭 (실무자 프로필 + 업무 통계 + 근무 상태) -->
+      <div id="worker-tab-profile" class="hidden flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        <!-- 프로필 카드 -->
+        <div class="bg-white p-5 rounded-2xl border border-[#EDECEB] space-y-3 shadow-xs">
+          <div class="flex items-center space-x-3">
+            <div class="w-12 h-12 rounded-full bg-[#1E1F21] text-white flex items-center justify-center font-bold text-base shadow-2xs" id="profile-avatar">
+              최
+            </div>
+            <div>
+              <div class="font-bold text-sm text-[#1E1F21]" id="profile-name">최영선 반장</div>
+              <div class="text-[11px] text-[#4573D2] font-semibold" id="profile-role">영선/시설보수팀 · 실무자</div>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-[#F4F3F2] space-y-1.5 text-[11px]">
+            <div class="flex justify-between">
+              <span class="text-[#6D6E6F]">로그인 ID (이메일)</span>
+              <span class="font-mono font-bold text-[#1E1F21]" id="profile-email">choi.maint@fms.kr</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-[#6D6E6F]">연락처</span>
+              <span class="font-medium text-[#1E1F21]" id="profile-phone">010-3333-4444</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-[#6D6E6F]">소속 사업장</span>
+              <span class="font-medium text-[#1E1F21]">센트럴타워 통합시설운영본부</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 오늘 업무 통계 카드 -->
+        <div class="bg-white p-4 rounded-2xl border border-[#EDECEB] space-y-2.5 shadow-2xs">
+          <span class="font-bold text-[#1E1F21] text-xs">오늘의 업무 현황</span>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="p-2.5 bg-[#FAF9F8] rounded-xl border border-[#EDECEB]">
+              <span class="text-[10px] text-[#6D6E6F] block">배정 작업</span>
+              <span class="text-base font-bold text-[#1E1F21]" id="profile-stat-assigned">0</span>
+            </div>
+            <div class="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+              <span class="text-[10px] text-emerald-700 block">완료 보고</span>
+              <span class="text-base font-bold text-[#34A853]" id="profile-stat-completed">0</span>
+            </div>
+            <div class="p-2.5 bg-blue-50/60 rounded-xl border border-blue-100">
+              <span class="text-[10px] text-[#4573D2] block">순찰 점검</span>
+              <span class="text-base font-bold text-[#4573D2]" id="profile-stat-patrol">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 근무 상태 스위처 -->
+        <div class="bg-white p-4 rounded-2xl border border-[#EDECEB] space-y-2 shadow-2xs">
+          <span class="font-bold text-[#1E1F21] text-xs">근무 상태 설정</span>
+          <div class="grid grid-cols-3 gap-1.5 text-[10px]">
+            <button onclick="setWorkStatus('WORKING')" id="btn-status-working" class="py-2 rounded-lg font-bold bg-[#34A853] text-white transition">🟢 현장근무</button>
+            <button onclick="setWorkStatus('REST')" id="btn-status-rest" class="py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition">⚪ 휴게/점심</button>
+            <button onclick="setWorkStatus('OFF')" id="btn-status-off" class="py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition">🔴 퇴근/대기</button>
+          </div>
+        </div>
+
+        <!-- 로그인 안내 카드 (다음 로그인 작업 준비) -->
+        <div class="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200 text-amber-800 space-y-1">
+          <div class="font-bold text-xs flex items-center space-x-1">
+            <span>🔐 로그인 인증 연동 준비 완료</span>
+          </div>
+          <p class="text-[10px] text-amber-700 leading-relaxed">
+            관리자 콘솔의 <b>[사용자 관리]</b>에서 각 실무자의 이메일 아이디와 비밀번호가 정상 등록되어 있습니다. 완성 후 다음 단계에서 정식 로그인 화면을 연동할 수 있습니다.
+          </p>
+        </div>
+      </div>
+
+      <!-- 하단 바 (내 작업 / 현장순찰 / 내 정보 탭 전환) -->
+      <div class="bg-white border-t border-[#EDECEB] px-3 py-2 flex justify-around text-xs select-none">
+        <button onclick="setWorkerNavTab('tasks')" id="worker-nav-tasks" class="flex flex-col items-center py-1 px-3 text-[#1E1F21] font-bold">
+          <span class="text-base">📋</span>
+          <span class="text-[10px] mt-0.5">내 작업</span>
+        </button>
+        <button onclick="setWorkerNavTab('patrol')" id="worker-nav-patrol" class="flex flex-col items-center py-1 px-3 text-[#6D6E6F] font-semibold hover:text-[#1E1F21]">
+          <span class="text-base">🔍</span>
+          <span class="text-[10px] mt-0.5">현장순찰</span>
+        </button>
+        <button onclick="setWorkerNavTab('profile')" id="worker-nav-profile" class="flex flex-col items-center py-1 px-3 text-[#6D6E6F] font-semibold hover:text-[#1E1F21]">
+          <span class="text-base">👤</span>
+          <span class="text-[10px] mt-0.5">내 정보</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ⭐️ [MODE 1-1] 실무자 조치 분기 모달: [해결 가능] vs [해결 불가능] -->
+    <div id="modal-worker-report" class="hidden absolute inset-0 bg-white z-20 flex flex-col">
+      <div class="px-4 py-3 border-b border-[#EDECEB] flex items-center justify-between">
+        <button onclick="closeWorkerDetail()" class="text-xs text-[#6D6E6F]">← 뒤로</button>
+        <span class="text-xs font-bold text-[#1E1F21]">현장 조치 상황 보고</span>
+        <div class="w-6"></div>
+      </div>
+
+      <input type="hidden" id="report-ticket-id">
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        
+        <div>
+          <span class="text-[11px] text-[#6D6E6F]">지시 작업명</span>
+          <div class="font-bold text-[#1E1F21] text-xs mt-0.5" id="report-ticket-title"></div>
+        </div>
+
+        <!-- ⭐️ 핵심 분기 선택 버튼: [해결 가능] vs [해결 불가능] vs [외주&아웃소싱] -->
+        <div class="bg-[#FAF9F8] p-3 rounded-xl border border-[#EDECEB] space-y-2">
+          <label class="block font-bold text-[#1E1F21]">현장 점검 결과를 선택하세요</label>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button type="button" onclick="setResolutionMode('RESOLVED')" id="btn-res-resolved" class="py-2 px-1 rounded-xl border-2 border-[#34A853] bg-emerald-50 text-[#34A853] font-bold text-[10px] flex flex-col items-center justify-center transition">
+              <span>해결 가능</span>
+              <span class="text-[8px] font-normal text-slate-500 mt-0.5">(자체 완료)</span>
+            </button>
+            <button type="button" onclick="setResolutionMode('UNRESOLVED')" id="btn-res-unresolved" class="py-2 px-1 rounded-xl border border-[#EDECEB] bg-white text-[#6D6E6F] font-bold text-[10px] flex flex-col items-center justify-center transition">
+              <span>해결 불가</span>
+              <span class="text-[8px] font-normal text-slate-500 mt-0.5">(미해결 대기)</span>
+            </button>
+            <button type="button" onclick="setResolutionMode('OUTSOURCE')" id="btn-res-outsource" class="py-2 px-1 rounded-xl border border-[#EDECEB] bg-white text-[#6D6E6F] font-bold text-[10px] flex flex-col items-center justify-center transition">
+              <span>외주/아웃소싱</span>
+              <span class="text-[8px] font-normal text-slate-500 mt-0.5">(전문업체)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- [분기 A: 현장문제 해결 가능 폼] -->
+        <div id="form-resolved-section" class="space-y-3.5">
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">조치 완료 사진 등록 (필수)</span>
+            <div onclick="simulatePhotoCapture('done')" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] cursor-pointer">
+              <div class="font-medium text-[#1E1F21]" id="photo-status-resolved">완료 사진 첨부하기</div>
+            </div>
+          </div>
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">조치 내용 코멘트 & 부품 사용</span>
+            <textarea id="report-notes-resolved" rows="3" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs outline-none" placeholder="수리 및 청소 완료 내용을 입력하세요 (예: 센서 배터리 교체 완료, 정상 통수 확인)"></textarea>
+          </div>
+        </div>
+
+        <!-- [분기 B: 현장문제 해결 불가능 폼 (미해결 대기)] -->
+        <div id="form-unresolved-section" class="hidden space-y-3.5">
+          <div class="p-2.5 bg-red-50 rounded-xl border border-red-200 text-red-700 text-[11px]">
+            즉시 해결 불가능으로 보고하면 관리자 진행프로세스에 '미해결 계속 대기'로 잔류하며, 후속 자재 발주나 공사가 진행됩니다.
+          </div>
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">미해결 사유 유형</span>
+            <select id="unresolved-category" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs bg-white outline-none font-semibold">
+              <option value="부품/자재 재고 없음">특수 부품/자재 재고 없음 (발주 필요)</option>
+              <option value="전문 외주업체 공사 필요">자체 해결 불가 (전문 외주업체 출동 필요)</option>
+              <option value="추가 인력 및 장비 필요">추가 인력 및 사다리/장비 지원 필요</option>
+              <option value="안전상 작업 중단 필요">전기/가스 누출 등 위험으로 작업 중단</option>
+            </select>
+          </div>
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">현장 상태 증빙 사진 (선택)</span>
+            <div onclick="simulatePhotoCapture('unresolved')" class="border border-dashed border-[#EDECEB] rounded-xl p-3 text-center bg-[#FAF9F8] cursor-pointer">
+              <span id="photo-status-unresolved" class="text-[#6D6E6F] font-medium">파손/부품 규격 사진 첨부</span>
+            </div>
+          </div>
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">미해결 상세 사유 입력</span>
+            <textarea id="report-notes-unresolved" rows="3" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs outline-none" placeholder="자세한 사유를 입력하세요 (예: 배관 100A 특수 밸브 마모로 자재 발주 필요. 3일 소요 예상)"></textarea>
+          </div>
+        </div>
+
+        <!-- [분기 C: 외주 및 아웃소싱 처리 폼] -->
+        <div id="form-outsource-section" class="hidden space-y-3.5">
+          <div class="p-2.5 bg-indigo-50 rounded-xl border border-indigo-200 text-indigo-700 text-[11px]">
+            자체 기술 또는 인력으로 처리가 어려운 전문 영역은 외주 및 아웃소싱 협력사로 의뢰 처리됩니다.
+          </div>
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">외주 협력업체 지정</span>
+            <select id="outsource-partner" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs bg-white outline-none font-semibold">
+              <option value="삼원엘리베이터">삼원엘리베이터 (승강기/특수설비)</option>
+              <option value="한양위생배관공사">한양위생배관공사 (메인배관/고압세척)</option>
+              <option value="대한소방방재엔지니어링">대한소방방재엔지니어링 (소방/스프링클러)</option>
+              <option value="세기특수유리샷시">세기특수유리샷시 (외벽/도어/강화유리)</option>
+              <option value="기타 전문외주업체">기타 전문외주업체 직접 협의</option>
+            </select>
+          </div>
+          <div>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">외주 의뢰 사유 및 작업 범위</span>
+            <textarea id="outsource-reason" rows="2" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs outline-none" placeholder="외주업체 전달 필요 작업 내용을 입력하세요 (예: 승강기 2호기 인버터 메인보드 고장 의심 출동 요청)"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">예상 출동 희망일</span>
+              <input type="text" id="outsource-estimated-date" placeholder="예: 익일 오전, 즉시출동" class="w-full border border-[#EDECEB] rounded-xl p-2 text-xs outline-none">
+            </div>
+            <div>
+              <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">현장 증빙</span>
+              <div onclick="simulatePhotoCapture('outsource')" class="border border-dashed border-[#EDECEB] rounded-xl p-2 text-center bg-[#FAF9F8] cursor-pointer">
+                <span id="photo-status-outsource" class="text-[10px] text-[#6D6E6F] font-semibold">사진 첨부</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 하단 제출 버튼 -->
+      <div class="p-4 border-t border-[#EDECEB]">
+        <button id="btn-submit-report" onclick="submitFinalReport()" class="w-full py-3 bg-[#34A853] hover:bg-[#2D8E47] text-white rounded-xl font-bold text-xs shadow-sm">
+          조치 완료 보고 제출
+        </button>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- [MODE 2] 일반인 QR 간편 신고 (SMS 문자인증) -->
+    <!-- ============================================== -->
+    <div id="view-qr" class="hidden flex-1 flex flex-col h-full bg-white">
+      <div class="px-5 py-3 border-b border-[#EDECEB]">
+        <span class="text-[10px] text-[#F06A6A] font-semibold">시설 불편 신고</span>
+        <select id="qr-target-location" class="w-full text-sm font-bold text-[#1E1F21] bg-transparent outline-none"></select>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        <div>
+          <span class="block text-[11px] text-[#6D6E6F] mb-1">불편 유형 선택</span>
+          <select id="qr-category-select" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs bg-white outline-none font-medium">
+            <option value="FACILITY">시설/영선보수 (수전, 배관, 문고리 고장)</option>
+            <option value="CLEANING">환경/미화청결 (바닥 오염, 쓰레기 방치)</option>
+            <option value="SECURITY">보안/안전 (출입문, 주차 장애, 비상구)</option>
+            <option value="ELECTRIC">전기/기계설비 (조명 깜빡임, 콘센트)</option>
+            <option value="ELEVATOR">승강기/특수 (버튼 불량, 소음)</option>
+          </select>
+        </div>
+
+        <div class="bg-[#FAF9F8] p-3 rounded-xl border border-[#EDECEB] space-y-2.5">
+          <div class="flex justify-between items-center">
+            <span class="font-semibold text-[#1E1F21]">휴대폰 문자 인증</span>
+            <span id="sms-badge" class="text-[10px] text-[#6D6E6F]">인증 대기</span>
+          </div>
+          <div class="flex space-x-1.5">
+            <input type="tel" id="sms-phone" placeholder="휴대폰 번호 (- 없이 입력)" class="flex-1 border border-[#EDECEB] bg-white rounded-lg px-2.5 py-1.5 text-xs outline-none">
+            <button onclick="sendSmsOtp()" class="px-2.5 py-1.5 bg-[#1E1F21] text-white rounded-lg text-[11px] font-medium whitespace-nowrap">인증번호 전송</button>
+          </div>
+          <div id="otp-group" class="hidden flex space-x-1.5 pt-1">
+            <input type="text" maxlength="6" id="sms-otp" placeholder="인증번호 6자리" class="flex-1 border border-[#EDECEB] bg-white rounded-lg px-2.5 py-1.5 text-xs outline-none">
+            <button onclick="verifySmsOtp()" class="px-3 py-1.5 bg-[#34A853] text-white rounded-lg text-[11px] font-medium whitespace-nowrap">확인</button>
+          </div>
+        </div>
+
+        <div>
+          <span class="block text-[11px] text-[#6D6E6F] mb-1">현장 사진 촬영</span>
+          <div onclick="simulateReportPhoto()" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] cursor-pointer">
+            <div class="font-medium text-[#1E1F21]" id="qr-photo-status">사진 촬영 / 추가</div>
+          </div>
+        </div>
+
+        <div>
+          <span class="block text-[11px] text-[#6D6E6F] mb-1">신고 제목</span>
+          <input type="text" id="qr-title" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs outline-none mb-2" placeholder="예: 세면대 물이 전혀 안 나옴">
+          <span class="block text-[11px] text-[#6D6E6F] mb-1">상세 내용</span>
+          <textarea id="qr-desc" rows="3" class="w-full border border-[#EDECEB] rounded-xl p-2.5 text-xs outline-none" placeholder="고장 및 불편 사항을 입력하세요"></textarea>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-[#EDECEB]">
+        <button onclick="submitQrTicket()" class="w-full py-3 bg-[#1E1F21] hover:bg-black text-white rounded-xl font-semibold text-xs shadow-md">
+          신고 접수하기
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function getTenantParam() {
+      return new URLSearchParams(window.location.search).get('tenant') || '';
+    }
+    (function() {
+      const origFetch = window.fetch;
+      window.fetch = function(input, init) {
+        const tenant = getTenantParam();
+        if (tenant && typeof input === 'string' && input.startsWith('/api/') && !input.includes('tenant=')) {
+          const sep = input.includes('?') ? '&' : '?';
+          input = input + sep + 'tenant=' + encodeURIComponent(tenant);
+        }
+        return origFetch.call(this, input, init);
+      };
+    })();
+
+    let isSmsVerified = false;
+    let hasReportPhoto = false;
+    let hasCompletePhoto = false;
+    let currentWorkerId = 'user_worker_kang_e';
+    let currentWorkerGroupId = 'role_elec';
+    let currentResolutionMode = 'RESOLVED'; // 'RESOLVED' or 'UNRESOLVED'
+
+    async function init() {
+      // 1. URL 쿼리 파라미터 파싱 (테넌트, 사용자, 모드 지원)
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenant = urlParams.get('tenant');
+      const userId = urlParams.get('user_id');
+      const mode = urlParams.get('mode');
+
+      // 2. 테넌트 정보 동적 로드 (로고 및 회사명 반영)
+      if (tenant) {
+        try {
+          const res = await fetch(`/api/settings/company?tenant=${tenant}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.logo_url) {
+              const logoBadge = document.getElementById('mobile-header-logo');
+              if (logoBadge) logoBadge.innerText = data.logo_url;
+            }
+          }
+        } catch (e) {
+          console.error('Tenant load error:', e);
+        }
+      }
+
+      // 3. 특정 작업자 ID 전달 시 자동 스위칭
+      if (userId) {
+        const sel = document.getElementById('worker-select-switch');
+        if (sel) {
+          for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === userId) {
+              sel.selectedIndex = i;
+              currentWorkerId = sel.options[i].value;
+              currentWorkerGroupId = sel.options[i].getAttribute('data-group');
+              const groupLabel = document.getElementById('worker-group-label');
+              if (groupLabel) groupLabel.innerText = sel.options[i].getAttribute('data-group-name');
+              break;
+            }
+          }
+        }
+      }
+
+      // 4. QR 모드 전달 시 자동 전환
+      if (mode === 'qr') {
+        setMobileMode('qr');
+      }
+
+      await loadLocations();
+      await loadWorkerTasks();
+    }
+
+    async function loadLocations() {
+      const res = await fetch('/api/locations');
+      const locs = await res.json();
+      const select = document.getElementById('qr-target-location');
+      select.innerHTML = '';
+      locs.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.id;
+        opt.innerText = l.name;
+        select.appendChild(opt);
+      });
+    }
+
+    function switchWorkerAccount() {
+      const sel = document.getElementById('worker-select-switch');
+      const opt = sel.options[sel.selectedIndex];
+      currentWorkerId = opt.value;
+      currentWorkerGroupId = opt.getAttribute('data-group');
+      document.getElementById('worker-group-label').innerText = opt.getAttribute('data-group-name');
+      loadWorkerTasks();
+    }
+
+    async function loadWorkerTasks() {
+      const res = await fetch('/api/tickets');
+      const tickets = await res.json();
+
+      const myTasks = tickets.filter(t => {
+        if (t.status === 'COMPLETED') return false;
+        const isIndividual = t.target_type === 'INDIVIDUAL' && t.assignee_id === currentWorkerId;
+        const isGroup = t.target_type === 'GROUP' && t.target_group_role_id === currentWorkerGroupId;
+        return isIndividual || isGroup;
+      });
+
+      document.getElementById('worker-task-count').innerText = myTasks.length;
+      const container = document.getElementById('worker-task-list');
+      container.innerHTML = '';
+
+      if (myTasks.length === 0) {
+        container.innerHTML = '<div class="text-center py-8 text-xs text-[#6D6E6F]">수신된 작업이 없습니다.</div>';
+        return;
+      }
+
+      myTasks.forEach(t => {
+        const isGroupTask = t.target_type === 'GROUP';
+        const isUnresolved = t.resolution_type === 'UNRESOLVED';
+        const isOutsourced = t.resolution_type === 'OUTSOURCING';
+        const isWaitingApproval = t.status === 'WAITING_APPROVAL';
+        const isClaimedByMe = t.assignee_id === currentWorkerId;
+        const isClaimedByOther = t.started_at && t.assignee_id && t.assignee_id !== currentWorkerId;
+        const isNotClaimedYet = !t.started_at;
+
+        const card = document.createElement('div');
+        card.className = `p-3.5 rounded-xl border bg-white shadow-xs space-y-2.5 ${isClaimedByOther ? 'opacity-65 bg-slate-50' : isUnresolved ? 'border-red-300 bg-red-50/30' : isOutsourced ? 'border-indigo-300 bg-indigo-50/20' : isWaitingApproval ? 'border-purple-200 bg-purple-50/20' : 'border-[#EDECEB]'}`;
+        
+        let statusTag = '';
+        if (isWaitingApproval) {
+          statusTag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#8250DF]/15 text-[#8250DF]">조치완료 (관리자 승인 대기)</span>`;
+        } else if (isOutsourced) {
+          statusTag = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">외주/아웃소싱 처리중</span>';
+        } else if (isUnresolved) {
+          statusTag = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#F06A6A]/15 text-[#F06A6A]">현장 미해결 (대기중)</span>';
+        } else if (isNotClaimedYet) {
+          statusTag = isGroupTask 
+            ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#4573D2]/15 text-[#4573D2]">직무그룹 배정 (선착순 접수)</span>'
+            : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B]">개인 배정 (접수 대기)</span>';
+        } else if (isClaimedByMe) {
+          statusTag = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#34A853]/15 text-[#34A853]">내가 접수함 (작업 중)</span>';
+        } else {
+          statusTag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">${t.claimed_by_name || t.completed_by_name || '동료'} 접수 진행 중</span>`;
+        }
+
+        let actionButtonHtml = '';
+        if (isWaitingApproval) {
+          actionButtonHtml = '<span class="text-[11px] font-bold text-[#8250DF] bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">관리자 승인 대기중</span>';
+        } else if (isClaimedByOther) {
+          actionButtonHtml = `<span class="text-[10px] text-[#6D6E6F] font-semibold bg-slate-100 px-2 py-1 rounded">${t.claimed_by_name || '동료'} 작업중</span>`;
+        } else if (isNotClaimedYet) {
+          actionButtonHtml = `
+            <button onclick="claimWorkerTask('${t.id}')" class="px-3.5 py-1.5 bg-[#4573D2] hover:bg-[#3460B8] text-white text-[11px] font-bold rounded-lg shadow-sm flex items-center space-x-1">
+              <span>내가 접수 (작업 착수)</span>
+            </button>
+          `;
+        } else {
+          // 내가 접수한 건 -> 조치 보고 & 외주/아웃소싱 처리 버튼 제공!
+          actionButtonHtml = `
+            <div class="flex items-center space-x-1.5">
+              <button onclick="openWorkerDetail('${t.id}', '${t.instruction_title || t.title}', true, 'OUTSOURCE')" class="px-2.5 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-[11px] font-bold rounded-lg shadow-2xs">
+                외주/아웃소싱
+              </button>
+              <button onclick="openWorkerDetail('${t.id}', '${t.instruction_title || t.title}', true, 'RESOLVED')" class="px-3 py-1.5 bg-[#1E1F21] hover:bg-black text-white text-[11px] font-bold rounded-lg shadow-sm">
+                조치 보고
+              </button>
+            </div>
+          `;
+        }
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            ${statusTag}
+            <span class="text-[10px] text-[#4573D2] font-semibold">${t.location_name || ''}</span>
+          </div>
+
+          <div class="text-xs font-bold text-[#1E1F21]">${t.instruction_title || t.title}</div>
+          <div class="text-[11px] text-[#6D6E6F] bg-[#FAF9F8] p-2 rounded-lg border border-[#EDECEB]">지시: "${t.instruction_notes || '현장 점검 및 조치 요망'}"</div>
+
+          ${isUnresolved ? `
+            <div class="p-2 bg-red-100/60 rounded text-[10px] text-red-700 font-medium">
+              등록된 미해결 사유: ${t.unresolved_reason || ''}
+            </div>
+          ` : ''}
+
+          ${isWaitingApproval ? `
+            <div class="p-2 bg-purple-100/50 rounded text-[10px] text-[#8250DF] font-medium">
+              조치 보고 내용: "${t.completion_notes || ''}"
+            </div>
+          ` : ''}
+
+          <div class="pt-1 flex items-center justify-between border-t border-[#EDECEB]">
+            <span class="text-[10px] text-[#A0A1A2]">${t.assigned_at ? t.assigned_at.substring(5, 16) : ''}</span>
+            <div>${actionButtonHtml}</div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // [신규] 실무자 현장 접수 (선착순 할당)
+    async function claimWorkerTask(ticketId) {
+      const sel = document.getElementById('worker-select-switch');
+      const workerName = sel.options[sel.selectedIndex].text;
+      
+      if (!confirm(`[${workerName}] 님으로 이 작업을 현장 접수하시겠습니까?\n접수 시 본인에게 작업이 할당되며 조치 보고(카메라/코멘트)가 활성화됩니다.`)) return;
+
+      const res = await fetch(`/api/tickets/${ticketId}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_id: currentWorkerId,
+          worker_name: workerName
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || '접수 실패');
+        return;
+      }
+      alert(`작업이 성공적으로 접수되었습니다.\n현장 조치 후 [조치 보고 작성]을 눌러 완료 사진과 코멘트를 등록하세요.`);
+      await loadWorkerTasks();
+    }
+
+    function openWorkerDetail(id, title, isClaimed = true, defaultMode = 'RESOLVED') {
+      document.getElementById('report-ticket-id').value = id;
+      document.getElementById('report-ticket-title').innerText = title;
+      setResolutionMode(defaultMode);
+      hasCompletePhoto = false;
+      document.getElementById('photo-status-resolved').innerText = '완료 사진 첨부하기';
+      document.getElementById('modal-worker-report').classList.remove('hidden');
+    }
+
+    function closeWorkerDetail() {
+      document.getElementById('modal-worker-report').classList.add('hidden');
+    }
+
+    // 분기 모드 전환: RESOLVED vs UNRESOLVED vs OUTSOURCE
+    function setResolutionMode(mode) {
+      currentResolutionMode = mode;
+      const btnRes = document.getElementById('btn-res-resolved');
+      const btnUnres = document.getElementById('btn-res-unresolved');
+      const btnOut = document.getElementById('btn-res-outsource');
+      const formRes = document.getElementById('form-resolved-section');
+      const formUnres = document.getElementById('form-unresolved-section');
+      const formOut = document.getElementById('form-outsource-section');
+      const submitBtn = document.getElementById('btn-submit-report');
+
+      // 초기화
+      btnRes.className = 'py-2 px-1 rounded-xl border border-[#EDECEB] bg-white text-[#6D6E6F] font-bold text-[10px] flex flex-col items-center justify-center transition';
+      btnUnres.className = 'py-2 px-1 rounded-xl border border-[#EDECEB] bg-white text-[#6D6E6F] font-bold text-[10px] flex flex-col items-center justify-center transition';
+      btnOut.className = 'py-2 px-1 rounded-xl border border-[#EDECEB] bg-white text-[#6D6E6F] font-bold text-[10px] flex flex-col items-center justify-center transition';
+      formRes.classList.add('hidden');
+      formUnres.classList.add('hidden');
+      formOut.classList.add('hidden');
+
+      if (mode === 'RESOLVED') {
+        btnRes.className = 'py-2 px-1 rounded-xl border-2 border-[#34A853] bg-emerald-50 text-[#34A853] font-bold text-[10px] flex flex-col items-center justify-center transition';
+        formRes.classList.remove('hidden');
+        submitBtn.className = 'w-full py-3 bg-[#34A853] hover:bg-[#2D8E47] text-white rounded-xl font-bold text-xs shadow-sm';
+        submitBtn.innerText = '조치 완료 보고 제출';
+      } else if (mode === 'OUTSOURCE') {
+        btnOut.className = 'py-2 px-1 rounded-xl border-2 border-indigo-600 bg-indigo-50 text-indigo-700 font-bold text-[10px] flex flex-col items-center justify-center transition';
+        formOut.classList.remove('hidden');
+        submitBtn.className = 'w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-sm';
+        submitBtn.innerText = '외주 & 아웃소싱 의뢰 접수';
+      } else {
+        btnUnres.className = 'py-2 px-1 rounded-xl border-2 border-[#F06A6A] bg-red-50 text-[#F06A6A] font-bold text-[10px] flex flex-col items-center justify-center transition';
+        formUnres.classList.remove('hidden');
+        submitBtn.className = 'w-full py-3 bg-[#F06A6A] hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-sm';
+        submitBtn.innerText = '미해결 보고 제출 (관리자 계속 대기)';
+      }
+    }
+
+    const capturedMobilePhotos = {};
+    function simulatePhotoCapture(type) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment';
+      input.onchange = async function() {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        let infoText = `${file.name} (${Math.max(1, Math.round(file.size / 1024))}KB)`;
+        if (window.compressImageFile) {
+          try {
+            const res = await window.compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.78 });
+            capturedMobilePhotos[type] = res.dataUrl;
+            infoText = `${res.originalKB}KB -> ${res.compressedKB}KB 압축`;
+          } catch (e) {}
+        }
+        if (type === 'done') {
+          hasCompletePhoto = true;
+          document.getElementById('photo-status-resolved').innerHTML = `<span class="text-[#34A853] font-bold">완료 사진 첨부됨 (${infoText})</span>`;
+        } else if (type === 'outsource') {
+          document.getElementById('photo-status-outsource').innerHTML = `<span class="text-indigo-600 font-bold">사진 첨부됨 (${infoText})</span>`;
+        } else {
+          document.getElementById('photo-status-unresolved').innerHTML = `<span class="text-[#F06A6A] font-bold">증빙 사진 첨부됨 (${infoText})</span>`;
+        }
+      };
+      input.click();
+    }
+
+    // 최종 보고 제출 (해결 가능 vs 해결 불가능 vs 외주 의뢰 API 분기 호출)
+    async function submitFinalReport() {
+      const id = document.getElementById('report-ticket-id').value;
+      const sel = document.getElementById('worker-select-switch');
+      const workerName = sel.options[sel.selectedIndex].text;
+
+      if (currentResolutionMode === 'RESOLVED') {
+        // [해결 가능 경로]
+        const notes = document.getElementById('report-notes-resolved').value.trim();
+        if (!hasCompletePhoto) {
+          alert('현장 조치 완료 사진을 첨부해 주세요.');
+          return;
+        }
+
+        await fetch(`/api/tickets/${id}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worker_id: currentWorkerId,
+            worker_name: workerName,
+            completion_notes: notes || '현장 조치 완료되었습니다.',
+            completion_photo_url: capturedMobilePhotos.done || 'photo_done.jpg'
+          })
+        });
+
+        alert(`조치 완료 보고가 등록되었습니다.\n(${workerName}님이 완료 처리함 -> 관리자 승인 대기)`);
+      } else if (currentResolutionMode === 'OUTSOURCE') {
+        // [외주/아웃소싱 의뢰 경로]
+        const partner = document.getElementById('outsource-partner').value;
+        const reason = document.getElementById('outsource-reason').value.trim();
+        const estDate = document.getElementById('outsource-estimated-date').value.trim();
+
+        await fetch(`/api/tickets/${id}/outsource`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worker_id: currentWorkerId,
+            worker_name: workerName,
+            partner_name: partner,
+            outsource_reason: reason || '자체 수리 불가 전문 영역',
+            estimated_date: estDate,
+            photo_url: capturedMobilePhotos.outsource || 'outsource_guide.jpg'
+          })
+        });
+
+        alert(`외주 및 아웃소싱 의뢰가 접수되었습니다.\n협력사: ${partner}\n(관리자 및 관제 콘솔에 외주 진행중으로 등록)`);
+      } else {
+        // [해결 불가능 경로 - 미해결 계속 대기]
+        const catReason = document.getElementById('unresolved-category').value;
+        const textReason = document.getElementById('report-notes-unresolved').value.trim();
+        const fullReason = textReason ? `[${catReason}] ${textReason}` : catReason;
+
+        await fetch(`/api/tickets/${id}/unresolved`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worker_id: currentWorkerId,
+            worker_name: workerName,
+            unresolved_reason: fullReason,
+            unresolved_photo_url: capturedMobilePhotos.unresolved || 'unresolved.jpg'
+          })
+        });
+
+        alert(`현장 해결 불가 사유가 등록되었습니다.\n(관리자 진행프로세스에 '미해결 계속 대기'로 잔류합니다)`);
+      }
+
+      closeWorkerDetail();
+      await loadWorkerTasks();
+    }
+
+    // SMS 인증 로직
+    async function sendSmsOtp() {
+      const phone = document.getElementById('sms-phone').value.trim();
+      if (!phone) { alert('휴대폰 번호를 입력하세요.'); return; }
+      const res = await fetch('/api/auth/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.message || '인증번호 발송 실패'); return; }
+      document.getElementById('otp-group').classList.remove('hidden');
+      alert('인증번호 6자리가 발송되었습니다. (테스트용 고정 번호: 123456)');
+    }
+
+    async function verifySmsOtp() {
+      const phone = document.getElementById('sms-phone').value.trim();
+      const otp = document.getElementById('sms-otp').value.trim();
+      const res = await fetch('/api/auth/sms/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp })
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.message || '인증번호 오류'); return; }
+      isSmsVerified = true;
+      document.getElementById('sms-badge').innerText = '인증 완료';
+      document.getElementById('sms-badge').className = 'text-[10px] text-[#34A853] font-bold';
+      alert('문자 인증이 완료되었습니다.');
+    }
+
+    function simulateReportPhoto() {
+      hasReportPhoto = true;
+      document.getElementById('qr-photo-status').innerHTML = '<span class="text-[#34A853] font-bold">현장 사진 등록됨 (1장)</span>';
+      alert('현장 사진 첨부가 완료되었습니다.');
+    }
+
+    async function submitQrTicket() {
+      if (!isSmsVerified) { alert('먼저 휴대폰 문자 인증을 완료해 주세요.'); return; }
+      const title = document.getElementById('qr-title').value.trim();
+      if (!title) { alert('신고 제목을 입력하세요.'); return; }
+      const locId = document.getElementById('qr-target-location').value;
+      const cat = document.getElementById('qr-category-select').value;
+      const desc = document.getElementById('qr-desc').value.trim();
+      const phone = document.getElementById('sms-phone').value.trim();
+
+      const res = await fetch('/api/tickets/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_id: locId, category: cat, title, description: desc, phone })
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.message || '신고 접수 실패'); return; }
+
+      alert(`[접수 완료] 시설관리 관제센터에 정상적으로 등록되었습니다.`);
+      document.getElementById('qr-title').value = '';
+      document.getElementById('qr-desc').value = '';
+      document.getElementById('qr-photo-status').innerText = '사진 촬영 / 추가';
+      hasReportPhoto = false;
+    }
+
+    function setMobileMode(m) {
+      if (m === 'worker') {
+        document.getElementById('view-worker').classList.remove('hidden');
+        document.getElementById('view-qr').classList.add('hidden');
+        document.getElementById('btn-mode-worker').className = 'px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition';
+        document.getElementById('btn-mode-qr').className = 'px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition';
+        loadWorkerTasks();
+      } else {
+        document.getElementById('view-worker').classList.add('hidden');
+        document.getElementById('view-qr').classList.remove('hidden');
+        document.getElementById('btn-mode-qr').className = 'px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition';
+        document.getElementById('btn-mode-worker').className = 'px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition';
+      }
+    }
+
+    // ⭐️ [신규] 실무자 하단 서브탭 전환 (내 작업 vs 현장순찰 vs 내 정보)
+    let currentWorkerSubTab = 'tasks';
+    function setWorkerNavTab(tab) {
+      currentWorkerSubTab = tab;
+      ['tasks', 'patrol', 'profile'].forEach(t => {
+        const view = document.getElementById('worker-tab-' + t);
+        const btn = document.getElementById('worker-nav-' + t);
+        if (view) view.classList.add('hidden');
+        if (btn) {
+          btn.className = 'flex flex-col items-center py-1 px-3 text-[#6D6E6F] font-semibold hover:text-[#1E1F21] transition';
+        }
+      });
+
+      const activeView = document.getElementById('worker-tab-' + tab);
+      const activeBtn = document.getElementById('worker-nav-' + tab);
+      if (activeView) activeView.classList.remove('hidden');
+      if (activeBtn) {
+        activeBtn.className = 'flex flex-col items-center py-1 px-3 text-[#1E1F21] font-bold transition';
+      }
+
+      if (tab === 'tasks') loadWorkerTasks();
+      if (tab === 'patrol') {
+        loadPatrolHistory();
+        loadMobileInspectionTemplates();
+      }
+      if (tab === 'profile') updateProfileTab();
+    }
+
+    let mobileInspectionTemplates = [];
+
+    async function loadMobileInspectionTemplates() {
+      try {
+        const res = await fetch('/api/inspections/templates');
+        mobileInspectionTemplates = await res.json();
+        const sel = document.getElementById('mobile-patrol-template-select');
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = '<option value="DEFAULT">기본 순찰 체크리스트 (종합)</option>';
+        mobileInspectionTemplates.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.innerText = `[${t.target_role_name || '전체'}] ${t.title}`;
+          sel.appendChild(opt);
+        });
+        if (cur && Array.from(sel.options).some(o => o.value === cur)) sel.value = cur;
+      } catch (e) {
+        console.error('loadMobileInspectionTemplates err:', e);
+      }
+    }
+
+    function onMobileTemplateSelectChange() {
+      const sel = document.getElementById('mobile-patrol-template-select');
+      const tmplId = sel?.value;
+      const titleEl = document.getElementById('mobile-checklist-title');
+      const bodyEl = document.getElementById('mobile-checklist-items-body');
+      if (!bodyEl) return;
+
+      if (tmplId === 'DEFAULT' || !tmplId) {
+        if (titleEl) titleEl.innerText = '필수 순찰 점검 체크리스트';
+        bodyEl.innerHTML = `
+          <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+            <input type="checkbox" id="chk-fire" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+            <span>[소방] 소화전 압력 정상 / 비상구 적치물 없음</span>
+          </label>
+          <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+            <input type="checkbox" id="chk-light" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+            <span>[조명] 복도 및 비상계단 LED 점등 상태 양호</span>
+          </label>
+          <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+            <input type="checkbox" id="chk-leak" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+            <span>[위생] 화장실 수전 누수 없음 / 악취 및 배수 양호</span>
+          </label>
+          <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
+            <input type="checkbox" id="chk-door" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+            <span>[공용] 방화문 자동 도어클로저 및 승강기 정상</span>
+          </label>
+        `;
+        return;
+      }
+
+      const tmpl = mobileInspectionTemplates.find(t => t.id === tmplId);
+      if (!tmpl) return;
+
+      if (titleEl) titleEl.innerText = tmpl.title;
+      bodyEl.innerHTML = '';
+
+      // ⭐️ 템플릿 대상 건물/층수 범위 연동 (체크된 부분만 나오도록 함)
+      let allowedScope = {};
+      if (tmpl.building && tmpl.building !== '전체') {
+        try {
+          if (tmpl.building.startsWith('{')) {
+            allowedScope = JSON.parse(tmpl.building);
+          }
+        } catch(e) {}
+      }
+      const bldgSel = document.getElementById('patrol-building');
+      const floorSel = document.getElementById('patrol-floor');
+      if (bldgSel && floorSel && Object.keys(allowedScope).length > 0) {
+        const allowedBldgs = Object.keys(allowedScope);
+        bldgSel.innerHTML = '';
+        allowedBldgs.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b;
+          opt.innerText = b;
+          bldgSel.appendChild(opt);
+        });
+        const updateFloors = () => {
+          const curB = bldgSel.value;
+          const allowedF = (allowedScope[curB] || []).slice();
+          floorSel.innerHTML = '';
+          allowedF.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f;
+            opt.innerText = `${f} (${f.startsWith('B') ? '지하 ' + f.substring(1) + '층' : f === 'RF' ? '옥상' : f.replace('F', '층')})`;
+            floorSel.appendChild(opt);
+          });
+        };
+        bldgSel.onchange = updateFloors;
+        updateFloors();
+      }
+
+      let items = [];
+      try { items = typeof tmpl.items === 'string' ? JSON.parse(tmpl.items) : (tmpl.items || []); } catch(e) {}
+
+      items.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'p-2.5 bg-[#FAF9F8] rounded-xl border border-[#EDECEB] space-y-1 text-xs';
+
+        if (item.type === 'SECTION') {
+          div.className = 'p-2 bg-emerald-50 border-l-4 border-[#0F9D58] rounded-r-xl space-y-0.5 mt-2';
+          div.innerHTML = `<b class="text-[#0F9D58] text-xs">${item.title || item.label}</b><p class="text-[10px] text-gray-500">${item.description || ''}</p>`;
+        } else if (item.type === 'CHECK') {
+          div.innerHTML = `
+            <label class="flex items-center space-x-2 cursor-pointer font-bold text-[#1E1F21]">
+              <input type="checkbox" id="mob-chk-${item.id}" checked class="w-4 h-4 accent-[#0F9D58]">
+              <span>${item.label} (완료)</span>
+            </label>
+          `;
+        } else if (item.type === 'YES_NO') {
+          div.innerHTML = `
+            <div class="font-bold text-[#1E1F21] mb-1">${item.label}</div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex items-center justify-center p-2 bg-white rounded-lg border border-gray-200 cursor-pointer space-x-1.5 font-bold">
+                <input type="radio" name="mob-yn-${item.id}" value="네" checked class="accent-[#0F9D58]">
+                <span class="text-[#0F9D58]">네 (정상)</span>
+              </label>
+              <label class="flex items-center justify-center p-2 bg-white rounded-lg border border-gray-200 cursor-pointer space-x-1.5 font-bold">
+                <input type="radio" name="mob-yn-${item.id}" value="아니오" class="accent-[#EA4335]">
+                <span class="text-[#EA4335]">아니오 (이상)</span>
+              </label>
+            </div>
+          `;
+        } else if (item.type === 'TEXT') {
+          div.innerHTML = `
+            <div class="font-bold text-[#1E1F21] mb-1">${item.label}</div>
+            <div class="flex items-center space-x-1">
+              <input type="text" id="mob-txt-${item.id}" placeholder="${item.placeholder || '수치나 내용 입력'}" class="w-full h-8 px-2.5 bg-white border border-[#D5D3CF] rounded-lg text-xs font-bold outline-none">
+              ${item.unit ? `<span class="text-xs font-bold text-gray-600 px-1">${item.unit}</span>` : ''}
+            </div>
+          `;
+        } else if (item.type === 'RADIO') {
+          div.innerHTML = `
+            <div class="font-bold text-[#1E1F21] mb-1">${item.label}</div>
+            <div class="space-y-1">
+              ${(item.options || []).map((opt, i) => `
+                <label class="flex items-center space-x-2 p-1.5 bg-white rounded-lg border border-gray-200 cursor-pointer">
+                  <input type="radio" name="mob-rad-${item.id}" value="${opt}" ${i === 0 ? 'checked' : ''} class="accent-[#1E1F21]">
+                  <span class="text-xs font-medium">${opt}</span>
+                </label>
+              `).join('')}
+            </div>
+          `;
+        } else if (item.type === 'CHECKBOX') {
+          div.innerHTML = `
+            <div class="font-bold text-[#1E1F21] mb-1">${item.label}</div>
+            <div class="space-y-1">
+              ${(item.options || []).map((opt, i) => `
+                <label class="flex items-center space-x-2 p-1.5 bg-white rounded-lg border border-gray-200 cursor-pointer">
+                  <input type="checkbox" name="mob-cb-${item.id}" value="${opt}" ${i < 2 ? 'checked' : ''} class="accent-[#0F9D58]">
+                  <span class="text-xs font-medium">${opt}</span>
+                </label>
+              `).join('')}
+            </div>
+          `;
+        }
+        bodyEl.appendChild(div);
+      });
+    }
+
+    // ⭐️ [신규] 현장 순찰 점검 일지 제출
+    async function submitPatrolLog() {
+      const sel = document.getElementById('worker-select-switch');
+      const workerName = sel.options[sel.selectedIndex].text;
+      const building = document.getElementById('patrol-building').value;
+      const floor = document.getElementById('patrol-floor').value;
+      const locName = document.getElementById('patrol-loc-name').value.trim() || `${building} ${floor} 공용 복도`;
+      const notes = document.getElementById('patrol-notes').value.trim();
+
+      const tmplSel = document.getElementById('mobile-patrol-template-select');
+      const tmplId = tmplSel?.value;
+
+      if (tmplId && tmplId !== 'DEFAULT') {
+        const tmpl = mobileInspectionTemplates.find(t => t.id === tmplId);
+        let items = [];
+        try { items = typeof tmpl.items === 'string' ? JSON.parse(tmpl.items) : (tmpl.items || []); } catch (e) {}
+
+        const results = {};
+        items.forEach(item => {
+          if (item.type === 'CHECK') {
+            results[item.id] = document.getElementById(`mob-chk-${item.id}`)?.checked || false;
+          } else if (item.type === 'YES_NO') {
+            const checked = document.querySelector(`input[name="mob-yn-${item.id}"]:checked`);
+            results[item.id] = checked ? checked.value : '네';
+          } else if (item.type === 'TEXT') {
+            results[item.id] = document.getElementById(`mob-txt-${item.id}`)?.value.trim() || '';
+          } else if (item.type === 'RADIO') {
+            const checked = document.querySelector(`input[name="mob-rad-${item.id}"]:checked`);
+            results[item.id] = checked ? checked.value : (item.options?.[0] || '');
+          } else if (item.type === 'CHECKBOX') {
+            const checkboxes = document.querySelectorAll(`input[name="mob-cb-${item.id}"]:checked`);
+            results[item.id] = Array.from(checkboxes).map(c => c.value);
+          }
+        });
+
+        await fetch('/api/inspections/logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            template_id: tmpl.id,
+            template_title: tmpl.title,
+            worker_id: currentWorkerId,
+            worker_name: workerName,
+            role_name: tmpl.target_role_name || '전체 직무',
+            building,
+            floor,
+            location_name: locName,
+            status: '양호',
+            notes: notes || '현장 점검 완료 (정상)',
+            results
+          })
+        });
+      }
+
+      const checkItems = {
+        fire: document.getElementById('chk-fire') ? document.getElementById('chk-fire').checked : true,
+        light: document.getElementById('chk-light') ? document.getElementById('chk-light').checked : true,
+        leak: document.getElementById('chk-leak') ? document.getElementById('chk-leak').checked : true,
+        door: document.getElementById('chk-door') ? document.getElementById('chk-door').checked : true
+      };
+
+      const res = await fetch('/api/patrol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentWorkerId,
+          worker_name: workerName,
+          building,
+          floor,
+          location_name: locName,
+          check_items: checkItems,
+          notes: notes || '전 항목 점검 완료, 특이사항 없음',
+          photo_url: 'patrol_done.jpg'
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || '순찰 등록 실패'); return; }
+
+      alert(`[점검 완료]\n${building} ${floor} (${locName}) 점검 일지가 등록되었습니다.`);
+      document.getElementById('patrol-loc-name').value = '';
+      document.getElementById('patrol-notes').value = '';
+      await loadPatrolHistory();
+      updateProfileTab();
+    }
+
+    // ⭐️ [신규] 최근 순찰 점검 이력 로드
+    async function loadPatrolHistory() {
+      const list = document.getElementById('patrol-history-list');
+      if (!list) return;
+      try {
+        const res = await fetch('/api/patrol');
+        const logs = await res.json();
+        list.innerHTML = '';
+        if (logs.length === 0) {
+          list.innerHTML = '<div class="p-4 bg-white rounded-xl text-center text-[#A0A1A2] text-xs">등록된 최근 순찰 기록이 없습니다.</div>';
+          return;
+        }
+
+        logs.slice(0, 10).forEach(log => {
+          let items = {};
+          try { items = typeof log.check_items === 'string' ? JSON.parse(log.check_items) : log.check_items; } catch(e) {}
+          const isAllPass = items.fire !== false && items.light !== false && items.leak !== false && items.door !== false;
+
+          const card = document.createElement('div');
+          card.className = 'bg-white p-3 rounded-xl border border-[#EDECEB] space-y-1.5 shadow-2xs';
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21]">${log.building || '본관'}</span>
+                <span class="font-bold text-[#4573D2] text-xs">${log.floor}</span>
+                <span class="font-bold text-[#1E1F21] text-xs ml-1">${log.location_name}</span>
+              </div>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${isAllPass ? 'bg-emerald-50 text-[#34A853]' : 'bg-red-50 text-[#F06A6A]'}">
+                ${isAllPass ? '양호 (정상)' : '이상 확인'}
+              </span>
+            </div>
+            <p class="text-[11px] text-[#6D6E6F] leading-tight">${log.notes || '이상 없음'}</p>
+            <div class="pt-1 flex items-center justify-between text-[10px] text-[#A0A1A2] border-t border-[#F4F3F2]">
+              <span>점검자: <b class="text-[#1E1F21] font-semibold">${log.worker_name}</b></span>
+              <span>${log.created_at ? log.created_at.substring(5, 16) : ''}</span>
+            </div>
+          `;
+          list.appendChild(card);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ⭐️ [신규] 내 정보 탭 동기화
+    async function updateProfileTab() {
+      const sel = document.getElementById('worker-select-switch');
+      const opt = sel.options[sel.selectedIndex];
+      const workerName = opt.text;
+      const groupName = opt.getAttribute('data-group-name') || '실무팀';
+
+      const nameEl = document.getElementById('profile-name');
+      const roleEl = document.getElementById('profile-role');
+      const avatarEl = document.getElementById('profile-avatar');
+      const emailEl = document.getElementById('profile-email');
+      const phoneEl = document.getElementById('profile-phone');
+
+      if (nameEl) nameEl.innerText = workerName;
+      if (roleEl) roleEl.innerText = `${groupName} · 현장 실무자`;
+      if (avatarEl) avatarEl.innerText = workerName.charAt(0);
+
+      // 사용자 정보에서 이메일 & 전화번호 가져오기
+      try {
+        const res = await fetch('/api/users');
+        const users = await res.json();
+        const user = users.find(u => u.id === currentWorkerId);
+        if (user) {
+          if (emailEl) emailEl.innerText = user.email || `${currentWorkerId}@fms.kr`;
+          if (phoneEl) phoneEl.innerText = user.phone || '010-0000-0000';
+        }
+      } catch (e) {}
+
+      // 통계 계산
+      try {
+        const res = await fetch('/api/tickets');
+        const tickets = await res.json();
+        const assigned = tickets.filter(t => t.assignee_id === currentWorkerId || t.claimed_by_name === workerName).length;
+        const completed = tickets.filter(t => t.completed_by_name === workerName && (t.status === 'COMPLETED' || t.status === 'WAITING_APPROVAL')).length;
+
+        const statAssigned = document.getElementById('profile-stat-assigned');
+        const statCompleted = document.getElementById('profile-stat-completed');
+        if (statAssigned) statAssigned.innerText = assigned;
+        if (statCompleted) statCompleted.innerText = completed;
+
+        const patrolRes = await fetch('/api/patrol');
+        const patrols = await patrolRes.json();
+        const myPatrols = patrols.filter(p => p.user_id === currentWorkerId || p.worker_name === workerName).length;
+        const statPatrol = document.getElementById('profile-stat-patrol');
+        if (statPatrol) statPatrol.innerText = myPatrols;
+      } catch (e) {}
+    }
+
+    // ⭐️ [신규] 근무 상태 토글
+    function setWorkStatus(st) {
+      const btnWorking = document.getElementById('btn-status-working');
+      const btnRest = document.getElementById('btn-status-rest');
+      const btnOff = document.getElementById('btn-status-off');
+
+      btnWorking.className = 'py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
+      btnRest.className = 'py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
+      btnOff.className = 'py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
+
+      if (st === 'WORKING') {
+        btnWorking.className = 'py-2 rounded-lg font-bold bg-[#34A853] text-white transition';
+        alert('근무 상태가 [🟢 현장근무 중]으로 설정되었습니다.');
+      } else if (st === 'REST') {
+        btnRest.className = 'py-2 rounded-lg font-bold bg-[#E5983B] text-white transition';
+        alert('근무 상태가 [⚪ 휴게/점심시간]으로 설정되었습니다.');
+      } else {
+        btnOff.className = 'py-2 rounded-lg font-bold bg-[#F06A6A] text-white transition';
+        alert('근무 상태가 [🔴 퇴근/대기]로 설정되었습니다.');
+      }
+    }
+
+    // 계정 전환 시 프로필 탭도 갱신
+    const origSwitch = switchWorkerAccount;
+    switchWorkerAccount = function() {
+      origSwitch();
+      updateProfileTab();
+      if (currentWorkerSubTab === 'patrol') loadPatrolHistory();
+    };
+
+    init();
+  </script>
+</body>
+</html>
