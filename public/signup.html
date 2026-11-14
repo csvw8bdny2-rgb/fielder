@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>회원가입 - 스마트 FMS 종합 관제 센터</title>
+  <title>회원가입 - Fielder 종합 관제 센터</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap">
   <style>
@@ -95,7 +95,7 @@
                 <input type="checkbox" id="agree-terms" onchange="checkIndividual()" class="w-4 h-4 rounded text-[#13B5EA] focus:ring-[#13B5EA] cursor-pointer">
                 <span>[필수] 서비스 이용 약관</span>
               </label>
-              <button type="button" onclick="alert('스마트 FMS 이용약관: 데이터 보안 및 서비스 품질 준수.')" class="text-slate-400 underline hover:text-white">보기</button>
+              <button type="button" onclick="alert('Fielder 이용약관: 데이터 보안 및 서비스 품질 준수.')" class="text-slate-400 underline hover:text-white">보기</button>
             </div>
 
             <div class="flex items-center justify-between">
@@ -195,7 +195,7 @@
           </div>
 
           <button type="submit" id="btn-submit-signup" class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center mt-3 shadow-md">
-            100건 무료로 스마트 FMS 시작하기
+            100건 무료로 Fielder 시작하기
           </button>
         </form>
 
@@ -398,7 +398,7 @@
         if (!res.ok) {
           alert('가입 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'));
           btn.disabled = false;
-          btn.textContent = '100건 무료로 스마트 FMS 시작하기';
+          btn.textContent = '100건 무료로 Fielder 시작하기';
           return;
         }
 
@@ -416,7 +416,7 @@
       } catch (err) {
         alert('서버 오류: ' + err.message);
         btn.disabled = false;
-        btn.textContent = '100건 무료로 스마트 FMS 시작하기';
+        btn.textContent = '100건 무료로 Fielder 시작하기';
       }
     }
 

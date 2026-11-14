@@ -1,12 +1,12 @@
 {
-  "name": "smart-fms",
+  "name": "fielder",
   "version": "1.0.0",
-  "description": "Smart Facility Management System (Enterprise FMS)",
+  "description": "Fielder - 시설관리운영시스템 (Facility Management System)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [],
+  "keywords": ["fielder", "fms", "facility-management"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
