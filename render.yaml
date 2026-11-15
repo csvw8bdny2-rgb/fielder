@@ -3,6 +3,7 @@ services:
     name: fielder
     runtime: node
     plan: free
+    autoDeploy: true
     buildCommand: npm install
     startCommand: node server.js
     envVars:
