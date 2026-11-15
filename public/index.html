@@ -96,7 +96,7 @@
             <span class="font-bold text-[#1E1F21] text-sm">전체 관제</span>
             <span id="m-count-ALL" class="font-bold text-[#1E1F21] text-base">0</span>
           </div>
-          <div class="text-xs text-[#6D6E6F] mt-1">1~3단계 전체 순차 나열</div>
+          <div class="text-xs text-[#6D6E6F] mt-1">전체 접수 및 진행 현황</div>
         </button>
 
         <!-- 2. 신규접수 (직원 순찰) -->
@@ -105,7 +105,7 @@
             <span class="font-bold text-[#1E1F21] text-sm">1. 신규접수</span>
             <span id="m-count-NEW" class="font-bold text-[#4573D2] text-base">0</span>
           </div>
-          <div class="text-xs text-[#6D6E6F] mt-1">직원 순찰앱 등록 건</div>
+          <div class="text-xs text-[#6D6E6F] mt-1">현장 순찰 점검 등록 건</div>
         </button>
 
         <!-- 3. 민원접수 (일반 모바일 QR) -->
@@ -133,7 +133,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F4F3F2] pb-3">
           <div class="flex items-center space-x-2.5">
             <span class="w-2.5 h-2.5 rounded-full bg-[#002B41]"></span>
-            <h2 class="font-bold text-[#1E1F21] text-base" id="monitoring-active-group-label">전체 현장 모니터링 (그룹별 순차 나열)</h2>
+            <h2 class="font-bold text-[#1E1F21] text-base" id="monitoring-active-group-label">전체 현장 모니터링</h2>
             <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F]" id="monitoring-active-group-count">(총 0건)</span>
           </div>
           <span class="text-xs text-[#A0A1A2]">선택한 조건에 따라 실시간 현장 작업이 필터링됩니다.</span>
@@ -211,9 +211,9 @@
               📋
             </div>
             <div class="space-y-1">
-              <h3 class="font-bold text-[#1E1F21] text-sm">외부 접수 건 선택 없음 (직접 지시 모드)</h3>
+              <h3 class="font-bold text-[#1E1F21] text-sm">선택된 접수 건 없음 (신규 지시 작성)</h3>
               <p class="text-xs text-[#6D6E6F] max-w-xs mx-auto leading-relaxed">
-                실시간 모니터링 리스트에서 접수 티켓의 <b>[작업지시]</b>를 클릭하면 해당 신고 원본과 사진이 이곳에 자동 로드됩니다.
+                실시간 모니터링 리스트에서 접수 건의 <b>[작업지시]</b>를 클릭하면 해당 신고 원본과 사진이 이곳에 자동 로드됩니다.
               </p>
             </div>
             <div class="pt-2">
@@ -260,7 +260,7 @@
 
             <div class="pt-2 text-right">
               <button type="button" onclick="resetWorkOrderToDirect()" class="text-xs text-[#6D6E6F] hover:text-[#1E1F21] underline font-semibold">
-                선택 해제 (직접 지시 모드로 전환)
+                선택 해제 (신규 직접 지시 전환)
               </button>
             </div>
           </div>
@@ -271,9 +271,9 @@
           <div class="border-b border-[#F4F3F2] pb-3 flex justify-between items-center">
             <div class="flex items-center space-x-2">
               <span class="w-2.5 h-2.5 rounded-full bg-[#002B41]"></span>
-              <h2 class="text-sm sm:text-base font-bold text-[#1E1F21]" id="wo-form-header-title">관리자 작업 지시 작성 (직접 지시 / 티켓 연동)</h2>
+              <h2 class="text-sm sm:text-base font-bold text-[#1E1F21]" id="wo-form-header-title">현장 작업 지시서 작성</h2>
             </div>
-            <span id="wo-mode-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40">직접 지시 모드</span>
+            <span id="wo-mode-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40">신규 지시 작성</span>
           </div>
 
           <input type="hidden" id="wo-form-ticket-id">
@@ -349,7 +349,7 @@
             <div class="flex space-x-8">
               <label class="flex items-center space-x-2.5 cursor-pointer">
                 <input type="radio" name="wo_target_type" value="GROUP" checked onchange="toggleTargetType()" class="w-4 h-4 text-[#1E1F21] accent-[#002B41] cursor-pointer">
-                <span class="font-bold text-sm text-[#1E1F21]">직무 그룹 지정 (선착순 1명 완결)</span>
+                <span class="font-bold text-sm text-[#1E1F21]">담당 직무 그룹 배정 (팀원 선착순 처리)</span>
               </label>
               <label class="flex items-center space-x-2.5 cursor-pointer">
                 <input type="radio" name="wo_target_type" value="INDIVIDUAL" onchange="toggleTargetType()" class="w-4 h-4 text-[#1E1F21] accent-[#002B41] cursor-pointer">
@@ -358,7 +358,7 @@
             </div>
 
             <div id="wo-group-select-box" class="pt-1 space-y-1">
-              <label class="block text-xs text-[#6D6E6F] font-semibold">담당 직무 그룹 선택 (콤보박스)</label>
+              <label class="block text-xs text-[#6D6E6F] font-semibold">담당 직무 그룹 선택</label>
               <select id="wo-select-group" class="w-full h-11 border border-[#D5D3CF] bg-white rounded-xl px-3.5 text-sm font-medium outline-none focus:border-[#0084B4] cursor-pointer"></select>
               <p class="text-xs text-[#34A853] mt-1 font-medium">
                 그룹 소속 전원에게 알림이 가며, <b>가장 먼저 접수한 1명이 현장 작업을 완결</b> 처리합니다.
@@ -366,7 +366,7 @@
             </div>
 
             <div id="wo-individual-select-box" class="hidden pt-1 space-y-1">
-              <label class="block text-xs text-[#6D6E6F] font-semibold">담당 실무자 선택 (콤보박스)</label>
+              <label class="block text-xs text-[#6D6E6F] font-semibold">담당 실무자 지정</label>
               <select id="wo-select-worker" class="w-full h-11 border border-[#D5D3CF] bg-white rounded-xl px-3.5 text-sm font-medium outline-none focus:border-[#0084B4] cursor-pointer"></select>
             </div>
           </div>
@@ -415,22 +415,17 @@
           <tbody id="wo-list-table-body" class="divide-y divide-[#EDECEB]"></tbody>
         </table>
       </div>
-            </tr>
-          </thead>
-          <tbody id="wo-list-table-body" class="divide-y divide-[#EDECEB]"></tbody>
-        </table>
-      </div>
     </section>
 
 
     <!-- ======================================================== -->
-    <!-- [3. 진행프로세스] 프로세스 리스트 & '민원/건의사항 전용 모아보기' -->
+    <!-- [3. 진행중] 프로세스 리스트 & '민원/건의사항 전용 모아보기' -->
     <!-- ======================================================== -->
     <section id="page-process" class="hidden space-y-5 text-xs">
       
       <div class="flex items-center space-x-2 border-b border-[#EDECEB] pb-2.5">
         <button onclick="setProcessSubTab('all')" id="process-tab-all" class="px-4 py-2 bg-[#EBF7FD] text-[#007EA8] border-2 border-[#13B5EA] rounded-xl font-bold shadow-xs transition">
-          전체 진행 프로세스
+          전체 진행 현황
         </button>
         <button onclick="setProcessSubTab('complaints')" id="process-tab-complaints" class="px-4 py-2 bg-white border border-[#E2E8F0] text-[#64748B] hover:text-[#002B41] hover:border-slate-300 rounded-xl font-semibold transition flex items-center space-x-1.5">
           <span>일반 민원 / 건의사항 모아보기</span>
@@ -442,7 +437,7 @@
         <!-- 상단 검색 & 정렬 툴바 -->
         <div class="bg-white p-3.5 rounded-xl border border-[#D5D3CF] shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center space-x-2 flex-1 min-w-[280px]">
-            <span class="font-bold text-[#1E1F21] text-xs flex-shrink-0">프로세스 검색:</span>
+            <span class="font-bold text-[#1E1F21] text-xs flex-shrink-0">진행 작업 검색:</span>
             <input type="text" id="process-search-keyword" oninput="renderProcessLists()" placeholder="작업명, 위치, 실무자, 조치 코멘트 검색..." class="h-10 text-xs px-3.5 border border-[#D5D3CF] rounded-lg w-full max-w-md outline-none focus:border-[#0084B4] bg-[#FAF9F8]">
           </div>
           <div class="flex items-center space-x-2">
@@ -462,11 +457,11 @@
           <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex justify-between items-center">
             <div class="flex items-center space-x-2">
               <span class="w-2.5 h-2.5 rounded-full bg-[#E5983B]"></span>
-              <h3 class="font-bold text-[#1E1F21] text-xs">1. 진행사항 리스트 (현장 조치 진행 · 관리자 승인 대기 · 미해결 대기)</h3>
+              <h3 class="font-bold text-[#1E1F21] text-xs">진행 중인 작업 목록</h3>
               <span id="process-progress-count" class="px-2 py-0.2 bg-[#E5983B]/10 text-[#E5983B] rounded-full font-bold text-[10px]">0</span>
             </div>
             <span class="text-[11px] text-[#6D6E6F]">
-              실무자 완료 보고 시 <b class="text-[#8250DF]">승인 대기</b> 상태가 되며, <b class="text-[#F06A6A]">미해결 건</b>은 영구 대기 잔류합니다.
+              실무자 완료 보고 시 <b class="text-[#8250DF]">승인 대기</b> 상태가 되며, <b class="text-[#F06A6A]">미해결 건</b>은 조치가 완료될 때까지 목록에 유지됩니다.
             </span>
           </div>
           <table class="w-full table-fixed divide-y divide-[#EAE8E5] text-left">
@@ -484,7 +479,7 @@
                   <div class="flex items-center space-x-1"><span class="whitespace-nowrap">진행상태</span><span id="sort-icon-status" class="text-[10px] text-[#A0A1A2]">↕</span></div>
                 </th>
                 <th onclick="toggleProcessHeaderSort('title')" class="px-3 py-2.5 cursor-pointer hover:bg-[#EAE8E5] transition whitespace-nowrap" title="클릭하여 오름차순/내림차순 정렬">
-                  <div class="flex items-center space-x-1"><span class="whitespace-nowrap">작업 제목 (전체 표시)</span><span id="sort-icon-title" class="text-[10px] text-[#A0A1A2]">↕</span></div>
+                  <div class="flex items-center space-x-1"><span class="whitespace-nowrap">작업 제목</span><span id="sort-icon-title" class="text-[10px] text-[#A0A1A2]">↕</span></div>
                 </th>
                 <th onclick="toggleProcessHeaderSort('floor')" class="px-3 py-2.5 cursor-pointer hover:bg-[#EAE8E5] transition whitespace-nowrap" title="클릭하여 오름차순/내림차순 정렬">
                   <div class="flex items-center space-x-1"><span class="whitespace-nowrap">위치/층수</span><span id="sort-icon-floor" class="text-[10px] text-[#A0A1A2]">↕</span></div>
@@ -509,7 +504,7 @@
           <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex justify-between items-center">
             <div class="flex items-center space-x-2">
               <span class="w-2.5 h-2.5 rounded-full bg-[#34A853]"></span>
-              <h3 class="font-bold text-[#1E1F21] text-xs">2. 완료 리스트 (최종 마감 승인 완료 이력)</h3>
+              <h3 class="font-bold text-[#1E1F21] text-xs">최종 완료 및 마감 이력</h3>
               <span id="process-completed-count" class="px-2 py-0.2 bg-[#34A853]/10 text-[#34A853] rounded-full font-bold text-[10px]">0</span>
             </div>
             <span class="text-[11px] text-[#6D6E6F]">최신 5개 기본 노출 (더보기 클릭 시 전체 확장)</span>
@@ -577,7 +572,7 @@
               <th class="px-3.5 py-2.5">신고자 연락처</th>
               <th class="px-3.5 py-2.5">접수 일시</th>
               <th class="px-3.5 py-2.5">현재 상태</th>
-              <th class="px-3.5 py-2.5 text-right">조치 명령</th>
+              <th class="px-3.5 py-2.5 text-right">작업 지시</th>
             </tr>
           </thead>
           <tbody id="complaints-table-body" class="divide-y divide-[#EAE8E5] bg-white"></tbody>
@@ -622,7 +617,7 @@
       </div>
 
       <div class="bg-white p-4 rounded-xl border border-[#EDECEB] space-y-3">
-        <div class="font-bold text-[#1E1F21]">단계별 평균 소요시간 (병목 구간 분해)</div>
+        <div class="font-bold text-[#1E1F21]">단계별 평균 처리 시간 분석</div>
         <div class="space-y-2.5" id="leadtime-bars"></div>
       </div>
 
@@ -632,7 +627,7 @@
           <div id="group-perf-list" class="space-y-2"></div>
         </div>
         <div class="bg-white p-4 rounded-xl border border-[#EDECEB] space-y-2.5">
-          <div class="font-bold text-[#1E1F21]">반복 하자 발생 구역 (Hotspot TOP 3)</div>
+          <div class="font-bold text-[#1E1F21]">빈번 발생 구역 TOP 3</div>
           <div id="hotspot-list" class="space-y-2"></div>
         </div>
       </div>
@@ -658,10 +653,10 @@
           </table>
         </div>
 
-        <!-- 2. 외주 & 아웃소싱 처리 통계 -->
+        <!-- 2. 외주 협력사 처리 통계 -->
         <div class="bg-white p-4 rounded-xl border border-[#EDECEB] space-y-3">
           <div class="flex justify-between items-center">
-            <span class="font-bold text-[#1E1F21] text-xs">외주 & 아웃소싱 처리 통계</span>
+            <span class="font-bold text-[#1E1F21] text-xs">외주 협력사 처리 통계</span>
             <span id="outsource-ratio-badge" class="px-2 py-0.5 rounded font-bold text-[10px] bg-[#E5983B]/10 text-[#E5983B]"></span>
           </div>
           <div class="grid grid-cols-3 gap-2">
@@ -705,7 +700,7 @@
             점검표 통계
           </button>
           <button onclick="setInspectionSubTab('builder')" id="chk-tab-builder" class="px-4 py-2 bg-white border border-[#D5D3CF] text-[#002B41] hover:border-[#0084B4] hover:bg-[#F0F8FC] rounded-xl font-bold transition shadow-xs">
-            점검표 작성
+            점검표 서식 만들기
           </button>
         </div>
       </div>
@@ -952,7 +947,7 @@
               <span id="builder-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">양식 수정 중</span>
             </div>
             <input type="hidden" id="builder-template-id">
-            <span class="text-[11px] text-[#6D6E6F]">직무그룹을 선택하고 6가지 질문 유형을 조합하여 자유롭게 설계하세요.</span>
+            <span class="text-[11px] text-[#6D6E6F]">담당 직무를 선택하고 점검 항목 유형을 조합하여 맞춤 서식을 설계하세요.</span>
           </div>
 
           <!-- 기본 메타 정보 (점검표명, 직무그룹, 대상건물, 주기) -->
@@ -1005,7 +1000,7 @@
             <div class="flex items-center justify-between pb-1">
               <div>
                 <h3 class="font-extrabold text-[#002B41] text-lg sm:text-xl tracking-tight">
-                  점검 항목은 <span class="text-[#00B37E] font-black">6가지 유형</span>으로 만들 수 있어요
+                  점검 항목은 <span class="text-[#00B37E] font-black">6가지 유형</span>으로 구성할 수 있습니다
                 </h3>
               </div>
             </div>
@@ -1023,7 +1018,7 @@
                 </div>
                 <div>
                   <div class="font-extrabold text-[#002B41] text-base group-hover:text-[#00B37E] transition truncate whitespace-nowrap">체크리스트</div>
-                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">점검했는지 체크만 해요.</div>
+                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">단순 이행 여부를 빠르게 체크합니다.</div>
                 </div>
               </div>
 
@@ -1038,7 +1033,7 @@
                 </div>
                 <div>
                   <div class="font-extrabold text-[#002B41] text-base group-hover:text-[#00B37E] transition truncate whitespace-nowrap">체크리스트(네/아니오)</div>
-                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">O/X로 답하는 점검에 좋아요.</div>
+                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">적합/부적합 등 2지선다로 점검합니다.</div>
                 </div>
               </div>
 
@@ -1050,7 +1045,7 @@
                 </div>
                 <div>
                   <div class="font-extrabold text-[#002B41] text-base group-hover:text-[#00B37E] transition truncate whitespace-nowrap">텍스트</div>
-                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">수치나 내용을 직접 입력해요.</div>
+                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">측정 수치나 텍스트를 직접 입력합니다.</div>
                 </div>
               </div>
 
@@ -1073,7 +1068,7 @@
                 </div>
                 <div>
                   <div class="font-extrabold text-[#002B41] text-base group-hover:text-[#00B37E] transition truncate whitespace-nowrap">객관식</div>
-                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">옵션 중 하나만 골라요. 기타는 1개까지 넣을 수 있어요.</div>
+                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">선택지 중 1개를 선택합니다. (단일 선택)</div>
                 </div>
               </div>
 
@@ -1098,7 +1093,7 @@
                 </div>
                 <div>
                   <div class="font-extrabold text-[#002B41] text-base group-hover:text-[#00B37E] transition truncate whitespace-nowrap">체크박스</div>
-                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">옵션 중 여러 개를 골라요.</div>
+                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">여러 항목을 복수 선택합니다. (다중 선택)</div>
                 </div>
               </div>
 
@@ -1112,7 +1107,7 @@
                 </div>
                 <div>
                   <div class="font-extrabold text-[#002B41] text-base group-hover:text-[#00B37E] transition truncate whitespace-nowrap">섹션</div>
-                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">항목 사이를 구분해요. 이미지를 4장까지 넣을 수 있어요.</div>
+                  <div class="text-xs sm:text-[13px] text-[#64748B] mt-1.5 font-medium truncate whitespace-nowrap">항목 단락을 구분하고 안내 이미지를 첨부합니다.</div>
                 </div>
               </div>
 
@@ -1159,7 +1154,7 @@
       
       <div class="flex flex-wrap gap-2 border-b border-[#EDECEB] pb-3">
         <button onclick="setSettingSubTab('locations')" id="set-tab-locations" class="px-4 py-2 bg-[#EBF7FD] text-[#007EA8] border-2 border-[#13B5EA] rounded-xl font-bold shadow-xs transition">
-          구역위치 관리
+          구역 및 층수 관리
         </button>
         <button onclick="setSettingSubTab('users')" id="set-tab-users" class="px-4 py-2 bg-white border border-[#E2E8F0] text-[#64748B] hover:text-[#002B41] hover:border-slate-300 rounded-xl font-medium transition">
           사용자 관리
@@ -1231,10 +1226,10 @@
               수정 취소
             </button>
             <button id="btn-loc-submit" type="button" onclick="submitNewLocation()" class="h-10 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg hover:bg-[#001D2C] text-xs shadow-xs transition">
-              구역 등록 (QR 자동생성)
+              신규 구역 등록
             </button>
             <button id="btn-loc-update" type="button" onclick="submitUpdateLocation()" class="hidden h-10 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition">
-              선택 구역 수정 완료
+              구역 수정 완료
             </button>
           </div>
         </div>
@@ -1454,7 +1449,7 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
             <div>
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">소속 직무 그룹 (실무자 필수 지정)</label>
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">소속 직무 그룹 (현장 실무자 필수)</label>
               <select id="new-user-group" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white outline-none font-semibold text-[#1E1F21] focus:border-[#0084B4]"></select>
             </div>
             <div class="flex items-end justify-end space-x-2">
@@ -1465,7 +1460,7 @@
                 사용자 등록
               </button>
               <button id="btn-user-update" type="button" onclick="submitUpdateUser()" class="hidden h-10 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition">
-                선택 사용자 정보 수정 완료
+                사용자 정보 수정 완료
               </button>
             </div>
           </div>
@@ -1544,7 +1539,7 @@
 
       <!-- 5-5. SMS 차단 목록 -->
       <div id="set-view-blocked" class="hidden bg-white p-4 rounded-xl border border-[#EDECEB] space-y-3">
-        <div class="font-bold text-[#1E1F21]">SMS 문자인증 차단 목록 (블랙리스트)</div>
+        <div class="font-bold text-[#1E1F21]">SMS 인증 제한 및 차단 목록</div>
         <table class="min-w-full divide-y divide-[#EDECEB]">
           <tbody id="blocked-users-body" class="divide-y divide-[#EDECEB]"></tbody>
         </table>
@@ -1603,7 +1598,7 @@
       <!-- 현장미해결 사유 안내 박스 -->
       <div id="detail-unresolved-box" class="hidden p-3 bg-red-50 border border-red-200 rounded-xl text-xs space-y-1">
         <span class="font-bold text-[#F06A6A] flex items-center space-x-1">
-          <span>현장 미해결 사유 (부품수급/외주 계속 대기)</span>
+          <span>현장 미해결 사유 (조치 대기)</span>
         </span>
         <p id="detail-unresolved-reason" class="text-[#1E1F21] font-medium"></p>
       </div>
@@ -1622,7 +1617,7 @@
 
       <div class="flex justify-between items-center pt-2 border-t border-[#EDECEB]" id="detail-modal-actions">
         <button onclick="openDirectCloseFromDetail()" class="px-3.5 py-2 bg-[#FAF9F8] border border-[#D5D3CF] text-[#34A853] hover:bg-emerald-50 font-bold rounded-lg transition">
-          즉시 마감 (코멘트 작성)
+          즉시 종결 처리
         </button>
         <button onclick="directMoveToWorkOrderFromModal()" class="px-4 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg shadow-sm">
           작업지시 작성 이동 →
@@ -1636,7 +1631,7 @@
     <div class="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl text-xs border border-[#EDECEB]">
       <div class="flex justify-between items-center border-b border-[#EDECEB] pb-2.5">
         <span class="font-bold text-[#1E1F21] text-sm flex items-center space-x-1.5">
-          <span>즉시 마감 처리 (종결 사유 기록)</span>
+          <span>접수 건 즉시 종결</span>
         </span>
         <button onclick="closeDirectCloseModal()" class="text-[#A0A1A2] hover:text-[#002B41] font-bold text-base">×</button>
       </div>
@@ -1801,7 +1796,7 @@
       <div class="space-y-3 pt-2">
         <div class="font-bold text-[#1E1F21] text-xs flex items-center space-x-1.5">
           <span class="w-2 h-2 rounded-full bg-[#002B41]"></span>
-          <span>진행 프로세스 타임라인 히스토리 (언제, 누가, 어떻게 처리했는지)</span>
+          <span>단계별 처리 이력 (타임라인)</span>
         </div>
         <div class="space-y-3.5 pl-3 border-l-2 border-[#D5D3CF] ml-2 text-xs" id="dtl-timeline-container">
           <!-- 동적 타임라인 단계 렌더링 -->
@@ -2878,7 +2873,7 @@
       } else {
         actionsEl.innerHTML = `
           <button onclick="openDirectCloseFromDetail()" class="px-3.5 py-2 bg-[#FAF9F8] border border-[#D5D3CF] text-[#34A853] hover:bg-emerald-50 font-bold rounded-lg transition text-xs">
-            즉시 마감 (코멘트 작성)
+            즉시 종결 처리
           </button>
           <button onclick="directMoveToWorkOrderFromModal()" class="px-4 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg shadow-sm text-xs">
             작업지시 작성 이동 →
@@ -3360,7 +3355,7 @@
       document.getElementById('wo-form-ticket-id').value = '';
       document.getElementById('wo-left-empty-state').classList.remove('hidden');
       document.getElementById('wo-left-ticket-detail').classList.add('hidden');
-      document.getElementById('wo-mode-badge').innerText = '직접 지시 모드';
+      document.getElementById('wo-mode-badge').innerText = '신규 지시 작성';
       document.getElementById('wo-mode-badge').className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40';
       document.getElementById('wo-form-title').value = '';
       document.getElementById('wo-form-location-name').value = '';
