@@ -248,6 +248,8 @@ function initDatabase() {
 
   // 관리자 계정 이름 및 이메일 동기화 (기존 데이터 보정)
   try {
+    db.exec("UPDATE users SET name = 'Fielder 소장' WHERE id = 'user_admin' AND (name = '김관리 소장' OR name IS NULL);");
+    db.exec("UPDATE companies SET admin_name = 'Fielder 소장' WHERE id = 'comp_central_tower' AND (admin_name = '김관리 소장' OR admin_name IS NULL);");
     const adminUser = db.prepare("SELECT name, email FROM users WHERE id = 'user_admin'").get();
     if (adminUser) {
       db.prepare("UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = 'comp_central_tower'").run(adminUser.name, adminUser.email);
@@ -538,7 +540,7 @@ function seedData() {
 
   // 사용자들
   const users = [
-    { id: 'user_admin', role: 'ADMIN', name: '김관리 소장', phone: '010-1111-2222', custom_role_id: null },
+    { id: 'user_admin', role: 'ADMIN', name: 'Fielder 소장', phone: '010-1111-2222', custom_role_id: null },
     { id: 'user_admin_sub', role: 'ADMIN', name: '이운영 팀장', phone: '010-1111-3333', custom_role_id: null },
     { id: 'user_worker_choi', role: 'WORKER', name: '최영선 반장', phone: '010-3333-4444', custom_role_id: 'role_maint' },
     { id: 'user_worker_lee_m', role: 'WORKER', name: '이영선 기사', phone: '010-3333-5555', custom_role_id: 'role_maint' },
