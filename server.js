@@ -184,7 +184,11 @@ function resolveCompanyId(parsedUrl, body, req) {
       return auth.companyId;
     }
   }
-  const tenant = (parsedUrl && parsedUrl.query && parsedUrl.query.tenant) || (body && (body.tenant || body.company_id)) || '';
+  let tenant = (parsedUrl && parsedUrl.query && parsedUrl.query.tenant) || (body && (body.tenant || body.company_id)) || '';
+  if (!tenant && parsedUrl && parsedUrl.pathname) {
+    const tMatch = parsedUrl.pathname.match(/^\/t\/([a-zA-Z0-9_-]+)/);
+    if (tMatch) tenant = tMatch[1];
+  }
   if (tenant && tenant !== 'null' && tenant !== 'undefined') {
     const row = db.prepare('SELECT id FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
     if (row) return row.id;
@@ -2028,6 +2032,16 @@ const server = http.createServer(async (req, res) => {
     // ==========================================
     if (pathname === '/' || pathname === '/admin') {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'index.html'));
+    }
+    // ⭐️ [TENANT PATH ROUTING] 개별 프로젝트 전용 URL 지원 (/t/:slug/)
+    if (pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/?$/)) {
+      return serveStaticFile(res, path.join(PUBLIC_DIR, 'index.html'));
+    }
+    if (pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/mobile\/?$/)) {
+      return serveStaticFile(res, path.join(PUBLIC_DIR, 'mobile.html'));
+    }
+    if (pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/(report|qr)\/?$/)) {
+      return serveStaticFile(res, path.join(PUBLIC_DIR, 'report.html'));
     }
     if (pathname === '/super-admin' || pathname === '/super-admin/') {
       const session = getSession(req);

@@ -23,15 +23,14 @@
       
       <!-- 좌측: Xero 스타일 조직 전환기 (Org Switcher) + 6대 네비게이션 탭 -->
       <div class="flex items-center space-x-4 lg:space-x-5 min-w-0">
-        <!-- 조직 전환기 버튼 (디자인 레퍼런스 스타일) -->
-        <div class="flex items-center space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition flex-shrink-0" onclick="location.href='/?tenant=' + (typeof getTenantParam === 'function' ? getTenantParam() : 'central')" title="현재 고객사 관제 대시보드 홈">
+        <!-- 일반 프로젝트 로고 & 회사명 (클릭 시 실시간 모니터링 메뉴로 전환) -->
+        <div class="flex items-center space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition flex-shrink-0" onclick="navTo('monitoring')" title="실시간 모니터링 메뉴로 이동">
           <span id="header-company-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-md whitespace-nowrap flex-shrink-0">Fielder</span>
           <div class="min-w-0 leading-tight">
             <div class="flex items-center space-x-1">
               <span class="font-bold text-sm sm:text-base text-white group-hover:text-[#13B5EA] transition truncate whitespace-nowrap" id="header-company-name">Fielder 통합시설운영본부</span>
-              <span class="text-xs text-[#13B5EA] group-hover:text-white transition">▾</span>
             </div>
-            <span class="text-[11px] text-slate-300 font-medium leading-tight block mt-0.5">종합 관제 센터</span>
+            <span class="text-[11px] text-slate-300 font-medium leading-tight block mt-0.5">실시간 관제 대시보드</span>
           </div>
         </div>
 
@@ -2117,7 +2116,11 @@
 
   <script>
     function getTenantParam() {
-      return new URLSearchParams(window.location.search).get('tenant') || '';
+      const q = new URLSearchParams(window.location.search).get('tenant');
+      if (q && q !== 'null' && q !== 'undefined') return q;
+      const m = window.location.pathname.match(/^\/t\/([a-zA-Z0-9_-]+)/);
+      if (m && m[1]) return m[1];
+      return '';
     }
     (function() {
       const origFetch = window.fetch;
