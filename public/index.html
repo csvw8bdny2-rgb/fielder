@@ -4623,105 +4623,127 @@
     // 4. 통계 & 보고서 (개인별 + 외주 통계 포함)
     // ==========================================
     async function loadAnalytics() {
-      const res = await fetch('/api/analytics');
+      const tenant = typeof getTenantParam === 'function' ? getTenantParam() : 'central';
+      const res = await fetch('/api/analytics?tenant=' + encodeURIComponent(tenant));
       const data = await res.json();
-      document.getElementById('stat-total').innerText = data.total_tickets + ' 건';
-      document.getElementById('stat-lead-time').innerText = data.avg_lead_time_hours + ' 시간';
-      document.getElementById('stat-rate').innerText = data.completion_rate + ' %';
-      document.getElementById('stat-bottleneck').innerText = data.bottleneck_step;
+
+      document.getElementById('stat-total').innerText = (data.total_tickets || 0) + ' 건';
+      document.getElementById('stat-lead-time').innerText = (data.avg_lead_time_hours || 0) + ' 시간';
+      document.getElementById('stat-rate').innerText = (data.completion_rate || 0) + ' %';
+      document.getElementById('stat-bottleneck').innerText = data.bottleneck_step || '데이터 수집 중';
 
       const barContainer = document.getElementById('leadtime-bars');
       barContainer.innerHTML = '';
-      (data.lead_time_breakdown || []).forEach(b => {
-        const div = document.createElement('div');
-        div.innerHTML = `
-          <div class="flex justify-between text-[11px] mb-1">
-            <span class="${b.percentage >= 40 ? 'text-[#F06A6A] font-semibold' : 'text-[#6D6E6F]'}">${b.step}</span>
-            <span class="font-medium text-[#1E1F21]">${Math.floor(b.minutes / 60) > 0 ? Math.floor(b.minutes/60)+'시간 ' : ''}${b.minutes % 60}분</span>
-          </div>
-          <div class="w-full bg-[#F3F2F1] rounded-full h-2">
-            <div class="${b.percentage >= 40 ? 'bg-[#F06A6A]' : 'bg-[#4573D2]'} h-2 rounded-full" style="width: ${b.percentage}%"></div>
-          </div>
-        `;
-        barContainer.appendChild(div);
-      });
+      if (!data.lead_time_breakdown || data.lead_time_breakdown.length === 0) {
+        barContainer.innerHTML = '<div class="text-xs text-slate-400 py-2">등록된 처리 리드타임 데이터가 없습니다.</div>';
+      } else {
+        data.lead_time_breakdown.forEach(b => {
+          const div = document.createElement('div');
+          div.innerHTML = `
+            <div class="flex justify-between text-[11px] mb-1">
+              <span class="${b.percentage >= 40 ? 'text-[#F06A6A] font-semibold' : 'text-[#6D6E6F]'}">${b.step}</span>
+              <span class="font-medium text-[#1E1F21]">${Math.floor(b.minutes / 60) > 0 ? Math.floor(b.minutes/60)+'시간 ' : ''}${b.minutes % 60}분</span>
+            </div>
+            <div class="w-full bg-[#F3F2F1] rounded-full h-2">
+              <div class="${b.percentage >= 40 ? 'bg-[#F06A6A]' : 'bg-[#4573D2]'} h-2 rounded-full" style="width: ${b.percentage}%"></div>
+            </div>
+          `;
+          barContainer.appendChild(div);
+        });
+      }
 
       const perfList = document.getElementById('group-perf-list');
       perfList.innerHTML = '';
-      (data.group_performance || []).forEach(g => {
-        const row = document.createElement('div');
-        row.className = 'flex justify-between items-center py-1.5 border-b border-[#EDECEB] last:border-none';
-        row.innerHTML = `
-          <div><b class="text-[#1E1F21]">${g.group}</b> <span class="text-[#6D6E6F] ml-2">평균 ${g.avg_time}</span></div>
-          <span class="font-bold text-[#34A853]">완료율 ${g.rate}</span>
-        `;
-        perfList.appendChild(row);
-      });
+      if (!data.group_performance || data.group_performance.length === 0) {
+        perfList.innerHTML = '<div class="text-xs text-slate-400 py-2">등록된 직무 그룹 통계가 없습니다.</div>';
+      } else {
+        data.group_performance.forEach(g => {
+          const row = document.createElement('div');
+          row.className = 'flex justify-between items-center py-1.5 border-b border-[#EDECEB] last:border-none';
+          row.innerHTML = `
+            <div><b class="text-[#1E1F21]">${g.group}</b> <span class="text-[#6D6E6F] ml-2">평균 ${g.avg_time}</span></div>
+            <span class="font-bold ${g.rate === '0%' ? 'text-slate-400' : 'text-[#34A853]'}">완료율 ${g.rate}</span>
+          `;
+          perfList.appendChild(row);
+        });
+      }
 
       const hotspotList = document.getElementById('hotspot-list');
       hotspotList.innerHTML = '';
-      (data.hotspots || []).forEach((h, i) => {
-        const row = document.createElement('div');
-        row.className = 'flex justify-between items-center py-1.5 border-b border-[#EDECEB] last:border-none';
-        row.innerHTML = `
-          <div><b class="text-[#1E1F21]">${i + 1}. ${h.location}</b> <span class="text-[#6D6E6F] ml-2">${h.details}</span></div>
-          <span class="font-bold text-[#F06A6A]">${h.count}건</span>
-        `;
-        hotspotList.appendChild(row);
-      });
+      if (!data.hotspots || data.hotspots.length === 0) {
+        hotspotList.innerHTML = '<div class="text-xs text-slate-400 py-2">등록된 다빈도 민원 구역이 없습니다.</div>';
+      } else {
+        data.hotspots.forEach((h, i) => {
+          const row = document.createElement('div');
+          row.className = 'flex justify-between items-center py-1.5 border-b border-[#EDECEB] last:border-none';
+          row.innerHTML = `
+            <div><b class="text-[#1E1F21]">${i + 1}. ${h.location}</b> <span class="text-[#6D6E6F] ml-2">${h.details}</span></div>
+            <span class="font-bold text-[#F06A6A]">${h.count}건</span>
+          `;
+          hotspotList.appendChild(row);
+        });
+      }
 
       // ⭐️ 개인별 통계 렌더링
       const workerTbody = document.getElementById('worker-perf-table-body');
-      if (workerTbody && data.worker_performance) {
+      if (workerTbody) {
         workerTbody.innerHTML = '';
-        data.worker_performance.forEach(w => {
-          const tr = document.createElement('tr');
-          tr.className = 'hover:bg-[#FAF9F8] text-xs transition';
-          tr.innerHTML = `
-            <td class="px-2.5 py-2 font-bold text-[#1E1F21]">${w.name} <span class="text-[10px] text-[#6D6E6F] font-normal">(${w.role})</span></td>
-            <td class="px-2.5 py-2 font-medium">${w.completed_count || w.total}건 / ${w.assigned_count || w.total}건</td>
-            <td class="px-2.5 py-2 font-bold text-[#34A853]">${w.completion_rate || w.rate}</td>
-            <td class="px-2.5 py-2 text-[#4573D2] font-semibold">${w.avg_lead_time || w.avg_time}</td>
-          `;
-          workerTbody.appendChild(tr);
-        });
+        if (!data.worker_performance || data.worker_performance.length === 0) {
+          workerTbody.innerHTML = '<tr><td colspan="4" class="px-2.5 py-4 text-center text-xs text-slate-400">등록된 실무자가 없습니다.</td></tr>';
+        } else {
+          data.worker_performance.forEach(w => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-[#FAF9F8] text-xs transition';
+            tr.innerHTML = `
+              <td class="px-2.5 py-2 font-bold text-[#1E1F21]">${w.name} <span class="text-[10px] text-[#6D6E6F] font-normal">(${w.role})</span></td>
+              <td class="px-2.5 py-2 font-medium">${w.completed_count !== undefined ? w.completed_count : (w.total || 0)}건 / ${w.assigned_count !== undefined ? w.assigned_count : (w.total || 0)}건</td>
+              <td class="px-2.5 py-2 font-bold ${w.completion_rate === '0%' ? 'text-slate-400' : 'text-[#34A853]'}">${w.completion_rate || w.rate}</td>
+              <td class="px-2.5 py-2 text-[#4573D2] font-semibold">${w.avg_lead_time || w.avg_time}</td>
+            `;
+            workerTbody.appendChild(tr);
+          });
+        }
       }
 
       // ⭐️ 외주 & 아웃소싱 통계 렌더링
       if (data.outsourcing_summary) {
         const outSum = data.outsourcing_summary;
         if (document.getElementById('stat-internal-count')) {
-          document.getElementById('stat-internal-count').innerText = (outSum.internal_count || 124) + '건';
+          document.getElementById('stat-internal-count').innerText = (outSum.internal_count !== undefined ? outSum.internal_count : 0) + '건';
         }
         if (document.getElementById('stat-outsource-count')) {
-          document.getElementById('stat-outsource-count').innerText = (outSum.total_outsourced || outSum.outsourced_count || 18) + '건';
+          document.getElementById('stat-outsource-count').innerText = (outSum.total_outsourced !== undefined ? outSum.total_outsourced : 0) + '건';
         }
         const partnerListArray = outSum.partners || outSum.partner_breakdown || [];
         if (document.getElementById('stat-partner-count')) {
           document.getElementById('stat-partner-count').innerText = partnerListArray.length + '개사';
         }
         if (document.getElementById('outsource-ratio-badge')) {
-          document.getElementById('outsource-ratio-badge').innerText = `외주 비중 ${outSum.outsource_ratio}%`;
+          document.getElementById('outsource-ratio-badge').innerText = `외주 비중 ${outSum.outsource_ratio || 0}%`;
         }
 
         const partnerList = document.getElementById('partner-perf-list');
-        if (partnerList && partnerListArray.length > 0) {
+        if (partnerList) {
           partnerList.innerHTML = '';
-          partnerListArray.forEach(p => {
-            const div = document.createElement('div');
-            div.className = 'flex justify-between items-center p-2 rounded-lg bg-[#FAF9F8] border border-[#EDECEB] text-xs';
-            div.innerHTML = `
-              <div>
-                <b class="text-[#1E1F21]">${p.partner || p.partner_name}</b>
-                <span class="text-[10px] text-[#6D6E6F] ml-1.5">${p.category}</span>
-              </div>
-              <div class="flex items-center space-x-1.5">
-                <span class="px-2 py-0.5 rounded font-bold text-[11px] bg-[#4573D2]/10 text-[#4573D2]">${p.count}건</span>
-                ${p.status ? `<span class="text-[10px] text-[#6D6E6F] font-medium">(${p.status})</span>` : ''}
-              </div>
-            `;
-            partnerList.appendChild(div);
-          });
+          if (partnerListArray.length === 0) {
+            partnerList.innerHTML = '<div class="text-xs text-slate-400 py-2">등록된 외주 협력사가 없습니다.</div>';
+          } else {
+            partnerListArray.forEach(p => {
+              const div = document.createElement('div');
+              div.className = 'flex justify-between items-center p-2 rounded-lg bg-[#FAF9F8] border border-[#EDECEB] text-xs';
+              div.innerHTML = `
+                <div>
+                  <b class="text-[#1E1F21]">${p.partner || p.partner_name}</b>
+                  <span class="text-[10px] text-[#6D6E6F] ml-1.5">${p.category}</span>
+                </div>
+                <div class="flex items-center space-x-1.5">
+                  <span class="px-2 py-0.5 rounded font-bold text-[11px] bg-[#4573D2]/10 text-[#4573D2]">${p.count}건</span>
+                  ${p.status ? `<span class="text-[10px] text-[#6D6E6F] font-medium">(${p.status})</span>` : ''}
+                </div>
+              `;
+              partnerList.appendChild(div);
+            });
+          }
         }
       }
     }
