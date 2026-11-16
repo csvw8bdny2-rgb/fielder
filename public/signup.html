@@ -206,34 +206,34 @@
         </div>
       </section>
 
-      <!-- ================= STEP 4 : 가입 완료 ================= -->
+      <!-- ================= STEP 4 : 가입 신청 결과 ================= -->
       <section id="step-4" class="bg-[#002B41] border border-[#004D73] rounded-3xl p-7 sm:p-8 shadow-2xl space-y-6 hidden text-center">
         <div class="space-y-1">
-          <h1 class="text-2xl font-bold text-white">가입 완료</h1>
-          <p class="text-xs text-slate-300">회사 계정 및 100건 무료 리포트가 발급되었습니다.</p>
+          <h1 class="text-2xl font-bold text-white" id="step4-title">가입 신청 접수 완료</h1>
+          <p class="text-xs text-slate-300" id="step4-desc">신청서가 성공적으로 접수되었습니다. 관리자 승인 후 사이트가 개설됩니다.</p>
         </div>
 
         <div class="border border-[#005B82] rounded-xl p-4 bg-[#001F30] text-left space-y-2.5 text-xs">
           <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
-            <span class="text-slate-400">고객사명</span>
+            <span class="text-slate-400">신청 고객사명</span>
             <span class="font-bold text-white" id="result-company-name">-</span>
           </div>
           <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
-            <span class="text-slate-400">전용 웹 주소</span>
-            <a id="result-web-url" href="#" target="_blank" class="font-mono font-bold text-[#13B5EA] underline">https://-.fielder.kr</a>
+            <span class="text-slate-400">희망 웹 주소</span>
+            <a id="result-web-url" href="#" target="_blank" class="font-mono font-bold text-[#13B5EA] underline">/?tenant=-</a>
           </div>
-          <div class="flex justify-between items-center py-1 border-b border-[#004D73]">
+          <div class="flex justify-between items-center py-1 border-b border-[#004D73]" id="row-result-mobile">
             <span class="text-slate-400">모바일 링크</span>
             <a id="result-mobile-url" href="#" target="_blank" class="font-mono text-slate-300">/mobile?tenant=-</a>
           </div>
-          <div class="flex justify-between items-center py-1">
-            <span class="text-slate-400">기본 혜택</span>
-            <span class="font-bold text-[#13B5EA]">100건 리포트 한도 지급</span>
+          <div class="flex justify-between items-center py-1" id="row-result-status">
+            <span class="text-slate-400">진행 상태</span>
+            <span class="font-bold text-amber-400" id="result-status-text">승인 심사 대기 중</span>
           </div>
         </div>
 
         <div class="space-y-2 pt-2">
-          <button type="button" id="btn-enter-dashboard" class="btn-sky w-full h-11 rounded-xl text-sm flex items-center justify-center shadow-md">
+          <button type="button" id="btn-enter-dashboard" class="btn-sky w-full h-11 rounded-xl text-sm flex items-center justify-center shadow-md hidden">
             관제 시스템 바로 접속하기
           </button>
           <a href="/login" class="block w-full h-10 border border-[#005B82] rounded-xl text-xs font-semibold text-slate-300 flex items-center justify-center hover:bg-[#001F30]">
@@ -402,15 +402,31 @@
           return;
         }
 
-        document.getElementById('result-company-name').textContent = data.company.name;
-        document.getElementById('result-web-url').textContent = `https://${data.company.subdomain}.fielder.kr`;
-        document.getElementById('result-web-url').href = data.company.web_url;
-        document.getElementById('result-mobile-url').textContent = `/mobile?tenant=${data.company.subdomain}`;
-        document.getElementById('result-mobile-url').href = data.company.mobile_url;
-
-        document.getElementById('btn-enter-dashboard').onclick = () => {
-          location.href = data.company.web_url;
-        };
+        if (data.pending) {
+          document.getElementById('step4-title').textContent = '가입 신청 접수 완료';
+          document.getElementById('step4-desc').textContent = '신청서가 성공적으로 접수되었습니다. 관리자 승인 후 사이트가 개설됩니다.';
+          document.getElementById('result-company-name').textContent = signupData.companyName;
+          document.getElementById('result-web-url').textContent = `/?tenant=${signupData.subdomain}`;
+          document.getElementById('result-web-url').href = `/?tenant=${signupData.subdomain}`;
+          document.getElementById('row-result-mobile').classList.add('hidden');
+          document.getElementById('result-status-text').textContent = '승인 심사 대기 중';
+          document.getElementById('btn-enter-dashboard').classList.add('hidden');
+        } else {
+          document.getElementById('step4-title').textContent = '가입 완료';
+          document.getElementById('step4-desc').textContent = '회사 계정 및 100건 무료 리포트가 발급되었습니다.';
+          document.getElementById('result-company-name').textContent = data.company.name;
+          document.getElementById('result-web-url').textContent = `/?tenant=${data.company.subdomain}`;
+          document.getElementById('result-web-url').href = data.company.web_url;
+          document.getElementById('row-result-mobile').classList.remove('hidden');
+          document.getElementById('result-mobile-url').textContent = `/mobile?tenant=${data.company.subdomain}`;
+          document.getElementById('result-mobile-url').href = data.company.mobile_url;
+          document.getElementById('result-status-text').textContent = '즉시 활성화 완료 (100건 무료)';
+          document.getElementById('result-status-text').className = 'font-bold text-emerald-400';
+          document.getElementById('btn-enter-dashboard').classList.remove('hidden');
+          document.getElementById('btn-enter-dashboard').onclick = () => {
+            location.href = data.company.web_url;
+          };
+        }
 
         goToStep(4);
       } catch (err) {

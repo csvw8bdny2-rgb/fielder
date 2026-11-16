@@ -24,7 +24,7 @@
       <!-- 좌측: Xero 스타일 조직 전환기 (Org Switcher) + 6대 네비게이션 탭 -->
       <div class="flex items-center space-x-4 lg:space-x-5 min-w-0">
         <!-- 조직 전환기 버튼 (디자인 레퍼런스 스타일) -->
-        <div class="flex items-center space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition flex-shrink-0" onclick="location.href='/super-admin'" title="클릭 시 슈퍼 관리자 센터로 이동">
+        <div class="flex items-center space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition flex-shrink-0" onclick="location.href='/?tenant=' + (typeof getTenantParam === 'function' ? getTenantParam() : 'central')" title="현재 고객사 관제 대시보드 홈">
           <span id="header-company-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-md whitespace-nowrap flex-shrink-0">Fielder</span>
           <div class="min-w-0 leading-tight">
             <div class="flex items-center space-x-1">

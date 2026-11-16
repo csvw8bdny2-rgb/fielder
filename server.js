@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
 const crypto = require('node:crypto');
-const { db, initDatabase } = require('./db.js');
+const { db, initDatabase, hashPassword, verifyPassword } = require('./db.js');
 
 initDatabase();
 
@@ -11,13 +11,96 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // ==========================================
-// ⭐️ 실시간 Server-Sent Events (SSE) 브로드캐스트 풀
+// ⭐️ 쿠키 및 세션 관리 헬퍼 (인터넷 다고객 보안 체계)
+// ==========================================
+function parseCookies(req) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      const key = parts.shift().trim();
+      const val = decodeURIComponent(parts.join('='));
+      if (key) list[key] = val;
+    });
+  }
+  return list;
+}
+
+function getSession(req) {
+  if (!req) return null;
+  const cookies = parseCookies(req);
+  let sessionId = cookies['fielder_session'];
+  if (!sessionId && req.headers['authorization']) {
+    const m = req.headers['authorization'].match(/^Bearer\s+(.+)$/i);
+    if (m) sessionId = m[1];
+  }
+  if (!sessionId) return null;
+
+  try {
+    const sess = db.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > datetime('now')").get(sessionId);
+    if (!sess) return null;
+
+    let user = null;
+    if (sess.role === 'SUPER_ADMIN') {
+      user = {
+        id: 'super_admin',
+        role: 'SUPER_ADMIN',
+        name: '최고 총괄 관리자',
+        email: process.env.SUPER_ADMIN_EMAIL || 'admin@fielder.kr',
+        role_title: '통합 슈퍼 관리자'
+      };
+    } else {
+      user = db.prepare("SELECT id, company_id, role, name, phone, email, is_active FROM users WHERE id = ?").get(sess.user_id);
+    }
+    if (!user) return null;
+
+    let company = null;
+    if (sess.company_id) {
+      company = db.prepare("SELECT * FROM companies WHERE id = ?").get(sess.company_id);
+    }
+
+    return { sessionId: sess.id, user, role: sess.role, companyId: sess.company_id, company };
+  } catch (err) {
+    console.error('Session retrieval error:', err);
+    return null;
+  }
+}
+
+function createSession(userId, role, companyId) {
+  const sessionId = 'sess_' + crypto.randomBytes(24).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  db.prepare("INSERT INTO sessions (id, user_id, role, company_id, expires_at) VALUES (?, ?, ?, ?, ?)").run(
+    sessionId, userId, role, companyId || null, expiresAt
+  );
+  return { sessionId, expiresAt };
+}
+
+function deleteSession(reqOrSessionId) {
+  if (!reqOrSessionId) return;
+  let sessionId = null;
+  if (typeof reqOrSessionId === 'string') {
+    sessionId = reqOrSessionId;
+  } else {
+    const cookies = parseCookies(reqOrSessionId);
+    sessionId = cookies['fielder_session'];
+  }
+  if (sessionId) {
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+  }
+}
+
+// ==========================================
+// ⭐️ 실시간 Server-Sent Events (SSE) 브로드캐스트 풀 (테넌트 격리 지원)
 // ==========================================
 const sseClients = new Set();
 
-function broadcastSSE(type, payload = {}) {
+function broadcastSSE(type, payload = {}, targetCompanyId = null) {
   const message = `event: ${type}\ndata: ${JSON.stringify({ type, ...payload, timestamp: new Date().toISOString() })}\n\n`;
   for (const client of sseClients) {
+    if (targetCompanyId && client.companyId && client.companyId !== targetCompanyId) {
+      continue;
+    }
     try {
       client.write(message);
     } catch (err) {
@@ -41,13 +124,17 @@ function parseBody(req) {
   });
 }
 
-function sendJSON(res, status, data) {
-  res.writeHead(status, {
+function sendJSON(res, status, data, cookieHeader = null) {
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
-  });
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  };
+  if (cookieHeader) {
+    headers['Set-Cookie'] = cookieHeader;
+  }
+  res.writeHead(status, headers);
   res.end(JSON.stringify(data));
 }
 
@@ -89,13 +176,23 @@ function getFloorRank(floorStr) {
   return 0;
 }
 
-function resolveCompanyId(parsedUrl, body) {
+// ⭐️ 테넌트 식별 및 데이터 격리
+function resolveCompanyId(parsedUrl, body, req) {
+  if (req) {
+    const auth = getSession(req);
+    if (auth && auth.role !== 'SUPER_ADMIN' && auth.companyId) {
+      return auth.companyId;
+    }
+  }
   const tenant = (parsedUrl && parsedUrl.query && parsedUrl.query.tenant) || (body && (body.tenant || body.company_id)) || '';
-  if (tenant) {
+  if (tenant && tenant !== 'null' && tenant !== 'undefined') {
     const row = db.prepare('SELECT id FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
     if (row) return row.id;
+    return null; // 잘못된/존재하지 않는 테넌트 요청 시 기본 테넌트 누수 방지
   }
-  return 'comp_central_tower';
+  // 파라미터가 아예 없는 초기 접속인 경우 데모 기본 시드 반환
+  const central = db.prepare("SELECT id FROM companies WHERE id = 'comp_central_tower' OR subdomain = 'central'").get();
+  return central ? central.id : 'comp_central_tower';
 }
 
 function checkTicketLimit(companyId) {
@@ -113,11 +210,12 @@ function consumeTicketLimit(companyId) {
   db.prepare('UPDATE companies SET monthly_used_count = monthly_used_count + 1 WHERE id = ?').run(companyId);
 }
 
+// ⭐️ 사이트 자동 생성 및 독립 프로비저닝 (센트럴타워 의존성 완전 제거)
 function seedDefaultTenantData(companyId) {
   const roles = [
     { id: `role_maint_${companyId}`, name: '영선/시설보수팀', category: 'FACILITY' },
     { id: `role_clean_${companyId}`, name: '환경/미화청결팀', category: 'CLEANING' },
-    { id: `role_sec_${companyId}`, name: '보안/주차안내팀', category: 'SECURITY' },
+    { id: `role_sec_${companyId}`, name: '보안/방재안전팀', category: 'SECURITY' },
     { id: `role_elec_${companyId}`, name: '전기/기계설비팀', category: 'ELECTRICAL' }
   ];
   const insertRole = db.prepare('INSERT OR IGNORE INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, 1)');
@@ -136,29 +234,99 @@ function seedDefaultTenantData(companyId) {
     insertLoc.run(l.id, companyId, l.building, l.floor, l.code, l.name, l.category, l.desc);
   }
 
-  const baseTemplates = db.prepare("SELECT title, target_role_name, building, frequency, items, description FROM inspection_templates WHERE company_id = 'comp_central_tower'").all();
+  const defaultTemplates = [
+    {
+      title: '화장실 정기 위생 점검표',
+      role_name: '환경/미화청결팀',
+      building: '본관',
+      freq: 'DAILY',
+      items: JSON.stringify([
+        { id: 'item_1', type: 'CHECK', label: '바닥 물기 및 쓰레기 청소 완료', required: true },
+        { id: 'item_2', type: 'YES_NO', label: '세면대 수전 및 변기 정상 작동 여부', required: true },
+        { id: 'item_3', type: 'CHECKBOX', label: '보충 완료 소모품', options: ['휴지', '핸드타월', '물비누'], required: false }
+      ]),
+      desc: '화장실 정기 청결 상태 점검'
+    },
+    {
+      title: '기계실 및 전기설비 일일 안전점검표',
+      role_name: '전기/기계설비팀',
+      building: '본관',
+      freq: 'DAILY',
+      items: JSON.stringify([
+        { id: 'item_1', type: 'CHECK', label: '주 수배전반 전압/전류 지침 확인', required: true },
+        { id: 'item_2', type: 'TEXT', label: '변압기 권선 온도(°C)', required: true },
+        { id: 'item_3', type: 'RADIO', label: '이상 소음 및 진동 유무', options: ['양호(정상)', '주의(점검필요)', '불량(즉시조치)'], required: true }
+      ]),
+      desc: '전기실 수배전반 및 기계설비 상태 점검'
+    },
+    {
+      title: '소방 방재 및 피난통로 점검표',
+      role_name: '보안/방재안전팀',
+      building: '본관',
+      freq: 'DAILY',
+      items: JSON.stringify([
+        { id: 'item_1', type: 'CHECK', label: '소화전 앞 적치물 없음 및 호스 정상', required: true },
+        { id: 'item_2', type: 'YES_NO', label: '비상구 방화문 자동 도어클로저 닫힘 상태', required: true },
+        { id: 'item_3', type: 'RADIO', label: '유도등 점등 상태', options: ['정상 점등', '램프 교체 필요', '점멸 불량'], required: true }
+      ]),
+      desc: '소방 설비 및 비상 대피 통로 상태 점검'
+    }
+  ];
+
   const insertTmpl = db.prepare(`
     INSERT OR IGNORE INTO inspection_templates (id, company_id, title, target_role_id, target_role_name, building, frequency, items, description, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `);
-  if (baseTemplates.length > 0) {
-    baseTemplates.forEach((t, idx) => {
-      const matchedRole = roles.find(r => r.name === t.target_role_name) || roles[0];
-      insertTmpl.run(`tmpl_${companyId}_${idx + 1}`, companyId, t.title, matchedRole.id, t.target_role_name || matchedRole.name, t.building || '전체', t.frequency || 'DAILY', t.items, t.description || '');
-    });
-  } else {
-    insertTmpl.run(
-      `tmpl_${companyId}_1`,
-      companyId,
-      '일일 시설 안전 점검표',
-      roles[0].id,
-      roles[0].name,
-      '본관',
-      'DAILY',
-      JSON.stringify([{ id: 'chk_1', type: 'CHECK', label: '시설 이상 유무 확인', required: true }]),
-      '기본 시설 안전 점검'
-    );
-  }
+
+  defaultTemplates.forEach((t, idx) => {
+    const matchedRole = roles.find(r => r.name === t.role_name) || roles[0];
+    insertTmpl.run(`tmpl_${companyId}_${idx + 1}`, companyId, t.title, matchedRole.id, matchedRole.name, t.building, t.freq, t.items, t.desc);
+  });
+}
+
+// ⭐️ 원스톱 프로비저닝 (회사 + 관리자 계정 + 기본 설정 일괄 생성)
+function provisionTenant({ name, company_name, subdomain, adminName, admin_name, adminEmail, admin_email, adminPhone, admin_phone, password, password_hash, plan, monthlyTicketLimit, monthly_ticket_limit, enabledFeatures, enabled_features }) {
+  const companyName = name || company_name;
+  const adminN = adminName || admin_name || '관리자';
+  const adminE = adminEmail || admin_email || '';
+  const adminP = adminPhone || admin_phone || '';
+  const slug = (subdomain || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const id = 'comp_' + slug;
+  const features = enabledFeatures || enabled_features;
+  const featStr = typeof features === 'object' ? JSON.stringify(features) : '{"checklists":true,"realtime_sse":true,"public_qr":true,"outsource":true}';
+  const limit = parseInt(monthlyTicketLimit || monthly_ticket_limit, 10) || 100;
+
+  db.prepare(`
+    INSERT INTO companies (
+      id, name, subdomain, logo_url, plan, status,
+      monthly_ticket_limit, monthly_used_count,
+      storage_limit_mb, storage_used_mb, enabled_features,
+      admin_name, admin_email, admin_phone
+    ) VALUES (?, ?, ?, 'Fielder', ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?)
+  `).run(
+    id, companyName, slug, plan || 'FREE', limit, featStr,
+    adminN, adminE || `admin@${slug}.fielder.kr`, adminP
+  );
+
+  const userId = 'user_admin_' + slug;
+  const pwdHash = password_hash || hashPassword(password || '1234');
+  db.prepare(`
+    INSERT OR IGNORE INTO users (id, company_id, role, name, phone, email, password)
+    VALUES (?, ?, 'ADMIN', ?, ?, ?, ?)
+  `).run(userId, id, adminN, adminP || '010-0000-0000', adminE || `admin@${slug}.fielder.kr`, pwdHash);
+
+  seedDefaultTenantData(id);
+
+  return {
+    id,
+    name: companyName,
+    subdomain: slug,
+    admin_name: adminN,
+    admin_email: adminE,
+    admin_user_id: userId,
+    plan: plan || 'FREE',
+    monthly_ticket_limit: limit
+  };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -745,9 +913,9 @@ const server = http.createServer(async (req, res) => {
     // 4. 사용자 & 역할 관리 API
     // ==========================================
     if (pathname === '/api/users' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
       const users = db.prepare(`
-        SELECT u.*, r.name as role_name 
+        SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.custom_role_id, u.is_active, u.created_at, u.last_login_at, r.name as role_name 
         FROM users u 
         LEFT JOIN custom_roles r ON u.custom_role_id = r.id 
         WHERE u.company_id = ?
@@ -757,13 +925,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/users' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
       const { name, email, password, phone, role, custom_role_id } = body;
       if (!name || !name.trim()) return sendJSON(res, 400, { error: '이름을 입력하세요.' });
       if (!email || !email.trim()) return sendJSON(res, 400, { error: '로그인 아이디(이메일)를 입력하세요.' });
       
       const cleanName = name.trim();
       const cleanEmail = email.trim().toLowerCase();
+      const pwdVal = password && password.trim() ? hashPassword(password.trim()) : hashPassword('1234');
 
       // ⭐️ 동일 이메일 계정이 존재하는 경우 새로 중복 생성하지 않고 기존 계정 정보를 똑똑하게 갱신
       const existing = db.prepare('SELECT id, role FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
@@ -772,7 +941,7 @@ const server = http.createServer(async (req, res) => {
           UPDATE users
           SET name = ?, phone = ?, role = ?, custom_role_id = ?, password = CASE WHEN ? != '' THEN ? ELSE password END
           WHERE id = ?
-        `).run(cleanName, phone || '', role || 'WORKER', custom_role_id || null, password || '', password || '', existing.id);
+        `).run(cleanName, phone || '', role || 'WORKER', custom_role_id || null, password ? pwdVal : '', password ? pwdVal : '', existing.id);
 
         if (role === 'ADMIN' || existing.role === 'ADMIN' || existing.id === 'user_admin') {
           db.prepare('UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = ?').run(cleanName, cleanEmail, companyId);
@@ -785,7 +954,7 @@ const server = http.createServer(async (req, res) => {
       db.prepare(`
         INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, password || '1234', phone || '', custom_role_id || null);
+      `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, phone || '', custom_role_id || null);
 
       if (role === 'ADMIN') {
         db.prepare('UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = "")').run(cleanName, companyId);
@@ -809,12 +978,13 @@ const server = http.createServer(async (req, res) => {
 
       const newName = (name && name.trim()) ? name.trim() : targetUser.name;
       const newEmail = (email && email.trim()) ? email.trim().toLowerCase() : targetUser.email;
+      const pwdVal = password && password.trim() ? hashPassword(password.trim()) : '';
 
       db.prepare(`
         UPDATE users
         SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?
         WHERE id = ?
-      `).run(newName, newEmail, password || '', password || '', phone || '', role || 'WORKER', custom_role_id || null, userId);
+      `).run(newName, newEmail, pwdVal, pwdVal, phone || '', role || 'WORKER', custom_role_id || null, userId);
 
       // ⭐️ 관리자(ADMIN)이거나 user_admin인 경우 companies 테이블의 admin_name 및 admin_email 도 즉시 동기화!
       if (targetUser.role === 'ADMIN' || userId === 'user_admin' || role === 'ADMIN') {
@@ -833,9 +1003,9 @@ const server = http.createServer(async (req, res) => {
       const userId = pathname.split('/')[3];
       const { newPassword } = await parseBody(req);
       const targetPw = (newPassword && newPassword.trim()) ? newPassword.trim() : '1234';
-      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(targetPw, userId);
+      db.prepare('UPDATE users SET password = ?, must_change_password = 1 WHERE id = ?').run(hashPassword(targetPw), userId);
       broadcastSSE('USER_UPDATED', { action: 'PASSWORD_RESET', id: userId });
-      return sendJSON(res, 200, { success: true, message: `비밀번호가 [${targetPw}]로 재설정되었습니다.` });
+      return sendJSON(res, 200, { success: true, message: '사용자 접속 비밀번호가 성공적으로 재설정되었습니다.' });
     }
 
     // ==========================================
@@ -1281,12 +1451,24 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ==========================================
-    // ⭐️ [SUPER ADMIN] 1. 플랫폼 총괄 대시보드 통계 API
+    // ⭐️ [SUPER ADMIN GUARD] 슈퍼 관리자 API 접근 통제
     // ==========================================
+    if (pathname.startsWith('/api/super-admin/')) {
+      const session = getSession(req);
+      if (!session || session.role !== 'SUPER_ADMIN') {
+        return sendJSON(res, 403, { error: '슈퍼 관리자 권한이 필요합니다.' });
+      }
+    }
+
+    // ⭐️ [SUPER ADMIN] 1. 플랫폼 총괄 대시보드 통계 API
     if (pathname === '/api/super-admin/overview' && method === 'GET') {
       const companies = db.prepare('SELECT * FROM companies').all();
       const totalTickets = db.prepare('SELECT count(*) as count FROM tickets').get().count;
       const totalUsers = db.prepare('SELECT count(*) as count FROM users').get().count;
+      let pendingApps = 0;
+      try {
+        pendingApps = db.prepare("SELECT count(*) as count FROM company_applications WHERE status = 'PENDING_REVIEW'").get().count;
+      } catch (e) {}
       
       let totalStorageUsed = 0;
       let freeCount = 0;
@@ -1304,6 +1486,7 @@ const server = http.createServer(async (req, res) => {
         total_companies: companies.length,
         total_tickets: totalTickets,
         total_users: totalUsers,
+        pending_applications: pendingApps,
         total_storage_used_mb: totalStorageUsed,
         plan_breakdown: { FREE: freeCount, PRO: proCount, ENTERPRISE: enterpriseCount },
         companies
@@ -1325,10 +1508,10 @@ const server = http.createServer(async (req, res) => {
       }));
     }
 
-    // ⭐️ [SUPER ADMIN] 3. 신규 회사 등록 (+100건 기본 부여)
+    // ⭐️ [SUPER ADMIN] 3. 신규 회사 등록 (모달 생성 + 즉시 프로비저닝)
     if (pathname === '/api/super-admin/companies' && method === 'POST') {
       const body = await parseBody(req);
-      const { name, subdomain, logo_url, plan, admin_name, admin_email, admin_phone, monthly_ticket_limit, enabled_features } = body;
+      const { name, subdomain, logo_url, plan, admin_name, admin_email, admin_phone, password, monthly_ticket_limit, enabled_features } = body;
       
       const slug = (subdomain || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
       if (!name || !slug) {
@@ -1340,39 +1523,92 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: `서브도메인 [${slug}]은(는) 이미 사용 중입니다.` });
       }
 
-      const id = 'comp_' + slug;
-      const featStr = typeof enabled_features === 'object' ? JSON.stringify(enabled_features) : '{"checklists":true,"realtime_sse":true,"public_qr":true,"outsource":true}';
-      const limit = parseInt(monthly_ticket_limit, 10) || 100;
+      const company = provisionTenant({
+        name,
+        subdomain: slug,
+        logo_url,
+        plan: plan || 'FREE',
+        admin_name,
+        admin_email,
+        admin_phone,
+        password: password || '1234',
+        monthly_ticket_limit,
+        enabled_features
+      });
 
-      db.prepare(`
-        INSERT INTO companies (
-          id, name, subdomain, logo_url, plan, status,
-          monthly_ticket_limit, monthly_used_count,
-          storage_limit_mb, storage_used_mb, enabled_features,
-          admin_name, admin_email, admin_phone
-        ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?)
-      `).run(
-        id, name, slug, logo_url || 'Fielder', plan || 'FREE',
-        limit, featStr, admin_name || '관리자', admin_email || '', admin_phone || ''
-      );
-
-      // 기본 관리자 계정 생성
-      const userId = 'user_admin_' + slug;
-      db.prepare(`
-        INSERT OR IGNORE INTO users (id, company_id, role, name, phone, email, password)
-        VALUES (?, ?, 'ADMIN', ?, ?, ?, '1234')
-      `).run(userId, id, admin_name || '관리자', admin_phone || '010-0000-0000', admin_email || `admin@${slug}.fielder.kr`);
-
-      seedDefaultTenantData(id);
       const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
 
       return sendJSON(res, 201, {
         success: true,
-        message: `[${name}] 회사가 성공적으로 등록되었습니다. 100건 무료 리포트가 부여되었습니다.`,
-        subdomain: slug,
-        web_url: `${baseOrigin}/?tenant=${slug}`,
-        mobile_url: `${baseOrigin}/mobile?tenant=${slug}`
+        message: `[${name}] 회사가 성공적으로 등록 및 개설되었습니다. 100건 무료 리포트가 부여되었습니다.`,
+        company: {
+          ...company,
+          web_url: `${baseOrigin}/?tenant=${slug}`,
+          mobile_url: `${baseOrigin}/mobile?tenant=${slug}`
+        }
       });
+    }
+
+    // ⭐️ [SUPER ADMIN] 3-1. 가입 신청서 목록 조회
+    if (pathname === '/api/super-admin/applications' && method === 'GET') {
+      const applications = db.prepare('SELECT * FROM company_applications ORDER BY created_at DESC').all();
+      return sendJSON(res, 200, applications);
+    }
+
+    // ⭐️ [SUPER ADMIN] 3-2. 가입 신청 승인 (프로비저닝 실행)
+    if (pathname.match(/^\/api\/super-admin\/applications\/([^/]+)\/approve$/) && method === 'POST') {
+      const appId = pathname.split('/')[4];
+      const app = db.prepare('SELECT * FROM company_applications WHERE id = ?').get(appId);
+      if (!app) return sendJSON(res, 404, { error: '신청서를 찾을 수 없습니다.' });
+      if (app.status === 'APPROVED') return sendJSON(res, 400, { error: '이미 승인된 신청서입니다.' });
+
+      const slug = app.requested_slug;
+      const existing = db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
+      if (existing) return sendJSON(res, 400, { error: `이미 해당 서브도메인 [${slug}]을 사용하는 회사가 존재합니다.` });
+
+      const session = getSession(req);
+      const company = provisionTenant({
+        name: app.company_name,
+        subdomain: slug,
+        admin_name: app.admin_name,
+        admin_email: app.admin_email,
+        admin_phone: app.admin_phone,
+        password_hash: app.password_hash
+      });
+
+      db.prepare(`
+        UPDATE company_applications
+        SET status = 'APPROVED', reviewer_id = ?, company_id = ?, reviewed_at = datetime('now')
+        WHERE id = ?
+      `).run(session ? session.user.id : 'super_admin', company.id, appId);
+
+      const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
+      return sendJSON(res, 200, {
+        success: true,
+        message: `[${app.company_name}] 가입 신청이 성공적으로 승인되어 사이트가 개설되었습니다.`,
+        company: {
+          ...company,
+          web_url: `${baseOrigin}/?tenant=${slug}`,
+          mobile_url: `${baseOrigin}/mobile?tenant=${slug}`
+        }
+      });
+    }
+
+    // ⭐️ [SUPER ADMIN] 3-3. 가입 신청 반려
+    if (pathname.match(/^\/api\/super-admin\/applications\/([^/]+)\/reject$/) && method === 'POST') {
+      const appId = pathname.split('/')[4];
+      const { reason } = await parseBody(req);
+      const app = db.prepare('SELECT * FROM company_applications WHERE id = ?').get(appId);
+      if (!app) return sendJSON(res, 404, { error: '신청서를 찾을 수 없습니다.' });
+
+      const session = getSession(req);
+      db.prepare(`
+        UPDATE company_applications
+        SET status = 'REJECTED', review_note = ?, reviewer_id = ?, reviewed_at = datetime('now')
+        WHERE id = ?
+      `).run(reason || '승인 요건 미충족', session ? session.user.id : 'super_admin', appId);
+
+      return sendJSON(res, 200, { success: true, message: `[${app.company_name}] 가입 신청이 반려 처리되었습니다.` });
     }
 
     // ⭐️ [SUPER ADMIN] 4. 기능 On/Off 토글 및 한도/플랜 수정
@@ -1416,7 +1652,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // ⭐️ [PUBLIC SIGNUP] 6. 홈페이지 자가 회원가입 및 즉시 온보딩 API
+    // ⭐️ [PUBLIC SIGNUP] 6. 홈페이지 자가 회원가입 및 신청 접수 API
     if (pathname === '/api/signup' && method === 'POST') {
       const body = await parseBody(req);
       const { company_name, subdomain, admin_name, admin_email, admin_phone, password } = body;
@@ -1426,48 +1662,70 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '필수 가입 정보를 모두 입력해주세요.' });
       }
 
+      const reservedSlugs = ['www', 'admin', 'super', 'superadmin', 'api', 'login', 'signup', 'app', 'system', 'root'];
+      if (reservedSlugs.includes(slug)) {
+        return sendJSON(res, 400, { error: `[${slug}]은(는) 시스템 예약어로 사용할 수 없습니다. 다른 서브도메인을 입력해주세요.` });
+      }
+
       const existing = db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
       if (existing) {
         return sendJSON(res, 400, { error: `입력하신 서브도메인 [${slug}]은(는) 이미 다른 고객사가 사용 중입니다. 다른 이름을 입력해주세요.` });
       }
 
-      const companyId = 'comp_' + slug;
-      // 100건 기본 발급
-      db.prepare(`
-        INSERT INTO companies (
-          id, name, subdomain, logo_url, plan, status,
-          monthly_ticket_limit, monthly_used_count,
-          storage_limit_mb, storage_used_mb, enabled_features,
-          admin_name, admin_email, admin_phone
-        ) VALUES (?, ?, ?, 'Fielder', 'FREE', 'ACTIVE', 100, 0, 500, 5, '{"checklists":true,"realtime_sse":true,"public_qr":true,"outsource":true}', ?, ?, ?)
-      `).run(companyId, company_name, slug, admin_name, admin_email, admin_phone || '');
+      const pendingApp = db.prepare("SELECT id FROM company_applications WHERE requested_slug = ? AND status = 'PENDING_REVIEW'").get(slug);
+      if (pendingApp) {
+        return sendJSON(res, 400, { error: `서브도메인 [${slug}]에 대한 가입 신청이 이미 접수되어 심사 중입니다.` });
+      }
 
-      // 관리자 계정 생성
-      const userId = 'user_admin_' + slug;
-      db.prepare(`
-        INSERT INTO users (id, company_id, role, name, phone, email, password)
-        VALUES (?, ?, 'ADMIN', ?, ?, ?, ?)
-      `).run(userId, companyId, admin_name, admin_phone || '010-0000-0000', admin_email, password || '1234');
+      const autoApprove = process.env.AUTO_APPROVE_SIGNUP === 'true';
 
-      seedDefaultTenantData(companyId);
-      const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
-
-      return sendJSON(res, 201, {
-        success: true,
-        message: '회원가입이 완료되었습니다! 100개 무료 리포트/티켓이 즉시 부여되었습니다.',
-        company: {
-          id: companyId,
+      if (autoApprove) {
+        const company = provisionTenant({
           name: company_name,
           subdomain: slug,
-          free_limit: 100,
-          web_url: `${baseOrigin}/?tenant=${slug}`,
-          mobile_url: `${baseOrigin}/mobile?tenant=${slug}`
-        }
-      });
+          admin_name,
+          admin_email,
+          admin_phone,
+          password: password || '1234'
+        });
+        const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
+        return sendJSON(res, 201, {
+          success: true,
+          pending: false,
+          message: '회원가입이 완료되었습니다! 100개 무료 리포트/티켓이 즉시 부여되었습니다.',
+          company: {
+            ...company,
+            free_limit: 100,
+            web_url: `${baseOrigin}/?tenant=${slug}`,
+            mobile_url: `${baseOrigin}/mobile?tenant=${slug}`
+          }
+        });
+      } else {
+        const appId = 'app_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+        const pwdHash = hashPassword(password || '1234');
+        db.prepare(`
+          INSERT INTO company_applications (
+            id, company_name, requested_slug, admin_name, admin_email, admin_phone,
+            password_hash, status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_REVIEW', datetime('now'))
+        `).run(appId, company_name, slug, admin_name, admin_email, admin_phone || '', pwdHash);
+
+        return sendJSON(res, 201, {
+          success: true,
+          pending: true,
+          message: '가입 신청이 성공적으로 접수되었습니다. 관리자 승인 후 사이트가 개설됩니다.',
+          application: {
+            id: appId,
+            company_name,
+            subdomain: slug,
+            admin_name,
+            admin_email
+          }
+        });
+      }
     }
 
-    
-    // ⭐️ [AUTH] 7. 통합 로그인 API
+    // ⭐️ [AUTH] 7. 통합 로그인 API (HTTP-only 세션 쿠키 발급 및 비밀번호 해시 검증)
     if (pathname === '/api/login' && method === 'POST') {
       const body = await parseBody(req);
       const email = (body.email || '').trim().toLowerCase();
@@ -1481,10 +1739,14 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 1) 슈퍼 관리자 계정 체크
-      if (email === 'admin@fielder.kr' || email === 'admin@smartfms.kr' || email === 'superadmin@smartfms.kr' || email === 'admin') {
-        if (password !== '1234' && password !== 'admin1234') {
+      const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'admin@fielder.kr').toLowerCase();
+      if (email === superAdminEmail || email === 'admin@fielder.kr' || email === 'admin@smartfms.kr' || email === 'superadmin@smartfms.kr' || email === 'admin') {
+        const superAdminPw = process.env.SUPER_ADMIN_PASSWORD || '1234';
+        if (password !== superAdminPw && password !== '1234' && password !== 'admin1234') {
           return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
         }
+        const session = createSession('super_admin', 'SUPER_ADMIN', null);
+        const cookieHeader = `fielder_session=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
         return sendJSON(res, 200, {
           success: true,
           role: 'SUPER_ADMIN',
@@ -1494,64 +1756,118 @@ const server = http.createServer(async (req, res) => {
             role_title: '통합 슈퍼 관리자'
           },
           redirect_url: '/super-admin'
-        });
+        }, cookieHeader);
       }
 
-      // 2) 회사 마스터 관리자 (companies 테이블 admin_email)
-      let companyAdmin = db.prepare('SELECT * FROM companies WHERE LOWER(admin_email) = ?').get(email);
-      if (!companyAdmin && (email === 'admin@central.kr' || email === 'admin@fms.kr' || email === 'admin@centraltower.kr')) {
-        companyAdmin = db.prepare('SELECT * FROM companies WHERE subdomain = ?').get('central');
-      }
-      if (companyAdmin) {
-        // users 테이블에서 최신 사용자 정보 조회 (동일 이메일 우선 -> ADMIN 계정)
-        const adminUser = db.prepare("SELECT * FROM users WHERE company_id = ? AND (LOWER(email) = ? OR role = 'ADMIN') ORDER BY (LOWER(email) = ?) DESC, created_at ASC LIMIT 1").get(companyAdmin.id, email, email);
-        const expectedPw = (adminUser && adminUser.password) ? adminUser.password : '1234';
-        if (password !== expectedPw) {
-          return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
+      // 2) 회사 관리자 / 실무자 통합 조회 (users 테이블 기준, companies 정보 조인)
+      let user = db.prepare(`
+        SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+        FROM users u
+        LEFT JOIN companies c ON u.company_id = c.id
+        WHERE LOWER(u.email) = ?
+      `).get(email);
+
+      // companies.admin_email 레거시 호환
+      if (!user) {
+        let comp = db.prepare('SELECT * FROM companies WHERE LOWER(admin_email) = ?').get(email);
+        if (!comp && (email === 'admin@central.kr' || email === 'admin@fms.kr' || email === 'admin@centraltower.kr')) {
+          comp = db.prepare("SELECT * FROM companies WHERE subdomain = 'central' OR id = 'comp_central_tower'").get();
         }
-        const effectiveName = (adminUser && adminUser.name) ? adminUser.name : (companyAdmin.admin_name || '마스터 관리자');
-        const effectiveEmail = (adminUser && adminUser.email) ? adminUser.email : (companyAdmin.admin_email || email);
-        return sendJSON(res, 200, {
-          success: true,
-          role: 'COMPANY_ADMIN',
-          user: {
-            id: adminUser ? adminUser.id : 'user_admin',
-            name: effectiveName,
-            email: effectiveEmail,
-            company_id: companyAdmin.id,
-            company_name: companyAdmin.name,
-            subdomain: companyAdmin.subdomain,
-            role_title: companyAdmin.name + ' 총괄 마스터'
-          },
-          redirect_url: '/?tenant=' + companyAdmin.subdomain
-        });
-      }
-
-      // 3) 현장 작업자 및 일반 사용자 (users 테이블)
-      const user = db.prepare('SELECT u.*, c.name as company_name, c.subdomain FROM users u LEFT JOIN companies c ON u.company_id = c.id WHERE LOWER(u.email) = ?').get(email);
-      if (user) {
-        const expectedPw = user.password || '1234';
-        if (password !== expectedPw) {
-          return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
+        if (comp) {
+          user = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            JOIN companies c ON u.company_id = c.id
+            WHERE u.company_id = ? AND (LOWER(u.email) = ? OR u.role = 'ADMIN')
+            ORDER BY (LOWER(u.email) = ?) DESC, u.created_at ASC
+            LIMIT 1
+          `).get(comp.id, email, email);
         }
-        const isAdmin = user.role === 'ADMIN';
-        return sendJSON(res, 200, {
-          success: true,
-          role: isAdmin ? 'COMPANY_ADMIN' : 'WORKER',
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            company_id: user.company_id,
-            company_name: user.company_name,
-            subdomain: user.subdomain,
-            role_title: isAdmin ? '시설 관리자' : (user.role || '현장 점검원')
-          },
-          redirect_url: isAdmin ? '/?tenant=' + user.subdomain : '/mobile?tenant=' + user.subdomain + '&user_id=' + user.id
-        });
       }
 
-      return sendJSON(res, 401, { error: '등록되지 않은 계정입니다. 가입 정보를 확인해주세요.' });
+      if (!user) {
+        return sendJSON(res, 401, { error: '등록되지 않은 계정입니다. 가입 정보를 확인해주세요.' });
+      }
+
+      // 고객사 정지 상태 확인
+      if (user.company_status === 'SUSPENDED' || user.company_status === 'CLOSED') {
+        return sendJSON(res, 403, { error: '해당 고객사 계정은 현재 이용이 정지되었습니다. 관리자에게 문의하세요.' });
+      }
+
+      // 비밀번호 검증 (해시 검증 + 평문 자동 업그레이드 지원)
+      const expectedPw = user.password || '1234';
+      const isValid = verifyPassword(password, expectedPw);
+      if (!isValid) {
+        return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
+      }
+
+      // 평문 비밀번호인 경우 해시로 즉시 자동 업그레이드
+      if (!expectedPw.includes(':')) {
+        try {
+          db.prepare("UPDATE users SET password = ?, last_login_at = datetime('now') WHERE id = ?").run(hashPassword(password), user.id);
+        } catch(e) {}
+      } else {
+        try {
+          db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(user.id);
+        } catch(e) {}
+      }
+
+      const isAdmin = user.role === 'ADMIN';
+      const roleName = isAdmin ? 'SITE_MANAGER' : 'WORKER';
+      const session = createSession(user.id, roleName, user.company_id);
+      const cookieHeader = `fielder_session=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
+
+      // ⭐️ subdomain이 NULL이 되지 않도록 강력 보장 ('central' 기본)
+      const targetSlug = user.subdomain && user.subdomain !== 'null' && user.subdomain !== 'undefined' ? user.subdomain : 'central';
+      const redirectUrl = isAdmin ? `/?tenant=${targetSlug}` : `/mobile?tenant=${targetSlug}&user_id=${user.id}`;
+
+      return sendJSON(res, 200, {
+        success: true,
+        role: isAdmin ? 'COMPANY_ADMIN' : 'WORKER',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          company_id: user.company_id,
+          company_name: user.company_name,
+          subdomain: targetSlug,
+          role_title: isAdmin ? (user.company_name + ' 총괄 관리자') : (user.role || '현장 점검원')
+        },
+        redirect_url: redirectUrl
+      }, cookieHeader);
+    }
+
+    // ⭐️ [AUTH] 7-1. 현재 로그인 사용자 세션 조회 API
+    if (pathname === '/api/me' && method === 'GET') {
+      const session = getSession(req);
+      if (!session) {
+        return sendJSON(res, 401, { logged_in: false, error: '로그인 세션이 없습니다.' });
+      }
+
+      let companyInfo = null;
+      if (session.companyId) {
+        companyInfo = db.prepare('SELECT id, name, subdomain, plan, status FROM companies WHERE id = ?').get(session.companyId);
+      }
+
+      return sendJSON(res, 200, {
+        logged_in: true,
+        user: {
+          id: session.user.id,
+          name: session.user.name,
+          email: session.user.email,
+          role: session.role,
+          company_id: session.companyId,
+          company_name: companyInfo ? companyInfo.name : '플랫폼 본부',
+          subdomain: companyInfo ? (companyInfo.subdomain || 'central') : 'central'
+        }
+      });
+    }
+
+    // ⭐️ [AUTH] 7-2. 로그아웃 API (세션 삭제 및 쿠키 만료)
+    if (pathname === '/api/logout' && method === 'POST') {
+      deleteSession(req);
+      const cookieClear = 'fielder_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax';
+      return sendJSON(res, 200, { success: true, message: '로그아웃되었습니다.' }, cookieClear);
     }
 
     // ⭐️ [SUPER ADMIN] 8. 회사 이름 / 도메인 / 비밀번호 개별 변경 & 삭제 API (JANDI 스타일)
@@ -1619,6 +1935,11 @@ const server = http.createServer(async (req, res) => {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'index.html'));
     }
     if (pathname === '/super-admin' || pathname === '/super-admin/') {
+      const session = getSession(req);
+      if (!session || session.role !== 'SUPER_ADMIN') {
+        res.writeHead(302, { Location: '/login?redirect=/super-admin' });
+        return res.end();
+      }
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'super_admin.html'));
     }
     if (pathname === '/login' || pathname === '/login/') {

@@ -1,11 +1,39 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 
 const DB_PATH = path.join(__dirname, 'fms.db');
 const db = new DatabaseSync(DB_PATH);
 
 db.exec('PRAGMA foreign_keys = ON;');
+
+// ⭐️ 비밀번호 해시 생성 및 검증 (scrypt 기반 안전 암호화 + 기존 평문 투명 호환)
+function hashPassword(password) {
+  if (!password) password = '1234';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored) return false;
+  if (!stored.startsWith('scrypt:')) {
+    // 기존 평문 비밀번호 호환
+    return password === stored;
+  }
+  const parts = stored.split(':');
+  if (parts.length !== 3) return false;
+  const [, salt, hash] = parts;
+  try {
+    const testBuf = crypto.scryptSync(password, salt, 64);
+    const storedBuf = Buffer.from(hash, 'hex');
+    if (testBuf.length !== storedBuf.length) return false;
+    return crypto.timingSafeEqual(testBuf, storedBuf);
+  } catch (e) {
+    return false;
+  }
+}
 
 function initDatabase() {
   console.log('📦 데이터베이스 스키마 구성 중...');
@@ -190,12 +218,46 @@ function initDatabase() {
     );
   `);
 
+  // ⭐️ 9. 세션 테이블 (인터넷 다고객 보안 인증)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      company_id TEXT,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // ⭐️ 10. 서비스 기업 가입 신청서 테이블 (승인/반려 워크플로)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_applications (
+      id TEXT PRIMARY KEY,
+      company_name TEXT NOT NULL,
+      requested_slug TEXT NOT NULL,
+      admin_name TEXT NOT NULL,
+      admin_email TEXT NOT NULL,
+      admin_phone TEXT,
+      password_hash TEXT NOT NULL,
+      status TEXT DEFAULT 'PENDING_REVIEW', -- PENDING_REVIEW, APPROVED, REJECTED, CANCELLED
+      reviewer_id TEXT,
+      review_note TEXT,
+      company_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at DATETIME
+    );
+  `);
+
   // 안전 마이그레이션 (기존 컬럼 보충)
   try { db.exec("ALTER TABLE tickets ADD COLUMN admin_notes TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN claimed_by_name TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN photo_url TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN email TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN password TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;"); } catch (e) {}
   try { db.exec("ALTER TABLE locations ADD COLUMN building TEXT DEFAULT '본관';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN buildings TEXT DEFAULT '[\"본관\", \"별관\"]';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
@@ -203,6 +265,11 @@ function initDatabase() {
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_at DATETIME;"); } catch (e) {}
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_by TEXT;"); } catch (e) {}
+
+  // ⭐️ comp_central_tower 서브도메인 'central' 보장 (/?tenant=null 버그 원천 방지)
+  try {
+    db.exec("UPDATE companies SET subdomain = 'central' WHERE id = 'comp_central_tower' AND (subdomain IS NULL OR subdomain = '' OR subdomain = 'null');");
+  } catch(e) {}
 
   // 기본 건물동 및 운영 층수 데이터 보장
   try {
@@ -500,9 +567,9 @@ function seedData() {
 
   // 기본 고객사
   db.prepare(`
-    INSERT INTO companies (id, name, logo_url, plan, monthly_ticket_limit, monthly_used_count)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run('comp_central_tower', '센트럴타워 통합시설운영본부', 'FMS', 'FREE', 100, 48);
+    INSERT INTO companies (id, name, subdomain, logo_url, plan, monthly_ticket_limit, monthly_used_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run('comp_central_tower', '센트럴타워 통합시설운영본부', 'central', 'FMS', 'FREE', 100, 48);
 
   // 직무 그룹
   const roles = [
@@ -707,5 +774,7 @@ function seedData() {
 
 module.exports = {
   db,
-  initDatabase
+  initDatabase,
+  hashPassword,
+  verifyPassword
 };

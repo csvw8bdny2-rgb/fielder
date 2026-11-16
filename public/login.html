@@ -81,8 +81,7 @@
               type="email" 
               id="login-email" 
               required 
-              placeholder="admin@fms.kr" 
-              value="admin@fms.kr" 
+              placeholder="예: admin@company.kr" 
               class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors"
             >
           </div>
@@ -90,14 +89,12 @@
           <div class="space-y-1 text-left text-xs">
             <div class="flex justify-between items-center">
               <label class="block font-semibold text-slate-200">비밀번호</label>
-              <span class="text-[11px] text-slate-400">초기값: 1234</span>
             </div>
             <input 
               type="password" 
               id="login-password" 
               required 
               placeholder="비밀번호 입력" 
-              value="1234" 
               class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors"
             >
           </div>
@@ -245,7 +242,12 @@
           } catch(e) {}
         }
 
-        location.href = data.redirect_url;
+        const redirectParam = new URLSearchParams(window.location.search).get('redirect');
+        if (redirectParam && (data.role === 'SUPER_ADMIN' || redirectParam.startsWith('/?tenant=') || redirectParam.startsWith('/mobile'))) {
+          location.href = redirectParam;
+        } else {
+          location.href = data.redirect_url;
+        }
       } catch (err) {
         alert('서버 연결 오류: ' + err.message);
         btn.disabled = false;
