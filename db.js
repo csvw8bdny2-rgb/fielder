@@ -478,9 +478,13 @@ function initDatabase() {
     );
   `);
 
-  seedData();
-  initInspectionSeeds();
-  console.log('✅ 데이터베이스 스키마 및 층수/위치/순찰 포함 시드 구성 완료!');
+  if (process.env.SEED_DEMO !== 'false') {
+    seedData();
+    initInspectionSeeds();
+  } else {
+    console.log('ℹ️ SEED_DEMO=false 설정으로 데모 회사/계정 시드를 건너뜁니다.');
+  }
+  console.log('✅ 데이터베이스 스키마 구성 완료!');
 }
 
 function initInspectionSeeds() {
@@ -692,8 +696,9 @@ function seedData() {
     );
   }
 
-  // 사용자들
-  const demoPwHash = hashPassword(process.env.DEMO_USER_PASSWORD || 'fielder2026!');
+  // 사용자들 (환경변수 DEMO_USER_PASSWORD 우선, 미설정 시 랜덤 생성)
+  const demoRawPw = process.env.DEMO_USER_PASSWORD || crypto.randomBytes(12).toString('base64url');
+  const demoPwHash = hashPassword(demoRawPw);
   const users = [
     { id: 'user_admin', role: 'ADMIN', name: 'Fielder 소장', email: 'admin@fms.kr', phone: '010-1111-2222', custom_role_id: null },
     { id: 'user_admin_sub', role: 'ADMIN', name: '이운영 팀장', email: 'lee.op@fms.kr', phone: '010-1111-3333', custom_role_id: null },
