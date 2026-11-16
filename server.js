@@ -315,8 +315,8 @@ function provisionTenant({ name, company_name, subdomain, adminName, admin_name,
   const userId = 'user_admin_' + slug;
   const pwdHash = password_hash || hashPassword(password || '1234');
   db.prepare(`
-    INSERT OR IGNORE INTO users (id, company_id, role, name, phone, email, password)
-    VALUES (?, ?, 'ADMIN', ?, ?, ?, ?)
+    INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active)
+    VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1)
   `).run(userId, id, adminN, adminP || '010-0000-0000', adminE || `admin@${slug}.fielder.kr`, pwdHash);
 
   seedDefaultTenantData(id);
@@ -1776,7 +1776,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: `서브도메인 [${slug}]에 대한 가입 신청이 이미 접수되어 심사 중입니다.` });
       }
 
-      const autoApprove = process.env.AUTO_APPROVE_SIGNUP === 'true';
+      const autoApprove = process.env.AUTO_APPROVE_SIGNUP !== 'false';
 
       if (autoApprove) {
         const company = provisionTenant({
@@ -1787,6 +1787,27 @@ const server = http.createServer(async (req, res) => {
           admin_phone,
           password: password || '1234'
         });
+
+        // 신청 내역에도 승인 완료로 보존 (슈퍼관리자 감사 로그)
+        try {
+          const appId = 'app_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+          const pwdHash = hashPassword(password || '1234');
+          db.prepare(`
+            INSERT INTO company_applications (
+              id, company_name, requested_slug, admin_name, admin_email, admin_phone,
+              password_hash, status, created_at, reviewed_at, review_note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'APPROVED', datetime('now'), datetime('now'), '자가 가입 즉시 자동 승인')
+          `).run(appId, company_name, slug, admin_name, admin_email, admin_phone || '', pwdHash);
+        } catch(e) {}
+
+        // 회원가입 직후 해당 관리자로 즉시 로그인 세션 발급
+        const adminUser = db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(company.id);
+        let cookieHeader = '';
+        if (adminUser) {
+          const session = createSession(adminUser.id, 'SITE_MANAGER', company.id);
+          cookieHeader = `fielder_session=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
+        }
+
         const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
         return sendJSON(res, 201, {
           success: true,
@@ -1798,7 +1819,7 @@ const server = http.createServer(async (req, res) => {
             web_url: `${baseOrigin}/?tenant=${slug}`,
             mobile_url: `${baseOrigin}/mobile?tenant=${slug}`
           }
-        });
+        }, cookieHeader);
       } else {
         const appId = 'app_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
         const pwdHash = hashPassword(password || '1234');

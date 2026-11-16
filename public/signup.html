@@ -412,6 +412,16 @@
           document.getElementById('result-status-text').textContent = '승인 심사 대기 중';
           document.getElementById('btn-enter-dashboard').classList.add('hidden');
         } else {
+          try {
+            localStorage.setItem('fielder_user', JSON.stringify({
+              name: data.company.admin_name,
+              email: data.company.admin_email,
+              role: 'ADMIN',
+              role_title: data.company.name + ' 총괄 관리자',
+              subdomain: data.company.subdomain
+            }));
+          } catch(e) {}
+
           document.getElementById('step4-title').textContent = '가입 완료';
           document.getElementById('step4-desc').textContent = '회사 계정 및 100건 무료 리포트가 발급되었습니다.';
           document.getElementById('result-company-name').textContent = data.company.name;

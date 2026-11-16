@@ -323,6 +323,27 @@ function initDatabase() {
     }
   } catch (e) {}
 
+  // ⭐️ 모든 회사의 기본 ADMIN 관리자 계정 누락 방지 및 자동 보강 동기화
+  try {
+    const allCompanies = db.prepare('SELECT id, subdomain, admin_name, admin_email, admin_phone FROM companies').all();
+    for (const c of allCompanies) {
+      const hasAdmin = db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(c.id);
+      if (!hasAdmin) {
+        const slug = c.subdomain || c.id.replace('comp_', '');
+        const adminId = 'user_admin_' + slug;
+        const adminEmail = c.admin_email || `admin@${slug}.fielder.kr`;
+        const adminName = c.admin_name || '총괄 관리자';
+        const adminPhone = c.admin_phone || '010-0000-0000';
+        db.prepare(`
+          INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active)
+          VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1)
+        `).run(adminId, c.id, adminName, adminPhone, adminEmail, hashPassword('1234'));
+      }
+    }
+  } catch (e) {
+    console.error('Admin auto-provision sync error:', e);
+  }
+
   // 기존 구역에 건물(본관) 기본값 설정
   db.exec("UPDATE locations SET building = '본관' WHERE building IS NULL OR building = '';");
 
