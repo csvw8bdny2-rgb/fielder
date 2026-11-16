@@ -822,7 +822,7 @@
       const data = await res.json();
       if (!res.ok) { alert(data.message || '인증번호 발송 실패'); return; }
       document.getElementById('otp-group').classList.remove('hidden');
-      alert('인증번호 6자리가 발송되었습니다. (테스트용 고정 번호: 123456)');
+      alert(data.message || '인증번호 6자리가 발송되었습니다.');
     }
 
     async function verifySmsOtp() {
@@ -1219,16 +1219,9 @@
       if (roleEl) roleEl.innerText = `${groupName} · 현장 실무자`;
       if (avatarEl) avatarEl.innerText = workerName.charAt(0);
 
-      // 사용자 정보에서 이메일 & 전화번호 가져오기
-      try {
-        const res = await fetch('/api/users');
-        const users = await res.json();
-        const user = users.find(u => u.id === currentWorkerId);
-        if (user) {
-          if (emailEl) emailEl.innerText = user.email || `${currentWorkerId}@fms.kr`;
-          if (phoneEl) phoneEl.innerText = user.phone || '010-0000-0000';
-        }
-      } catch (e) {}
+      // 본인 정보는 /api/me 세션 데이터에서 직접 표시 (전체 직원 목록 조회 제거)
+      if (emailEl) emailEl.innerText = currentWorkerEmail || '-';
+      if (phoneEl) phoneEl.innerText = currentWorkerPhone || '미등록';
 
       // 통계 계산
       try {

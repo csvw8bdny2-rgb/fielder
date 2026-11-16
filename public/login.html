@@ -78,28 +78,30 @@
           <span id="login-tenant-name" class="font-bold text-[#13B5EA]">-</span>
         </div>
 
+        <div id="login-error-box" class="hidden px-3.5 py-2.5 rounded-xl bg-red-500/15 border border-red-400/40 text-red-200 text-xs font-medium"></div>
+
         <form onsubmit="handleLogin(event)" class="space-y-4">
           
           <div class="space-y-1 text-left text-xs">
-            <label class="block font-semibold text-slate-200">아이디 (이름 또는 이메일)</label>
+            <label class="block font-semibold text-slate-200">이메일 (로그인 ID)</label>
             <input 
-              type="text" 
+              type="email" 
               id="login-email" 
               required 
-              placeholder="성명 입력 (대표 관리자는 이메일 입력)" 
+              placeholder="name@company.kr" 
               class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors"
             >
           </div>
 
           <div class="space-y-1 text-left text-xs">
             <div class="flex justify-between items-center">
-              <label class="block font-semibold text-slate-200">비밀번호 <span class="text-[11px] font-normal text-slate-400">(일반/모바일: 휴대폰 뒷 4자리)</span></label>
+              <label class="block font-semibold text-slate-200">비밀번호</label>
             </div>
             <input 
               type="password" 
               id="login-password" 
               required 
-              placeholder="비밀번호 또는 휴대폰 뒷 4자리" 
+              placeholder="비밀번호 입력" 
               class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors"
             >
           </div>
@@ -116,29 +118,32 @@
           </a>
         </div>
 
-        <!-- 빠른 테스트 계정 박스 (이모지 제거 및 단정화) -->
-        <div class="border border-[#004D73] rounded-xl p-3.5 bg-[#001F30] space-y-2 text-xs">
-          <span class="block font-semibold text-slate-300">테스트 계정 바로가기</span>
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" onclick="fillAccount('admin@smartfms.kr')" class="py-2 px-1 border border-[#005B82] rounded-lg bg-[#002B41] hover:border-[#13B5EA] text-center transition-colors">
-              <span class="block font-bold text-white text-[11px]">슈퍼관리자</span>
-              <span class="text-[10px] text-[#13B5EA]">통합 관제</span>
-            </button>
-            <button type="button" onclick="fillAccount('admin@fms.kr')" class="py-2 px-1 border border-[#005B82] rounded-lg bg-[#002B41] hover:border-[#13B5EA] text-center transition-colors">
-              <span class="block font-bold text-white text-[11px]">센트럴 마스터</span>
-              <span class="text-[10px] text-[#13B5EA]">admin@fms.kr</span>
-            </button>
-            <button type="button" onclick="fillAccount('kang.elec@fms.kr')" class="py-2 px-1 border border-[#005B82] rounded-lg bg-[#002B41] hover:border-[#13B5EA] text-center transition-colors">
-              <span class="block font-bold text-white text-[11px]">현장 실무자</span>
-              <span class="text-[10px] text-[#13B5EA]">모바일 접수</span>
-            </button>
-          </div>
-        </div>
-
       </div>
 
     </div>
   </main>
+
+  <!-- 모달 : 첫 로그인 비밀번호 변경 강제 -->
+  <div id="force-pw-modal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden backdrop-blur-xs">
+    <div class="bg-[#002B41] border border-[#004D73] text-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="space-y-1">
+        <h2 class="text-lg font-bold text-white">비밀번호 변경 필요</h2>
+        <p class="text-xs text-slate-300">임시 비밀번호로 로그인하셨습니다. 보안을 위해 새 비밀번호(8자 이상)로 변경해주세요.</p>
+      </div>
+      <div id="force-pw-error" class="hidden px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/40 text-red-200 text-xs"></div>
+      <form onsubmit="handleForcePwChange(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-200 mb-1">새 비밀번호 (최소 8자)</label>
+          <input type="password" id="force-new-pw" required minlength="8" placeholder="8자 이상 입력" class="w-full h-10 border border-[#005B82] rounded-xl px-3.5 text-sm bg-[#001F30] text-white outline-none focus:border-[#13B5EA]">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-200 mb-1">새 비밀번호 확인</label>
+          <input type="password" id="force-new-pw-confirm" required minlength="8" placeholder="비밀번호 재입력" class="w-full h-10 border border-[#005B82] rounded-xl px-3.5 text-sm bg-[#001F30] text-white outline-none focus:border-[#13B5EA]">
+        </div>
+        <button type="submit" id="btn-force-pw" class="btn-sky w-full h-10 rounded-xl text-sm">비밀번호 변경 후 계속하기</button>
+      </form>
+    </div>
+  </div>
 
   <!-- 3. 푸터 -->
   <footer class="w-full bg-[#002B41] border-t border-[#001F30] py-4 px-6 text-center text-xs text-slate-400">
@@ -223,9 +228,11 @@
       return '';
     }
 
+    let pendingRedirectUrl = '/';
+
     (async function() {
       const sp = new URLSearchParams(window.location.search);
-      const idParam = sp.get('name') || sp.get('email');
+      const idParam = sp.get('email');
       if (idParam) {
         const el = document.getElementById('login-email');
         if (el) el.value = idParam;
@@ -233,7 +240,7 @@
       const tenant = getLoginTenant();
       if (tenant) {
         try {
-          const r = await fetch(`/api/settings/company?tenant=${encodeURIComponent(tenant)}`);
+          const r = await fetch(`/api/public/company?tenant=${encodeURIComponent(tenant)}`);
           if (r.ok) {
             const c = await r.json();
             if (c && c.name) {
@@ -245,13 +252,19 @@
       }
     })();
 
-    function fillAccount(email) {
-      document.getElementById('login-email').value = email;
-      document.getElementById('login-password').value = '1234';
+    function showLoginError(msg) {
+      const box = document.getElementById('login-error-box');
+      if (box) {
+        box.textContent = msg;
+        box.classList.remove('hidden');
+      }
     }
 
     async function handleLogin(e) {
       e.preventDefault();
+      const errBox = document.getElementById('login-error-box');
+      if (errBox) errBox.classList.add('hidden');
+
       const email = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
       const tenant = getLoginTenant();
@@ -269,7 +282,7 @@
         const data = await res.json();
 
         if (!res.ok) {
-          alert('로그인 실패: ' + (data.error || '계정 정보를 다시 확인해주세요.'));
+          showLoginError(data.error || '이메일 또는 비밀번호를 다시 확인해주세요.');
           btn.disabled = false;
           btn.textContent = '로그인';
           return;
@@ -283,15 +296,65 @@
         }
 
         const redirectParam = new URLSearchParams(window.location.search).get('redirect');
-        if (redirectParam && (data.role === 'SUPER_ADMIN' || redirectParam.startsWith('/?tenant=') || redirectParam.startsWith('/mobile') || redirectParam.startsWith('/t/'))) {
-          location.href = redirectParam;
-        } else {
-          location.href = data.redirect_url;
+        const nextUrl = (redirectParam && (data.role === 'SUPER_ADMIN' || redirectParam.startsWith('/?tenant=') || redirectParam.startsWith('/mobile') || redirectParam.startsWith('/t/')))
+          ? redirectParam
+          : data.redirect_url;
+
+        if (data.must_change_password) {
+          pendingRedirectUrl = nextUrl;
+          document.getElementById('force-pw-modal').classList.remove('hidden');
+          btn.disabled = false;
+          btn.textContent = '로그인';
+          return;
         }
+
+        location.href = nextUrl;
       } catch (err) {
-        alert('서버 연결 오류: ' + err.message);
+        showLoginError('서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
         btn.disabled = false;
         btn.textContent = '로그인';
+      }
+    }
+
+    async function handleForcePwChange(e) {
+      e.preventDefault();
+      const errBox = document.getElementById('force-pw-error');
+      errBox.classList.add('hidden');
+      const pw1 = document.getElementById('force-new-pw').value.trim();
+      const pw2 = document.getElementById('force-new-pw-confirm').value.trim();
+      if (pw1.length < 8) {
+        errBox.textContent = '비밀번호는 최소 8자 이상이어야 합니다.';
+        errBox.classList.remove('hidden');
+        return;
+      }
+      if (pw1 !== pw2) {
+        errBox.textContent = '비밀번호 확인이 일치하지 않습니다.';
+        errBox.classList.remove('hidden');
+        return;
+      }
+      const btn = document.getElementById('btn-force-pw');
+      btn.disabled = true;
+      btn.textContent = '변경 중...';
+      try {
+        const res = await fetch('/api/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newPassword: pw1 })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errBox.textContent = data.error || '비밀번호 변경에 실패했습니다.';
+          errBox.classList.remove('hidden');
+          btn.disabled = false;
+          btn.textContent = '비밀번호 변경 후 계속하기';
+          return;
+        }
+        location.href = pendingRedirectUrl;
+      } catch (err) {
+        errBox.textContent = '서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.';
+        errBox.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = '비밀번호 변경 후 계속하기';
       }
     }
 

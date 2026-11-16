@@ -145,7 +145,7 @@
 
           <div class="space-y-1 text-left text-xs">
             <label class="block font-semibold text-slate-200">비밀번호</label>
-            <input type="password" id="user-password" required minlength="4" placeholder="비밀번호 (최소 4자 이상)" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+            <input type="password" id="user-password" required minlength="8" placeholder="비밀번호 (최소 8자 이상)" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
           </div>
 
           <div class="space-y-1 text-left text-xs">
@@ -350,6 +350,14 @@
       const pwd = document.getElementById('user-password').value;
       const pwdConfirm = document.getElementById('user-password-confirm').value;
 
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        alert('올바른 이메일 주소를 입력해주세요.');
+        return;
+      }
+      if (pwd.length < 8) {
+        alert('비밀번호는 최소 8자 이상이어야 합니다.');
+        return;
+      }
       if (pwd !== pwdConfirm) {
         alert('비밀번호가 일치하지 않습니다.');
         return;
@@ -362,19 +370,24 @@
     }
 
     function updateDomainPreview(val) {
-      const slug = (val || 'central').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      document.getElementById('domain-preview').textContent = `https://${slug || 'central'}.fielder.kr`;
+      const slug = (val || 'company').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      document.getElementById('domain-preview').textContent = `${window.location.origin}/?tenant=${slug || 'company'}`;
     }
 
     async function handleFinalSignup(e) {
       e.preventDefault();
-      const btn = document.getElementById('btn-submit-signup');
-      btn.disabled = true;
-      btn.textContent = '처리 중...';
-
       const companyName = document.getElementById('company-name').value.trim();
       const subdomain = document.getElementById('subdomain').value.trim().toLowerCase();
       const phone = document.getElementById('admin-phone').value.trim();
+
+      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) {
+        alert('올바른 휴대폰 또는 전화번호 형식을 입력해주세요. (예: 010-1234-5678)');
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-signup');
+      btn.disabled = true;
+      btn.textContent = '처리 중...';
 
       signupData.companyName = companyName;
       signupData.subdomain = subdomain;

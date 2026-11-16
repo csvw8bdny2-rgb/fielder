@@ -326,15 +326,26 @@
               </div>
 
               <div>
-                <label class="block text-[11px] text-[#6D6E6F] font-semibold mb-1">세부 구역 및 장소명</label>
-                <input type="text" id="wo-form-location-name" placeholder="예: 8층 임원회의실 앞 복도, 3층 남성화장실" class="w-full h-11 border border-[#D5D3CF] bg-white rounded-xl px-3.5 text-sm font-medium text-[#1E1F21] outline-none focus:border-[#0084B4]">
+                <label class="block text-[11px] text-[#6D6E6F] font-semibold mb-1">등록 구역 선택 (또는 직접 입력)</label>
+                <div class="flex space-x-2">
+                  <select id="wo-form-location-select" onchange="onWoLocationSelectChange()" class="w-1/2 h-11 border border-[#D5D3CF] bg-white rounded-xl px-2.5 text-xs font-semibold text-[#1E1F21] outline-none focus:border-[#0084B4]">
+                    <option value="">직접 입력</option>
+                  </select>
+                  <input type="text" id="wo-form-location-name" placeholder="세부 구역명 입력" class="w-1/2 h-11 border border-[#D5D3CF] bg-white rounded-xl px-3 text-xs font-medium text-[#1E1F21] outline-none focus:border-[#0084B4]">
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="space-y-1">
-            <label class="block text-xs font-bold text-[#1E1F21]">작업 지시 제목</label>
-            <input type="text" id="wo-form-title" placeholder="예: [본관 8층] 대회의실 조명 안정기 점검 및 수리 건" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-3.5 text-sm font-semibold text-[#1E1F21] outline-none focus:border-[#0084B4] focus:ring-1 focus:ring-[#13B5EA] transition">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="sm:col-span-2 space-y-1">
+              <label class="block text-xs font-bold text-[#1E1F21]">작업 지시 제목</label>
+              <input type="text" id="wo-form-title" placeholder="예: [본관 1층] 로비 조명 안정기 점검 및 수리 건" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-3.5 text-sm font-semibold text-[#1E1F21] outline-none focus:border-[#0084B4] focus:ring-1 focus:ring-[#13B5EA] transition">
+            </div>
+            <div class="space-y-1">
+              <label class="block text-xs font-bold text-[#1E1F21]">완료 예정일 (선택)</label>
+              <input type="date" id="wo-form-due-date" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-3 text-xs font-semibold text-[#1E1F21] bg-white outline-none focus:border-[#0084B4]">
+            </div>
           </div>
 
           <!-- 수신 대상 선택 (체크박스/라디오 및 콤보박스 대폭 확대) -->
@@ -385,8 +396,8 @@
           </div>
 
           <div class="flex justify-end space-x-3 pt-3 border-t border-[#EDECEB]">
-            <button onclick="navTo('monitoring')" class="px-5 py-2.5 border border-[#D5D3CF] text-[#6D6E6F] text-xs font-semibold rounded-xl hover:bg-[#FAF9F8] transition">취소</button>
-            <button onclick="submitWorkOrder()" class="px-6 py-2.5 bg-[#0084B4] hover:bg-[#006C9C] text-white text-xs font-bold rounded-xl shadow-sm transition">
+            <button type="button" onclick="navTo('monitoring')" class="px-5 py-2.5 border border-[#D5D3CF] text-[#6D6E6F] text-xs font-semibold rounded-xl hover:bg-[#FAF9F8] transition">취소</button>
+            <button type="button" id="btn-submit-workorder" onclick="submitWorkOrder()" class="px-6 py-2.5 bg-[#0084B4] hover:bg-[#006C9C] text-white text-xs font-bold rounded-xl shadow-sm transition">
               작업지시 발송하기
             </button>
           </div>
@@ -402,8 +413,9 @@
               <th class="px-4 py-3">작업명</th>
               <th class="px-4 py-3">구역</th>
               <th class="px-4 py-3">수신 대상</th>
-              <th class="px-4 py-3">지시 일시</th>
+              <th class="px-4 py-3">예정일 / 지시일시</th>
               <th class="px-4 py-3">상태</th>
+              <th class="px-4 py-3 text-right">관리</th>
             </tr>
           </thead>
           <tbody id="wo-list-table-body" class="divide-y divide-[#EDECEB]"></tbody>
@@ -1384,7 +1396,7 @@
               <span class="font-bold text-sm text-white">현장 실무자 배포용 모바일 콘솔 링크</span>
             </div>
             <p class="text-[11px] text-slate-300">
-              최초 가입 대표 관리자만 이메일 로그인을 사용하며, 추가 등록된 <b>일반/모바일 계정은 [이름]이 아이디, [휴대폰 뒷 4자리]가 비밀번호</b>입니다.
+              모든 계정은 <b>이메일(로그인 ID) + 비밀번호(8자 이상)</b>로 안전하게 인증하며, 임시 비밀번호 발급 시 첫 로그인 후 즉시 변경해야 합니다.
             </p>
           </div>
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
@@ -1432,31 +1444,30 @@
               <span class="font-bold text-[#1E1F21] text-sm" id="user-form-title">신규 사용자 및 계정 등록</span>
               <span id="user-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">수정 모드 활성</span>
             </div>
-            <span class="text-[11px] text-[#6D6E6F]">일반/모바일 계정은 <b>이름(ID)</b>과 <b>휴대폰 뒷 4자리(비밀번호)</b>로 자동 등록됩니다.</span>
+            <span class="text-[11px] text-[#6D6E6F]">이메일(로그인 ID)과 비밀번호(최소 8자)로 인증합니다. 비밀번호 미입력 시 임시 비밀번호가 자동 발급됩니다.</span>
           </div>
 
           <input type="hidden" id="edit-user-id">
 
           <div class="grid grid-cols-1 sm:grid-cols-6 gap-3.5">
             <div class="sm:col-span-1">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이름 (로그인 ID) <span class="text-[#F06A6A]">*</span></label>
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이름 <span class="text-[#F06A6A]">*</span></label>
               <input type="text" id="new-user-name" placeholder="예: 김철수" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-bold text-[#1E1F21]">
             </div>
-            <div class="sm:col-span-1">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">휴대폰 번호 <span class="text-[#F06A6A]">*</span></label>
-              <input type="tel" id="new-user-phone" placeholder="010-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
-              <span class="text-[10px] text-[#0084B4] block mt-0.5 truncate">뒷 4자리 = 초기 비밀번호</span>
-            </div>
             <div class="sm:col-span-2">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이메일 <span class="text-[10px] text-[#6D6E6F] font-normal">(선택사항)</span></label>
-              <input type="email" id="new-user-email" placeholder="선택 입력 (미입력 시 이름 로그인)" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-semibold text-[#1E1F21]">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이메일 (로그인 ID) <span class="text-[#F06A6A]">*</span></label>
+              <input type="email" id="new-user-email" placeholder="예: user@company.kr" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-semibold text-[#1E1F21]">
             </div>
             <div class="sm:col-span-1">
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-[#1E1F21] font-bold text-xs" id="user-pw-label">비밀번호 <span class="text-[10px] text-[#6D6E6F] font-normal">(선택)</span></label>
               </div>
-              <input type="password" id="new-user-password" placeholder="미입력 시 폰 뒷4자리" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white text-[#1E1F21]">
-              <span id="user-pw-help" class="text-[10px] text-[#6D6E6F] block mt-0.5 truncate">미입력 시 휴대폰 뒷 4자리</span>
+              <input type="password" id="new-user-password" minlength="8" placeholder="미입력 시 임시비번 발급" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white text-[#1E1F21]">
+              <span id="user-pw-help" class="text-[10px] text-[#6D6E6F] block mt-0.5 truncate">직접 입력 시 최소 8자 이상</span>
+            </div>
+            <div class="sm:col-span-1">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">휴대폰 번호</label>
+              <input type="tel" id="new-user-phone" placeholder="010-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
             </div>
             <div class="sm:col-span-1">
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">권한 <span class="text-[#F06A6A]">*</span></label>
@@ -1852,14 +1863,11 @@
       </div>
 
       <div>
-        <label class="block text-xs font-bold text-[#1E1F21] mb-1.5">새 비밀번호 입력</label>
+        <label class="block text-xs font-bold text-[#1E1F21] mb-1.5">새 임시 비밀번호 입력 (최소 8자, 미입력 시 자동 생성)</label>
         <div class="flex items-center space-x-2">
-          <input type="text" id="reset-pw-new-val" placeholder="새 비밀번호 (예: 1234 또는 영문/숫자)" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white font-bold text-[#1E1F21] outline-none focus:border-[#0084B4]">
-          <button type="button" onclick="document.getElementById('reset-pw-new-val').value = '1234'" class="h-10 px-3 bg-slate-100 hover:bg-slate-200 text-[#1E1F21] rounded-lg text-xs font-semibold whitespace-nowrap border border-[#D5D3CF]">
-            '1234' 자동입력
-          </button>
+          <input type="text" id="reset-pw-new-val" placeholder="최소 8자 이상 또는 비워두면 랜덤 발급" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white font-bold text-[#1E1F21] outline-none focus:border-[#0084B4]">
         </div>
-        <p class="text-[11px] text-[#6D6E6F] mt-1.5">• 초기 비밀번호 분실 시 <b class="text-[#1E1F21]">1234</b>로 재설정 후 본인이 로그인하여 변경할 수 있습니다.</p>
+        <p class="text-[11px] text-[#6D6E6F] mt-1.5">• 재설정된 사용자는 다음 로그인 시 반드시 새 비밀번호로 변경해야 합니다.</p>
       </div>
 
       <div class="flex justify-end space-x-2 pt-2 border-t border-[#EDECEB]">
@@ -2233,7 +2241,45 @@
       if (avatarEl && displayName) avatarEl.innerText = displayName.charAt(0);
     }
 
+    function formatKST(dtStr, withDate = true) {
+      if (!dtStr) return '-';
+      let s = String(dtStr).trim();
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+        s = s.replace(' ', 'T') + 'Z';
+      }
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return dtStr;
+      return new Intl.DateTimeFormat('ko-KR', {
+        timeZone: 'Asia/Seoul',
+        ...(withDate ? { month: '2-digit', day: '2-digit' } : {}),
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(d);
+    }
+
     async function init() {
+      // ⭐️ 1. 인증 세션 필수 확인 (비로그인 접근 시 로그인 화면으로 이동)
+      try {
+        const meRes = await fetch('/api/me');
+        if (!meRes.ok) {
+          location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+          return;
+        }
+        const meData = await meRes.json();
+        if (!meData.logged_in || !meData.user || meData.user.must_change_password) {
+          location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+          return;
+        }
+        try {
+          localStorage.setItem('fielder_user', JSON.stringify(meData.user));
+          sessionStorage.setItem('fielder_user', JSON.stringify(meData.user));
+        } catch (e) {}
+      } catch (e) {
+        location.href = '/login';
+        return;
+      }
+
       initUserProfile();
       try { await loadCompanySettings(); } catch (e) { console.warn('loadCompanySettings fallback:', e); }
       try { await loadRoles(); } catch (e) { console.warn('loadRoles fallback:', e); }
@@ -3491,6 +3537,69 @@
       syncCategoryToGroup(ticket.category);
     }
 
+    function populateWoLocationSelect() {
+      const sel = document.getElementById('wo-form-location-select');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">직접 입력</option>';
+      (currentLocations || []).forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id;
+        opt.innerText = `[${loc.building || '본관'} ${loc.floor || '1F'}] ${loc.name}`;
+        sel.appendChild(opt);
+      });
+    }
+
+    function onWoLocationSelectChange() {
+      const sel = document.getElementById('wo-form-location-select');
+      const locId = sel ? sel.value : '';
+      const locInput = document.getElementById('wo-form-location-name');
+      if (locId) {
+        const loc = currentLocations.find(l => l.id === locId);
+        if (loc) {
+          if (locInput) locInput.value = loc.name;
+          const bSel = document.getElementById('wo-form-building');
+          const fSel = document.getElementById('wo-form-floor');
+          if (bSel && loc.building) bSel.value = loc.building;
+          if (fSel && loc.floor) fSel.value = loc.floor;
+        }
+      }
+    }
+
+    async function cancelWorkOrder(ticketId) {
+      if (!confirm('이 작업지시를 취소하시겠습니까?')) return;
+      const res = await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToastNotification(data.error || data.message || '취소 실패', 'ERROR');
+        return;
+      }
+      showToastNotification('작업지시가 취소되었습니다.');
+      await loadCompanySettings();
+      await loadTickets();
+    }
+
+    async function editWorkOrderPrompt(ticketId) {
+      const t = currentTickets.find(x => x.id === ticketId);
+      if (!t) return;
+      const newTitle = prompt('수정할 작업 지시 제목:', t.title || '');
+      if (newTitle === null) return;
+      if (!newTitle.trim()) { alert('제목을 입력해주세요.'); return; }
+      const newDue = prompt('완료 예정일 (YYYY-MM-DD, 비워두면 미지정):', t.due_date || '');
+      if (newDue === null) return;
+      const res = await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle.trim(), due_date: newDue.trim() || null })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToastNotification(data.error || '수정 실패', 'ERROR');
+        return;
+      }
+      showToastNotification('작업지시가 수정되었습니다.');
+      await loadTickets();
+    }
+
     async function submitWorkOrder() {
       const id = document.getElementById('wo-form-ticket-id').value;
       const title = document.getElementById('wo-form-title').value.trim();
@@ -3501,55 +3610,67 @@
       const category = document.getElementById('wo-form-category').value;
       const building = document.getElementById('wo-form-building').value;
       const floor = document.getElementById('wo-form-floor').value;
+      const selectedLocId = document.getElementById('wo-form-location-select')?.value || '';
       const locName = document.getElementById('wo-form-location-name').value.trim();
+      const dueDate = document.getElementById('wo-form-due-date')?.value || '';
 
       if (!title) { alert('작업 지시 제목을 입력하세요.'); return; }
 
-      if (id) {
-        // [기존 티켓에 지시 발송]
-        const res = await fetch(`/api/tickets/${id}/assign`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            target_type: targetType,
-            target_group_role_id: groupRoleId,
-            assignee_id: workerId,
-            instruction_title: title,
-            instruction_notes: notes,
-            instruction_photo_url: droppedFileDataUrl || (droppedFile ? droppedFile.name : null)
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) { alert(data.message || '오류 발생'); return; }
-        alert('작업 지시가 발송되었습니다. (진행프로세스로 이동)');
-      } else {
-        // ⭐️ [관리자 직접 작업 지시 발송]
-        const res = await fetch('/api/tickets/direct-dispatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title,
-            category,
-            building,
-            floor,
-            location_custom_name: locName || `${building} ${floor} 작업 구역`,
-            target_type: targetType,
-            target_group_role_id: groupRoleId,
-            assignee_id: workerId,
-            instruction_notes: notes,
-            instruction_photo_url: droppedFileDataUrl || (droppedFile ? droppedFile.name : null)
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) { alert(data.message || '오류 발생'); return; }
-        alert(`[관리자 직접 지시 발송 완료]\n"${title}" 건이 현장 실무자에게 발송되었습니다.`);
-      }
+      const btn = document.getElementById('btn-submit-workorder');
+      if (btn) { btn.disabled = true; btn.innerText = '발송 중...'; }
 
-      removeDroppedFile();
-      resetWorkOrderToDirect();
-      await loadCompanySettings();
-      await loadTickets();
-      navTo('process');
+      try {
+        if (id) {
+          // [기존 티켓에 지시 발송]
+          const res = await fetch(`/api/tickets/${id}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              target_type: targetType,
+              target_group_role_id: groupRoleId,
+              assignee_id: workerId,
+              instruction_title: title,
+              instruction_notes: notes,
+              instruction_photo_url: droppedFileDataUrl || (droppedFile ? droppedFile.name : null)
+            })
+          });
+          const data = await res.json();
+          if (!res.ok || data.success === false) { showToastNotification(data.error || data.message || '발송 오류', 'ERROR'); return; }
+          showToastNotification('작업 지시가 발송되었습니다.');
+        } else {
+          // ⭐️ [관리자 직접 작업 지시 발송]
+          const res = await fetch('/api/tickets/direct-dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              category,
+              building,
+              floor,
+              location_id: selectedLocId || null,
+              location_custom_name: locName || `${building} ${floor} 작업 구역`,
+              target_type: targetType,
+              target_group_role_id: groupRoleId,
+              assignee_id: workerId,
+              instruction_notes: notes,
+              instruction_photo_url: droppedFileDataUrl || (droppedFile ? droppedFile.name : null),
+              due_date: dueDate || null
+            })
+          });
+          const data = await res.json();
+          if (!res.ok || data.success === false) { showToastNotification(data.error || data.message || '발송 오류', 'ERROR'); return; }
+          showToastNotification(`[작업지시 발송] "${title}" 건이 발송되었습니다.`);
+        }
+
+        removeDroppedFile();
+        resetWorkOrderToDirect();
+        if (document.getElementById('wo-form-due-date')) document.getElementById('wo-form-due-date').value = '';
+        await loadCompanySettings();
+        await loadTickets();
+        navTo('process');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '작업지시 발송하기'; }
+      }
     }
 
     // ⭐️ 현장 처리사항 코멘트 확인 모달 열기/닫기
@@ -3808,8 +3929,15 @@
               }
             })()}
           </td>
-          <td class="px-4 py-3 text-[#64748B] font-mono text-xs whitespace-nowrap">${t.assigned_at ? t.assigned_at.substring(5, 16) : (t.created_at ? t.created_at.substring(5, 16) : '-')}</td>
+          <td class="px-4 py-3 text-[#64748B] font-mono text-xs whitespace-nowrap">
+            ${t.due_date ? `<span class="text-[#0084B4] font-bold block">예정: ${t.due_date}</span>` : ''}
+            <span>${formatKST(t.assigned_at || t.created_at)}</span>
+          </td>
           <td class="px-4 py-3 whitespace-nowrap">${statusBadge}</td>
+          <td class="px-4 py-3 text-right whitespace-nowrap space-x-1">
+            <button onclick="editWorkOrderPrompt('${t.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] rounded text-[11px] font-semibold">수정</button>
+            <button onclick="cancelWorkOrder('${t.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-[11px] font-medium">취소</button>
+          </td>
         `;
         tbody.appendChild(tr);
       });
@@ -3838,6 +3966,7 @@
     async function loadLocations() {
       const res = await fetch('/api/locations');
       currentLocations = await res.json();
+      populateWoLocationSelect();
 
       // ⭐️ 건물동 오름차순, 층수 지하 최하층(B3->B2->B1)부터 지상(1F->2F..), 옥상(RF) 순서 정렬
       currentLocations.sort((a, b) => {
@@ -4299,17 +4428,18 @@
 
       filtered.forEach(u => {
         const isSelected = editingUserId === u.id;
+        const isInactive = u.is_active === 0;
         const tr = document.createElement('tr');
-        tr.className = `hover:bg-[#FAF9F8] text-xs transition ${isSelected ? 'bg-sky-50/80 border-l-4 border-l-[#0084B4]' : ''}`;
+        tr.className = `hover:bg-[#FAF9F8] text-xs transition ${isSelected ? 'bg-sky-50/80 border-l-4 border-l-[#0084B4]' : ''} ${isInactive ? 'opacity-50' : ''}`;
         tr.innerHTML = `
           <td class="px-3.5 py-2.5 font-bold text-[#1E1F21] cursor-pointer hover:text-[#0084B4] truncate" onclick="editUser('${u.id}')" title="클릭하여 사용자 정보 수정">
             <span class="inline-flex items-center space-x-1">
               <span>${u.name}</span>
-              <span class="text-[10px] text-[#0084B4] opacity-70">✏️</span>
+              ${isInactive ? '<span class="px-1 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px]">비활성</span>' : ''}
             </span>
           </td>
           <td class="px-3.5 py-2.5 font-mono text-[11px] text-[#1E1F21] truncate font-semibold">
-            <span class="cursor-pointer hover:text-[#0084B4] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 계정 정보 수정">${u.email || (u.name + ' <span class="text-[10px] text-[#0084B4] font-normal">(이름 ID)</span>')}</span>
+            <span class="cursor-pointer hover:text-[#0084B4] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 계정 정보 수정">${u.email || '-'}</span>
           </td>
           <td class="px-3.5 py-2.5 truncate">
             <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : 'bg-[#4573D2]/10 text-[#4573D2]'}">
@@ -4318,10 +4448,11 @@
           </td>
           <td class="px-3.5 py-2.5 font-medium text-[#1E1F21] truncate">${u.role_name || '<i class="text-[#A0A1A2]">전체 총괄</i>'}</td>
           <td class="px-3.5 py-2.5 text-[#6D6E6F] truncate">${u.phone || '-'}</td>
-          <td class="px-3.5 py-2.5 text-right whitespace-nowrap space-x-1.5 pr-4">
-            <button onclick="openSendAccessModal('${u.id}')" class="px-2.5 py-1 bg-[#EBF7FD] border border-[#13B5EA]/40 text-[#007EA8] hover:bg-[#DDF2FB] font-bold rounded text-[11px] shadow-2xs">접속주소 보내기</button>
-            <button onclick="editUser('${u.id}')" class="px-2.5 py-1 ${isSelected ? 'bg-[#0084B4] text-white font-bold' : 'bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold'} rounded text-[11px] shadow-2xs">${isSelected ? '수정 중 ✏️' : '수정'}</button>
-            <button onclick="openPasswordResetModal('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email || ''}')" class="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-bold rounded text-[11px] shadow-2xs">비번 재설정</button>
+          <td class="px-3.5 py-2.5 text-right whitespace-nowrap space-x-1 pr-4">
+            <button onclick="openSendAccessModal('${u.id}')" class="px-2 py-1 bg-[#EBF7FD] border border-[#13B5EA]/40 text-[#007EA8] hover:bg-[#DDF2FB] font-bold rounded text-[11px] shadow-2xs">접속주소</button>
+            <button onclick="editUser('${u.id}')" class="px-2 py-1 ${isSelected ? 'bg-[#0084B4] text-white font-bold' : 'bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold'} rounded text-[11px] shadow-2xs">${isSelected ? '수정중' : '수정'}</button>
+            <button onclick="openPasswordResetModal('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email || ''}')" class="px-2 py-1 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-bold rounded text-[11px] shadow-2xs">비번재설정</button>
+            <button onclick="toggleUserActive('${u.id}')" class="px-2 py-1 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 font-medium rounded text-[11px]">${isInactive ? '활성화' : '비활성'}</button>
             <button onclick="deleteUser('${u.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-medium text-[11px]">삭제</button>
           </td>
         `;
@@ -4329,11 +4460,22 @@
       });
     }
 
+    async function toggleUserActive(userId) {
+      const res = await fetch(`/api/users/${userId}/toggle-active`, { method: 'PUT' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToastNotification(data.error || '상태 변경 실패', 'ERROR');
+        return;
+      }
+      showToastNotification(data.message || '상태가 변경되었습니다.');
+      await loadUsers();
+    }
+
     function openPasswordResetModal(userId, userName, userEmail) {
       document.getElementById('reset-pw-user-id').value = userId;
       document.getElementById('reset-pw-user-name').innerText = userName;
       document.getElementById('reset-pw-user-email').innerText = userEmail;
-      document.getElementById('reset-pw-new-val').value = '1234';
+      document.getElementById('reset-pw-new-val').value = '';
       document.getElementById('modal-reset-user-password').classList.remove('hidden');
     }
 
@@ -4344,8 +4486,8 @@
     async function submitPasswordReset() {
       const userId = document.getElementById('reset-pw-user-id').value;
       const newPassword = document.getElementById('reset-pw-new-val').value.trim();
-      if (!newPassword) {
-        alert('새 비밀번호를 입력하세요.');
+      if (newPassword && newPassword.length < 8) {
+        alert('비밀번호는 최소 8자 이상이어야 합니다. (자동 생성하려면 비워두세요)');
         return;
       }
       const res = await fetch(`/api/users/${userId}/reset-password`, {
@@ -4355,10 +4497,10 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || '비밀번호 재설정 실패');
+        showToastNotification(data.error || '비밀번호 재설정 실패', 'ERROR');
         return;
       }
-      alert(data.message || '비밀번호가 재설정되었습니다.');
+      alert(data.message || '임시 비밀번호로 재설정되었습니다.');
       closePasswordResetModal();
       await loadUsers();
     }
@@ -4378,16 +4520,14 @@
 
       const tenant = getTenantParam() || 'central';
       const compName = document.getElementById('header-company-name')?.innerText || 'Fielder';
-      const isEmailLogin = (u.role === 'ADMIN' && u.email);
-      const loginIdText = isEmailLogin ? u.email : u.name;
+      const loginIdText = u.email || '-';
       const phoneDigits = (u.phone || '').replace(/\D/g, '');
-      const last4 = phoneDigits.length >= 4 ? phoneDigits.slice(-4) : '1234';
-      const pwHint = isEmailLogin ? '가입 시 설정한 비밀번호' : `휴대폰 뒷 4자리 (${last4})`;
+      const pwHint = u.must_change_password ? '발급된 임시 비밀번호 (첫 로그인 시 변경 필수)' : '설정된 개인 비밀번호';
 
-      const idQs = isEmailLogin ? `&email=${encodeURIComponent(u.email)}` : `&name=${encodeURIComponent(u.name)}`;
+      const emailQs = u.email ? `&email=${encodeURIComponent(u.email)}` : '';
       const targetUrl = u.role === 'ADMIN'
-        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${idQs}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
-        : `${window.location.origin}/mobile?tenant=${encodeURIComponent(tenant)}${idQs}`;
+        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${emailQs}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
+        : `${window.location.origin}/mobile?tenant=${encodeURIComponent(tenant)}${emailQs}`;
 
       const msg = `[${compName}] 현장 접속 안내\n${u.name}님, 아래 전용 주소로 접속하여 본인 계정으로 로그인해주세요.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 로그인 ID: ${loginIdText}\n▶ 비밀번호: ${pwHint}`;
 
@@ -4508,11 +4648,11 @@
       document.getElementById('btn-user-cancel').classList.add('hidden');
 
       const pwLabel = document.getElementById('user-pw-label');
-      if (pwLabel) pwLabel.innerHTML = `비밀번호 <span class="text-[#F06A6A]">*</span>`;
+      if (pwLabel) pwLabel.innerHTML = `비밀번호 <span class="text-[10px] text-[#6D6E6F] font-normal">(선택)</span>`;
       const pwInp = document.getElementById('new-user-password');
-      if (pwInp) pwInp.placeholder = '비밀번호';
+      if (pwInp) pwInp.placeholder = '미입력 시 임시비번 발급';
       const pwHelp = document.getElementById('user-pw-help');
-      if (pwHelp) pwHelp.innerText = "신규 등록 시 기본값 '1234'";
+      if (pwHelp) pwHelp.innerText = '직접 입력 시 최소 8자 이상';
 
       renderFilteredUsers();
     }
@@ -4525,46 +4665,40 @@
       const role = document.getElementById('new-user-role').value;
       const groupId = document.getElementById('new-user-group').value;
 
-      if (!name) { alert('이름(로그인 ID)을 입력하세요.'); return; }
-      if (!phone && !email && !password) {
-        if (!confirm('휴대폰 번호가 없으면 초기 비밀번호가 1234로 설정됩니다. 계속하시겠습니까?')) return;
-      }
+      if (!name) { alert('이름을 입력하세요.'); return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('유효한 이메일(로그인 ID)을 입력하세요.'); return; }
+      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { alert('올바른 휴대폰 번호 형식을 입력하세요.'); return; }
+      if (password && password.length < 8) { alert('비밀번호는 최소 8자 이상이어야 합니다.'); return; }
+      if (role === 'WORKER' && !groupId) { alert('현장 실무자는 소속 직무 그룹을 선택해야 합니다.'); return; }
 
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email: email || '', password: password || '', phone, role, custom_role_id: groupId || null })
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || '사용자 등록 실패'); return; }
+      const btn = document.getElementById('btn-user-submit');
+      if (btn) { btn.disabled = true; btn.innerText = '등록 중...'; }
 
-      document.getElementById('new-user-name').value = '';
-      if (document.getElementById('new-user-email')) document.getElementById('new-user-email').value = '';
-      if (document.getElementById('new-user-password')) document.getElementById('new-user-password').value = '';
-      document.getElementById('new-user-phone').value = '';
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password: password || '', phone, role, custom_role_id: groupId || null })
+        });
+        const data = await res.json();
+        if (!res.ok || data.success === false) { showToastNotification(data.error || '사용자 등록 실패', 'ERROR'); return; }
 
-      // 관리자 이름 동기화
-      if (role === 'ADMIN') {
-        let currentUser = null;
-        try { currentUser = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}'); } catch(e){}
-        if (!currentUser.id || currentUser.email === email || currentUser.role === 'ADMIN') {
-          currentUser.name = name;
-          currentUser.email = email;
-          try {
-            localStorage.setItem('fielder_user', JSON.stringify(currentUser));
-            sessionStorage.setItem('fielder_user', JSON.stringify(currentUser));
-          } catch(e){}
-          const nameEl = document.getElementById('header-user-name');
-          const avatarEl = document.getElementById('header-user-avatar');
-          if (nameEl) nameEl.innerText = name;
-          if (avatarEl) avatarEl.innerText = name.charAt(0);
+        document.getElementById('new-user-name').value = '';
+        if (document.getElementById('new-user-email')) document.getElementById('new-user-email').value = '';
+        if (document.getElementById('new-user-password')) document.getElementById('new-user-password').value = '';
+        document.getElementById('new-user-phone').value = '';
+
+        if (data.temp_password) {
+          alert(data.message);
+        } else {
+          showToastNotification(data.message || `사용자 [${name}] 계정이 등록되었습니다.`);
         }
+        await loadUsers();
+        await loadRoles();
+        await loadCompanySettings();
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '사용자 등록'; }
       }
-
-      alert(data.message || `사용자 [${name}] 계정이 등록되었습니다. (아이디: ${email})`);
-      await loadUsers();
-      await loadRoles();
-      await loadCompanySettings();
     }
 
     async function submitUpdateUser() {
@@ -4577,42 +4711,57 @@
       const groupId = document.getElementById('new-user-group').value;
 
       if (!name) { alert('이름을 입력하세요.'); return; }
-      if (!email) { alert('이메일(로그인 ID)을 입력하세요.'); return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('유효한 이메일(로그인 ID)을 입력하세요.'); return; }
+      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { alert('올바른 휴대폰 번호 형식을 입력하세요.'); return; }
+      if (password && password.length < 8) { alert('비밀번호는 최소 8자 이상이어야 합니다.'); return; }
+      if (role === 'WORKER' && !groupId) { alert('현장 실무자는 소속 직무 그룹을 선택해야 합니다.'); return; }
 
-      const res = await fetch('/api/users/' + id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, phone, role, custom_role_id: groupId || null })
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || '수정 중 오류가 발생했습니다.'); return; }
+      const btn = document.getElementById('btn-user-update');
+      if (btn) { btn.disabled = true; btn.innerText = '수정 중...'; }
 
-      // ⭐️ 현재 세션의 사용자 또는 관리자 정보도 즉시 갱신
-      let currentUser = null;
-      try { currentUser = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}'); } catch(e){}
-      if (!currentUser.id || currentUser.id === id || currentUser.email === email || role === 'ADMIN') {
-        currentUser.name = name;
-        currentUser.email = email;
-        try {
-          localStorage.setItem('fielder_user', JSON.stringify(currentUser));
-          sessionStorage.setItem('fielder_user', JSON.stringify(currentUser));
-        } catch(e){}
-        const nameEl = document.getElementById('header-user-name');
-        const avatarEl = document.getElementById('header-user-avatar');
-        if (nameEl) nameEl.innerText = name;
-        if (avatarEl) avatarEl.innerText = name.charAt(0);
+      try {
+        const res = await fetch('/api/users/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, phone, role, custom_role_id: groupId || null })
+        });
+        const data = await res.json();
+        if (!res.ok || data.success === false) { showToastNotification(data.error || '수정 중 오류가 발생했습니다.', 'ERROR'); return; }
+
+        let currentUser = null;
+        try { currentUser = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}'); } catch(e){}
+        if (currentUser && currentUser.id === id) {
+          currentUser.name = name;
+          currentUser.email = email;
+          try {
+            localStorage.setItem('fielder_user', JSON.stringify(currentUser));
+            sessionStorage.setItem('fielder_user', JSON.stringify(currentUser));
+          } catch(e){}
+          const nameEl = document.getElementById('header-user-name');
+          const avatarEl = document.getElementById('header-user-avatar');
+          if (nameEl) nameEl.innerText = name;
+          if (avatarEl) avatarEl.innerText = name.charAt(0);
+        }
+
+        cancelUserEdit();
+        showToastNotification(`사용자 [${name}]의 정보가 수정되었습니다.`);
+        await loadUsers();
+        await loadRoles();
+        await loadCompanySettings();
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '사용자 정보 수정 완료'; }
       }
-
-      cancelUserEdit();
-      alert(`사용자 [${name}]의 정보가 성공적으로 수정되었습니다.`);
-      await loadUsers();
-      await loadRoles();
-      await loadCompanySettings();
     }
 
     async function deleteUser(id) {
       if (!confirm('이 사용자를 삭제하시겠습니까?')) return;
-      await fetch('/api/users/' + id, { method: 'DELETE' });
+      const res = await fetch('/api/users/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        showToastNotification(data.error || '삭제할 수 없습니다.', 'ERROR');
+        return;
+      }
+      showToastNotification(data.message || '사용자가 삭제되었습니다.');
       await loadUsers();
     }
 
@@ -4761,35 +4910,47 @@
       const id = document.getElementById('edit-role-id').value;
       const name = document.getElementById('new-role-input').value.trim();
       if (!name) { alert('직무 그룹명을 입력하세요.'); return; }
+      if (name.length > 30) { alert('직무 그룹명은 최대 30자까지 입력할 수 있습니다.'); return; }
 
       const res = await fetch('/api/roles/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, category: 'FACILITY' })
       });
-      if (!res.ok) { alert('수정 중 오류가 발생했습니다.'); return; }
+      const data = await res.json();
+      if (!res.ok) { showToastNotification(data.error || '수정 중 오류가 발생했습니다.', 'ERROR'); return; }
 
       cancelRoleEdit();
-      alert('직무 그룹명이 수정되었습니다.');
+      showToastNotification('직무 그룹명이 수정되었습니다.');
       await loadRoles();
       await loadUsers();
     }
 
     async function addCustomRole() {
       const val = document.getElementById('new-role-input').value.trim();
-      if (!val) return;
-      await fetch('/api/roles', {
+      if (!val) { alert('직무 그룹명을 입력하세요.'); return; }
+      if (val.length > 30) { alert('직무 그룹명은 최대 30자까지 입력할 수 있습니다.'); return; }
+      const res = await fetch('/api/roles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: val, category: 'FACILITY' })
       });
+      const data = await res.json();
+      if (!res.ok) { showToastNotification(data.error || '등록 중 오류가 발생했습니다.', 'ERROR'); return; }
       document.getElementById('new-role-input').value = '';
+      showToastNotification('직무 그룹이 등록되었습니다.');
       await loadRoles();
     }
 
     async function deleteRole(id) {
       if (!confirm('이 직무 그룹을 삭제하시겠습니까?')) return;
-      await fetch('/api/roles/' + id, { method: 'DELETE' });
+      const res = await fetch('/api/roles/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToastNotification(data.error || '삭제할 수 없습니다.', 'ERROR');
+        return;
+      }
+      showToastNotification('직무 그룹이 삭제되었습니다.');
       await loadRoles();
     }
 
@@ -4797,8 +4958,16 @@
     // 4. 통계 & 보고서 (개인별 + 외주 통계 포함)
     // ==========================================
     async function loadAnalytics() {
-      const tenant = typeof getTenantParam === 'function' ? getTenantParam() : 'central';
-      const res = await fetch('/api/analytics?tenant=' + encodeURIComponent(tenant));
+      const tenant = typeof getTenantParam === 'function' ? getTenantParam() : '';
+      const res = await fetch('/api/analytics' + (tenant ? '?tenant=' + encodeURIComponent(tenant) : ''));
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        document.getElementById('stat-total').innerText = '오류';
+        document.getElementById('stat-lead-time').innerText = '-';
+        document.getElementById('stat-rate').innerText = '-';
+        document.getElementById('stat-bottleneck').innerText = errData.error || '통계 조회 실패';
+        return;
+      }
       const data = await res.json();
 
       document.getElementById('stat-total').innerText = (data.total_tickets || 0) + ' 건';
@@ -5025,6 +5194,10 @@
       const data = await res.json();
       const tbody = document.getElementById('blocked-users-body');
       tbody.innerHTML = '';
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="py-6 text-center text-xs text-[#6D6E6F]">차단된 연락처가 없습니다.</td></tr>';
+        return;
+      }
       data.forEach(b => {
         const tr = document.createElement('tr');
         tr.innerHTML = `

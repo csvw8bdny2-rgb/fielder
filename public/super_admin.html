@@ -1210,7 +1210,7 @@
           alert('개설 실패: ' + data.error);
         }
       } catch (err) {
-        alert('오류: ' + err.message);
+        alert('서버 연결 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       } finally {
         btn.disabled = false;
         btn.textContent = '즉시 개설 및 프로비저닝';

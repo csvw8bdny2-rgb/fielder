@@ -253,11 +253,18 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tickets ADD COLUMN admin_notes TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN claimed_by_name TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN photo_url TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN due_date TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN cancelled_at DATETIME;"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN cancelled_reason TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN email TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN password TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN invite_token TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN invite_expires_at DATETIME;"); } catch (e) {}
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_company_email ON users(company_id, LOWER(email)) WHERE email IS NOT NULL AND email != '';"); } catch (e) {}
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_company_name ON custom_roles(company_id, LOWER(TRIM(name)));"); } catch (e) {}
   try { db.exec("ALTER TABLE locations ADD COLUMN building TEXT DEFAULT '본관';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN buildings TEXT DEFAULT '[\"본관\", \"별관\"]';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
@@ -324,8 +331,16 @@ function initDatabase() {
 
   // ⭐️ 모든 회사의 기본 ADMIN 관리자 계정 누락 방지 및 자동 보강 동기화
   try {
+    // 1) companies.id가 비어있는 불량 데이터(예: gabal 등) 보정
+    const badComps = db.prepare("SELECT rowid, id, subdomain FROM companies WHERE id IS NULL OR id = ''").all();
+    for (const bc of badComps) {
+      const fixedId = 'comp_' + ((bc.subdomain || 'tenant').replace(/[^a-zA-Z0-9_-]/g, ''));
+      db.prepare("UPDATE companies SET id = ? WHERE rowid = ?").run(fixedId, bc.rowid);
+    }
+
     const allCompanies = db.prepare('SELECT id, subdomain, admin_name, admin_email, admin_phone FROM companies').all();
     for (const c of allCompanies) {
+      if (!c.id) continue;
       const hasAdmin = db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(c.id);
       if (!hasAdmin) {
         const slug = c.subdomain || c.id.replace('comp_', '');
@@ -333,14 +348,47 @@ function initDatabase() {
         const adminEmail = c.admin_email || `admin@${slug}.fielder.kr`;
         const adminName = c.admin_name || '총괄 관리자';
         const adminPhone = c.admin_phone || '010-0000-0000';
+        const randPw = crypto.randomBytes(6).toString('base64url').slice(0, 10);
         db.prepare(`
-          INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active)
-          VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1)
-        `).run(adminId, c.id, adminName, adminPhone, adminEmail, hashPassword('1234'));
+          INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active, must_change_password)
+          VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1, 1)
+        `).run(adminId, c.id, adminName, adminPhone, adminEmail, hashPassword(randPw));
       }
     }
   } catch (e) {
     console.error('Admin auto-provision sync error:', e);
+  }
+
+  // ⭐️ 평문 비밀번호 scrypt 일괄 해시 전환
+  try {
+    const plainUsers = db.prepare("SELECT id, password FROM users WHERE password IS NULL OR password = '' OR password NOT LIKE '%:%'").all();
+    for (const pu of plainUsers) {
+      const raw = (pu.password && pu.password.trim()) ? pu.password.trim() : crypto.randomBytes(6).toString('base64url').slice(0, 10);
+      const mustChange = (pu.password && pu.password.trim()) ? 0 : 1;
+      db.prepare("UPDATE users SET password = ?, must_change_password = COALESCE(must_change_password, ?) WHERE id = ?").run(hashPassword(raw), mustChange, pu.id);
+    }
+  } catch (e) {
+    console.error('Password hash migration error:', e);
+  }
+
+  // ⭐️ QA 테스트 데이터 정리 (central QA 잔여 데이터 및 qatest-20261116 테넌트 제거)
+  try {
+    db.prepare("DELETE FROM tickets WHERE company_id = 'comp_central_tower' AND (title LIKE '%[QA]%' OR title = '[QA] 테스트 작업지시')").run();
+    db.prepare("DELETE FROM users WHERE company_id = 'comp_central_tower' AND (name = 'QA테스터' OR name LIKE '%QA테스터%')").run();
+    db.prepare("DELETE FROM custom_roles WHERE company_id = 'comp_central_tower' AND (name = 'QA테스트팀' OR name LIKE '%QA테스트팀%')").run();
+    db.prepare("DELETE FROM companies WHERE subdomain = 'qatest-20261116' OR id = 'comp_qatest-20261116'").run();
+    // 이번 달 실제 티켓 수 재계산 반영
+    db.prepare(`
+      UPDATE companies
+      SET monthly_used_count = (
+        SELECT COUNT(*) FROM tickets
+        WHERE tickets.company_id = companies.id
+          AND status != 'CANCELLED'
+          AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+      )
+    `).run();
+  } catch (e) {
+    console.error('QA cleanup error:', e);
   }
 
   // 기존 구역에 건물(본관) 기본값 설정
