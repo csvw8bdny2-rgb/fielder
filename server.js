@@ -1248,7 +1248,12 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 409, { error: '작업지시 또는 순찰 이력이 있는 사용자는 삭제할 수 없습니다. 비활성화(퇴사/중지) 기능을 이용해주세요.' });
       }
 
-      db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(userId, companyId);
+      try {
+        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(userId, companyId);
+      } catch (delErr) {
+        return sendJSON(res, 409, { error: '다른 데이터에서 참조 중인 사용자는 삭제할 수 없습니다. 비활성화 기능을 이용해주세요.' });
+      }
       broadcastSSE('USER_UPDATED', { action: 'DELETE', id: userId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '사용자가 삭제되었습니다.' });
     }
@@ -1413,14 +1418,18 @@ const server = http.createServer(async (req, res) => {
       if (roleRow.is_system) return sendJSON(res, 409, { error: '기본 시스템 직무 그룹은 삭제할 수 없습니다.' });
 
       const userRef = db.prepare('SELECT COUNT(*) as cnt FROM users WHERE custom_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
-      const ticketRef = db.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE target_group_role_id = ? AND company_id = ? AND status != 'CANCELLED'").get(roleId, companyId).cnt;
+      const ticketRef = db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE target_group_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
       const tmplRef = db.prepare('SELECT COUNT(*) as cnt FROM inspection_templates WHERE target_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
 
       if (userRef > 0 || ticketRef > 0 || tmplRef > 0) {
-        return sendJSON(res, 409, { error: '소속 사용자, 작업지시 또는 점검표에서 사용 중인 직무 그룹은 삭제할 수 없습니다.' });
+        return sendJSON(res, 409, { error: '작업지시, 점검표 또는 소속 사용자에서 사용 중인 직무 그룹은 삭제할 수 없습니다.' });
       }
 
-      db.prepare('DELETE FROM custom_roles WHERE id = ? AND company_id = ?').run(roleId, companyId);
+      try {
+        db.prepare('DELETE FROM custom_roles WHERE id = ? AND company_id = ?').run(roleId, companyId);
+      } catch (delErr) {
+        return sendJSON(res, 409, { error: '다른 데이터에서 참조 중인 직무 그룹은 삭제할 수 없습니다.' });
+      }
       return sendJSON(res, 200, { success: true, message: '직무 그룹이 삭제되었습니다.' });
     }
     if (pathname.match(/^\/api\/roles\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
@@ -1507,8 +1516,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname.match(/^\/api\/inspections\/templates\/([^/]+)$/) && method === 'DELETE') {
       const tmplId = pathname.split('/')[4];
-      db.prepare('DELETE FROM inspection_templates WHERE id = ?').run(tmplId);
-      broadcastSSE('INSPECTION_TEMPLATE_UPDATED', { action: 'DELETE', id: tmplId });
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      try {
+        db.prepare('DELETE FROM inspection_templates WHERE id = ? AND company_id = ?').run(tmplId, companyId);
+      } catch (delErr) {
+        return sendJSON(res, 409, { error: '점검 이력에서 참조 중인 점검표 양식은 삭제할 수 없습니다.' });
+      }
+      broadcastSSE('INSPECTION_TEMPLATE_UPDATED', { action: 'DELETE', id: tmplId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '점검표 양식이 삭제되었습니다.' });
     }
 

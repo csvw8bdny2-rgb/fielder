@@ -2739,14 +2739,12 @@
         }
         updateLogoPreview();
 
-        // 팝업 알림 (명확한 피드백 제공)
-        alert(`[기본 설정 저장 완료]\n\n• 회사/기관명: ${name}\n• 로고 텍스트: ${logo || '(기본값 FMS)'}\n\n상단 시스템 헤더 및 모바일 화면에 즉시 적용되었습니다.`);
-        showToastNotification(`회사 기본 정보 및 로고가 안전하게 저장되었습니다.`);
+        showToastNotification(`회사 기본 정보 및 로고 [${name}]가 저장되었습니다.`);
 
         await loadCompanySettings();
       } catch (err) {
         console.error('saveCompanySettings Error:', err);
-        alert('설정 저장 중 통신 에러가 발생했습니다.');
+        showToastNotification('설정 저장 중 통신 오류가 발생했습니다.', 'ERROR');
       } finally {
         if (saveBtn) {
           saveBtn.disabled = false;
@@ -2768,8 +2766,8 @@
           buildings_config: currentBuildingsConfig
         })
       });
-      if (!res.ok) { alert('설정 저장 중 오류가 발생했습니다.'); return; }
-      alert('건물별 층수 구조가 저장되었습니다.\n[층수 및 구역위치 관리]와 [작업지시] 화면에 즉시 적용되었습니다.');
+      if (!res.ok) { showToastNotification('건물/층수 설정 저장 중 오류가 발생했습니다.', 'ERROR'); return; }
+      showToastNotification('건물별 층수 구조가 저장되었습니다.');
       await loadCompanySettings();
       await loadLocations();
     }
