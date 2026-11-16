@@ -941,24 +941,32 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const companyId = resolveCompanyId(parsedUrl, body, req);
       const { name, email, password, phone, role, custom_role_id } = body;
-      if (!name || !name.trim()) return sendJSON(res, 400, { error: '이름을 입력하세요.' });
-      if (!email || !email.trim()) return sendJSON(res, 400, { error: '로그인 아이디(이메일)를 입력하세요.' });
+      if (!name || !name.trim()) return sendJSON(res, 400, { error: '이름(로그인 아이디)을 입력하세요.' });
       
       const cleanName = name.trim();
-      const cleanEmail = email.trim().toLowerCase();
-      const pwdVal = password && password.trim() ? hashPassword(password.trim()) : hashPassword('1234');
+      const cleanPhone = (phone || '').trim();
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const phoneDigits = cleanPhone.replace(/\D/g, '');
+      const defaultPw = phoneDigits.length >= 4 ? phoneDigits.slice(-4) : '1234';
+      const pwdVal = (password && password.trim()) ? hashPassword(password.trim()) : hashPassword(defaultPw);
 
-      // ⭐️ 동일 이메일 계정이 존재하는 경우 새로 중복 생성하지 않고 기존 계정 정보를 똑똑하게 갱신
-      const existing = db.prepare('SELECT id, role FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
+      // ⭐️ 동일 이메일(있는 경우) 또는 동일 회사 내 동일 이름+연락처 계정이 존재하는 경우 기존 계정 정보 갱신
+      let existing = null;
+      if (cleanEmail) {
+        existing = db.prepare('SELECT id, role FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
+      } else if (cleanPhone) {
+        existing = db.prepare('SELECT id, role FROM users WHERE company_id = ? AND TRIM(name) = ? AND phone = ?').get(companyId, cleanName, cleanPhone);
+      }
+
       if (existing) {
         db.prepare(`
           UPDATE users
-          SET name = ?, phone = ?, role = ?, custom_role_id = ?, password = CASE WHEN ? != '' THEN ? ELSE password END
+          SET name = ?, phone = ?, role = ?, custom_role_id = ?, email = COALESCE(NULLIF(?, ''), email), password = CASE WHEN ? != '' THEN ? ELSE password END
           WHERE id = ?
-        `).run(cleanName, phone || '', role || 'WORKER', custom_role_id || null, password ? pwdVal : '', password ? pwdVal : '', existing.id);
+        `).run(cleanName, cleanPhone, role || 'WORKER', custom_role_id || null, cleanEmail, (password && password.trim()) ? pwdVal : '', (password && password.trim()) ? pwdVal : '', existing.id);
 
         if (role === 'ADMIN' || existing.role === 'ADMIN' || existing.id === 'user_admin') {
-          db.prepare('UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = ?').run(cleanName, cleanEmail, companyId);
+          db.prepare("UPDATE companies SET admin_name = ?, admin_email = COALESCE(NULLIF(?, ''), admin_email) WHERE id = ?").run(cleanName, cleanEmail, companyId);
         }
         broadcastSSE('USER_UPDATED', { action: 'UPDATE', id: existing.id, name: cleanName, email: cleanEmail });
         return sendJSON(res, 200, { success: true, id: existing.id, message: `기존 계정 [${cleanName}] 정보가 정상적으로 업데이트되었습니다.` });
@@ -968,14 +976,14 @@ const server = http.createServer(async (req, res) => {
       db.prepare(`
         INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, phone || '', custom_role_id || null);
+      `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail || null, pwdVal, cleanPhone, custom_role_id || null);
 
       if (role === 'ADMIN') {
         db.prepare('UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = "")').run(cleanName, companyId);
       }
 
       broadcastSSE('USER_UPDATED', { action: 'CREATE', id });
-      return sendJSON(res, 201, { success: true, id, message: '사용자가 등록되었습니다.' });
+      return sendJSON(res, 201, { success: true, id, default_password: (password && password.trim()) ? undefined : defaultPw, message: `사용자가 등록되었습니다. (로그인 ID: ${cleanName}, 초기 비번: ${(password && password.trim()) ? '직접입력' : defaultPw})` });
     }
     if (pathname.match(/^\/api\/users\/([^/]+)$/) && method === 'DELETE') {
       const userId = pathname.split('/')[3];
@@ -1855,14 +1863,16 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // ⭐️ [AUTH] 7. 통합 로그인 API (HTTP-only 세션 쿠키 발급 및 비밀번호 해시 검증)
+    // ⭐️ [AUTH] 7. 통합 로그인 API (이메일 또는 성명 ID + 비밀번호/휴대폰 뒷4자리 + 회사별 tenant 지원)
     if (pathname === '/api/login' && method === 'POST') {
       const body = await parseBody(req);
-      const email = (body.email || '').trim().toLowerCase();
+      const rawIdentifier = (body.email || body.identifier || body.name || '').trim();
+      const email = rawIdentifier.toLowerCase();
       const password = (body.password || '').trim();
+      const tenant = (body.tenant || (parsedUrl.query && parsedUrl.query.tenant) || '').trim().toLowerCase();
 
-      if (!email) {
-        return sendJSON(res, 400, { error: '이메일을 입력해주세요.' });
+      if (!rawIdentifier) {
+        return sendJSON(res, 400, { error: '이메일 또는 이름(로그인 ID)을 입력해주세요.' });
       }
       if (!password) {
         return sendJSON(res, 400, { error: '비밀번호를 입력해주세요.' });
@@ -1889,16 +1899,69 @@ const server = http.createServer(async (req, res) => {
         }, cookieHeader);
       }
 
-      // 2) 회사 관리자 / 실무자 통합 조회 (users 테이블 기준, companies 정보 조인)
-      let user = db.prepare(`
-        SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
-        FROM users u
-        LEFT JOIN companies c ON u.company_id = c.id
-        WHERE LOWER(u.email) = ?
-      `).get(email);
+      // 특정 회사(tenant)가 지정된 경우 해당 회사 ID 확인
+      let tenantComp = null;
+      if (tenant && tenant !== 'null' && tenant !== 'undefined') {
+        tenantComp = db.prepare('SELECT id, name, subdomain FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
+      }
+
+      // 2) 회사 관리자 / 실무자 통합 조회 (이메일 우선 -> 이름(ID) 조회)
+      let user = null;
+
+      if (rawIdentifier.includes('@')) {
+        if (tenantComp) {
+          user = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE u.company_id = ? AND LOWER(u.email) = ?
+          `).get(tenantComp.id, email);
+        }
+        if (!user) {
+          user = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE LOWER(u.email) = ?
+          `).get(email);
+        }
+      }
+
+      // 이름(ID) 기반 조회 (모바일/일반 사용자 계정: 아이디=이름, 비밀번호=휴대폰 뒷4자리)
+      if (!user) {
+        let candidates = [];
+        if (tenantComp) {
+          candidates = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            JOIN companies c ON u.company_id = c.id
+            WHERE u.company_id = ? AND LOWER(TRIM(u.name)) = ?
+          `).all(tenantComp.id, email);
+        } else {
+          candidates = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE LOWER(TRIM(u.name)) = ?
+          `).all(email);
+        }
+
+        if (candidates.length === 1) {
+          user = candidates[0];
+        } else if (candidates.length > 1) {
+          // 동명이인이 있을 경우 입력한 비밀번호 또는 휴대폰 뒷4자리가 일치하는 계정 선택
+          user = candidates.find(cand => {
+            const exp = cand.password || '1234';
+            if (verifyPassword(password, exp)) return true;
+            const pDigits = (cand.phone || '').replace(/\D/g, '');
+            if (pDigits.length >= 4 && pDigits.slice(-4) === password && (exp === '1234' || !exp)) return true;
+            return false;
+          }) || candidates[0];
+        }
+      }
 
       // companies.admin_email 레거시 호환
-      if (!user) {
+      if (!user && rawIdentifier.includes('@')) {
         let comp = db.prepare('SELECT * FROM companies WHERE LOWER(admin_email) = ?').get(email);
         if (!comp && (email === 'admin@central.kr' || email === 'admin@fms.kr' || email === 'admin@centraltower.kr')) {
           comp = db.prepare("SELECT * FROM companies WHERE subdomain = 'central' OR id = 'comp_central_tower'").get();
@@ -1916,7 +1979,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (!user) {
-        return sendJSON(res, 401, { error: '등록되지 않은 계정입니다. 가입 정보를 확인해주세요.' });
+        return sendJSON(res, 401, { error: '등록되지 않은 계정입니다. 이름(또는 이메일)과 회사 주소를 확인해주세요.' });
       }
 
       // 고객사 정지 상태 확인
@@ -1924,11 +1987,17 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 403, { error: '해당 고객사 계정은 현재 이용이 정지되었습니다. 관리자에게 문의하세요.' });
       }
 
-      // 비밀번호 검증 (해시 검증 + 평문 자동 업그레이드 지원)
+      // 비밀번호 검증 (해시 검증 + 평문 자동 업그레이드 + 초기 미변경 계정의 휴대폰 뒷4자리 지원)
       const expectedPw = user.password || '1234';
-      const isValid = verifyPassword(password, expectedPw);
+      let isValid = verifyPassword(password, expectedPw);
+      if (!isValid && user.phone) {
+        const phoneDigits = user.phone.replace(/\D/g, '');
+        if (phoneDigits.length >= 4 && phoneDigits.slice(-4) === password && (expectedPw === '1234' || !expectedPw)) {
+          isValid = true;
+        }
+      }
       if (!isValid) {
-        return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다.' });
+        return sendJSON(res, 401, { error: '비밀번호가 일치하지 않습니다. (일반/모바일 계정은 휴대폰 뒷 4자리)' });
       }
 
       // 평문 비밀번호인 경우 해시로 즉시 자동 업그레이드
@@ -1949,7 +2018,7 @@ const server = http.createServer(async (req, res) => {
 
       // ⭐️ subdomain이 NULL이 되지 않도록 강력 보장 ('central' 기본)
       const targetSlug = user.subdomain && user.subdomain !== 'null' && user.subdomain !== 'undefined' ? user.subdomain : 'central';
-      const redirectUrl = isAdmin ? `/?tenant=${targetSlug}` : `/mobile?tenant=${targetSlug}&user_id=${user.id}`;
+      const redirectUrl = isAdmin ? `/?tenant=${targetSlug}` : `/mobile?tenant=${targetSlug}`;
 
       return sendJSON(res, 200, {
         success: true,

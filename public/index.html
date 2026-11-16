@@ -1374,8 +1374,34 @@
         </div>
       </div>
 
-      <!-- 5-3. 사용자 관리 (상단 대시보드 KPI + 검색 + 이메일/비밀번호 로그인 ID 지원) -->
+      <!-- 5-3. 사용자 관리 (회사별 전용 접속주소 + 상단 대시보드 KPI + 이름/폰뒷4자리 지원) -->
       <div id="set-view-users" class="hidden space-y-4">
+        <!-- ⭐️ 0. 회사 전용 모바일/웹 접속주소 안내 카드 -->
+        <div class="bg-[#002B41] text-white p-4 rounded-xl border border-[#004D73] shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 text-xs">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 bg-[#13B5EA] text-[#002B41] font-extrabold rounded text-[10px]">회사 전용 접속 주소</span>
+              <span class="font-bold text-sm text-white">현장 실무자 배포용 모바일 콘솔 링크</span>
+            </div>
+            <p class="text-[11px] text-slate-300">
+              최초 가입 대표 관리자만 이메일 로그인을 사용하며, 추가 등록된 <b>일반/모바일 계정은 [이름]이 아이디, [휴대폰 뒷 4자리]가 비밀번호</b>입니다.
+            </p>
+          </div>
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+            <div class="flex items-center bg-[#001F30] border border-[#005B82] rounded-lg px-3 py-1.5 space-x-2">
+              <span class="text-[10px] text-[#13B5EA] font-bold shrink-0">📱 모바일:</span>
+              <code id="company-mobile-url-display" class="text-[11px] font-mono text-white truncate max-w-[260px]">-</code>
+              <button type="button" onclick="copyCompanyUrl('mobile')" class="px-2 py-0.5 bg-[#13B5EA] text-[#002B41] font-bold rounded text-[10px] hover:bg-[#38BDF8] shrink-0">복사</button>
+              <a id="company-mobile-url-link" href="/mobile" target="_blank" class="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded text-[10px] shrink-0">열기</a>
+            </div>
+            <div class="flex items-center bg-[#001F30] border border-[#005B82] rounded-lg px-3 py-1.5 space-x-2">
+              <span class="text-[10px] text-slate-300 font-bold shrink-0">🖥️ 웹:</span>
+              <code id="company-web-url-display" class="text-[11px] font-mono text-slate-200 truncate max-w-[200px]">-</code>
+              <button type="button" onclick="copyCompanyUrl('web')" class="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded text-[10px] shrink-0">복사</button>
+            </div>
+          </div>
+        </div>
+
         <!-- ⭐️ 1. 상단 사용자 현황 미니 대시보드 -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
@@ -1406,31 +1432,31 @@
               <span class="font-bold text-[#1E1F21] text-sm" id="user-form-title">신규 사용자 및 계정 등록</span>
               <span id="user-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">수정 모드 활성</span>
             </div>
-            <span class="text-[11px] text-[#6D6E6F]">이메일이 로그인 시 아이디로 사용되며 비밀번호로 인증합니다.</span>
+            <span class="text-[11px] text-[#6D6E6F]">일반/모바일 계정은 <b>이름(ID)</b>과 <b>휴대폰 뒷 4자리(비밀번호)</b>로 자동 등록됩니다.</span>
           </div>
 
           <input type="hidden" id="edit-user-id">
 
           <div class="grid grid-cols-1 sm:grid-cols-6 gap-3.5">
             <div class="sm:col-span-1">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이름 <span class="text-[#F06A6A]">*</span></label>
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이름 (로그인 ID) <span class="text-[#F06A6A]">*</span></label>
               <input type="text" id="new-user-name" placeholder="예: 김철수" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-bold text-[#1E1F21]">
             </div>
+            <div class="sm:col-span-1">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">휴대폰 번호 <span class="text-[#F06A6A]">*</span></label>
+              <input type="tel" id="new-user-phone" placeholder="010-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
+              <span class="text-[10px] text-[#0084B4] block mt-0.5 truncate">뒷 4자리 = 초기 비밀번호</span>
+            </div>
             <div class="sm:col-span-2">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이메일 (로그인 ID) <span class="text-[#F06A6A]">*</span></label>
-              <input type="email" id="new-user-email" placeholder="예: user@fms.kr" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-semibold text-[#1E1F21]">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이메일 <span class="text-[10px] text-[#6D6E6F] font-normal">(선택사항)</span></label>
+              <input type="email" id="new-user-email" placeholder="선택 입력 (미입력 시 이름 로그인)" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-semibold text-[#1E1F21]">
             </div>
             <div class="sm:col-span-1">
               <div class="flex items-center justify-between mb-1.5">
-                <label class="block text-[#1E1F21] font-bold text-xs" id="user-pw-label">비밀번호 <span class="text-[#F06A6A]">*</span></label>
-                <button type="button" onclick="document.getElementById('new-user-password').value='1234'" class="text-[10px] text-[#4573D2] hover:underline">1234 자동</button>
+                <label class="block text-[#1E1F21] font-bold text-xs" id="user-pw-label">비밀번호 <span class="text-[10px] text-[#6D6E6F] font-normal">(선택)</span></label>
               </div>
-              <input type="password" id="new-user-password" placeholder="비밀번호" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white text-[#1E1F21]">
-              <span id="user-pw-help" class="text-[10px] text-[#6D6E6F] block mt-0.5 truncate">신규 등록 시 기본값 '1234'</span>
-            </div>
-            <div class="sm:col-span-1">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">휴대폰 번호</label>
-              <input type="tel" id="new-user-phone" placeholder="010-0000-0000" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
+              <input type="password" id="new-user-password" placeholder="미입력 시 폰 뒷4자리" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white text-[#1E1F21]">
+              <span id="user-pw-help" class="text-[10px] text-[#6D6E6F] block mt-0.5 truncate">미입력 시 휴대폰 뒷 4자리</span>
             </div>
             <div class="sm:col-span-1">
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">권한 <span class="text-[#F06A6A]">*</span></label>
@@ -2247,6 +2273,17 @@
       document.getElementById('usage-bar').style.width = pct + '%';
       updateLogoPreview();
       initUserProfile(data.admin_name);
+
+      // 회사별 모바일/웹 전용 주소 표시 동기화
+      const slug = data.subdomain || getTenantParam() || 'central';
+      const mobileUrl = `${window.location.origin}/mobile?tenant=${slug}`;
+      const webUrl = `${window.location.origin}/?tenant=${slug}`;
+      const mobEl = document.getElementById('company-mobile-url-display');
+      const mobLink = document.getElementById('company-mobile-url-link');
+      const webEl = document.getElementById('company-web-url-display');
+      if (mobEl) mobEl.innerText = mobileUrl;
+      if (mobLink) mobLink.href = mobileUrl;
+      if (webEl) webEl.innerText = webUrl;
 
       if (data.buildings_config && Object.keys(data.buildings_config).length > 0) {
         currentBuildingsConfig = data.buildings_config;
@@ -4272,7 +4309,7 @@
             </span>
           </td>
           <td class="px-3.5 py-2.5 font-mono text-[11px] text-[#1E1F21] truncate font-semibold">
-            <span class="cursor-pointer hover:text-[#0084B4] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 계정 ID(이메일) 수정">${u.email || '-'}</span>
+            <span class="cursor-pointer hover:text-[#0084B4] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 계정 정보 수정">${u.email || (u.name + ' <span class="text-[10px] text-[#0084B4] font-normal">(이름 ID)</span>')}</span>
           </td>
           <td class="px-3.5 py-2.5 truncate">
             <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : 'bg-[#4573D2]/10 text-[#4573D2]'}">
@@ -4326,24 +4363,39 @@
       await loadUsers();
     }
 
+    function copyCompanyUrl(type) {
+      const el = document.getElementById(type === 'mobile' ? 'company-mobile-url-display' : 'company-web-url-display');
+      const url = el ? el.innerText.trim() : '';
+      if (!url || url === '-') return;
+      navigator.clipboard.writeText(url).then(() => {
+        showToastNotification((type === 'mobile' ? '모바일 현장 콘솔' : '웹 관제 콘솔') + ' 주소가 복사되었습니다.');
+      }).catch(() => alert('복사: ' + url));
+    }
+
     function openSendAccessModal(userId) {
       const u = currentUsers.find(user => user.id === userId);
       if (!u) return;
 
       const tenant = getTenantParam() || 'central';
       const compName = document.getElementById('header-company-name')?.innerText || 'Fielder';
-      const emailParam = u.email ? `&email=${encodeURIComponent(u.email)}` : '';
-      const targetUrl = u.role === 'ADMIN'
-        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${emailParam}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
-        : `${window.location.origin}/mobile?tenant=${encodeURIComponent(tenant)}${emailParam}`;
+      const isEmailLogin = (u.role === 'ADMIN' && u.email);
+      const loginIdText = isEmailLogin ? u.email : u.name;
+      const phoneDigits = (u.phone || '').replace(/\D/g, '');
+      const last4 = phoneDigits.length >= 4 ? phoneDigits.slice(-4) : '1234';
+      const pwHint = isEmailLogin ? '가입 시 설정한 비밀번호' : `휴대폰 뒷 4자리 (${last4})`;
 
-      const msg = `[${compName}] 현장 접속 안내\n${u.name}님, 아래 전용 주소로 접속하여 본인 계정으로 로그인해주세요.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 로그인 ID: ${u.email || '-'}\n▶ 초기 비밀번호: 등록된 비밀번호 (미설정 시 1234)`;
+      const idQs = isEmailLogin ? `&email=${encodeURIComponent(u.email)}` : `&name=${encodeURIComponent(u.name)}`;
+      const targetUrl = u.role === 'ADMIN'
+        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${idQs}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
+        : `${window.location.origin}/mobile?tenant=${encodeURIComponent(tenant)}${idQs}`;
+
+      const msg = `[${compName}] 현장 접속 안내\n${u.name}님, 아래 전용 주소로 접속하여 본인 계정으로 로그인해주세요.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 로그인 ID: ${loginIdText}\n▶ 비밀번호: ${pwHint}`;
 
       document.getElementById('send-access-user-name').innerText = `${u.name} (${u.role === 'ADMIN' ? '관리자' : '실무자'})`;
       document.getElementById('send-access-user-phone').innerText = u.phone || '미등록';
-      document.getElementById('send-access-user-email').innerText = u.email || '-';
+      document.getElementById('send-access-user-email').innerText = loginIdText;
       document.getElementById('send-access-message').value = msg;
-      document.getElementById('send-access-target-phone').value = (u.phone || '').replace(/[^0-9+]/g, '');
+      document.getElementById('send-access-target-phone').value = phoneDigits;
       document.getElementById('send-access-target-url').value = targetUrl;
 
       document.getElementById('modal-send-access').classList.remove('hidden');
@@ -4473,13 +4525,15 @@
       const role = document.getElementById('new-user-role').value;
       const groupId = document.getElementById('new-user-group').value;
 
-      if (!name) { alert('이름을 입력하세요.'); return; }
-      if (!email) { alert('이메일(로그인 ID)을 입력하세요.'); return; }
+      if (!name) { alert('이름(로그인 ID)을 입력하세요.'); return; }
+      if (!phone && !email && !password) {
+        if (!confirm('휴대폰 번호가 없으면 초기 비밀번호가 1234로 설정됩니다. 계속하시겠습니까?')) return;
+      }
 
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password: password || '1234', phone, role, custom_role_id: groupId || null })
+        body: JSON.stringify({ name, email: email || '', password: password || '', phone, role, custom_role_id: groupId || null })
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error || '사용자 등록 실패'); return; }
