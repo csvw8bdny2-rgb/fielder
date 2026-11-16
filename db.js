@@ -693,21 +693,22 @@ function seedData() {
   }
 
   // 사용자들
+  const demoPwHash = hashPassword(process.env.DEMO_USER_PASSWORD || 'fielder2026!');
   const users = [
-    { id: 'user_admin', role: 'ADMIN', name: 'Fielder 소장', phone: '010-1111-2222', custom_role_id: null },
-    { id: 'user_admin_sub', role: 'ADMIN', name: '이운영 팀장', phone: '010-1111-3333', custom_role_id: null },
-    { id: 'user_worker_choi', role: 'WORKER', name: '최영선 반장', phone: '010-3333-4444', custom_role_id: 'role_maint' },
-    { id: 'user_worker_lee_m', role: 'WORKER', name: '이영선 기사', phone: '010-3333-5555', custom_role_id: 'role_maint' },
-    { id: 'user_worker_jung_c', role: 'WORKER', name: '정미화 조장', phone: '010-5555-6666', custom_role_id: 'role_clean' },
-    { id: 'user_worker_park_c', role: 'WORKER', name: '박청결 사원', phone: '010-5555-7777', custom_role_id: 'role_clean' },
-    { id: 'user_worker_kim_c', role: 'WORKER', name: '김위생 사원', phone: '010-5555-8888', custom_role_id: 'role_clean' },
-    { id: 'user_worker_park_s', role: 'WORKER', name: '박보안 대원', phone: '010-7777-8888', custom_role_id: 'role_sec' },
-    { id: 'user_worker_kang_e', role: 'WORKER', name: '강전기 기사', phone: '010-8888-9999', custom_role_id: 'role_elec' },
-    { id: 'user_worker_song_v', role: 'WORKER', name: '송승강 엔지니어', phone: '010-9999-1111', custom_role_id: 'role_elev' }
+    { id: 'user_admin', role: 'ADMIN', name: 'Fielder 소장', email: 'admin@fms.kr', phone: '010-1111-2222', custom_role_id: null },
+    { id: 'user_admin_sub', role: 'ADMIN', name: '이운영 팀장', email: 'lee.op@fms.kr', phone: '010-1111-3333', custom_role_id: null },
+    { id: 'user_worker_choi', role: 'WORKER', name: '최영선 반장', email: 'choi.maint@fms.kr', phone: '010-3333-4444', custom_role_id: 'role_maint' },
+    { id: 'user_worker_lee_m', role: 'WORKER', name: '이영선 기사', email: 'lee.maint@fms.kr', phone: '010-3333-5555', custom_role_id: 'role_maint' },
+    { id: 'user_worker_jung_c', role: 'WORKER', name: '정미화 조장', email: 'jung.clean@fms.kr', phone: '010-5555-6666', custom_role_id: 'role_clean' },
+    { id: 'user_worker_park_c', role: 'WORKER', name: '박청결 사원', email: 'park.clean@fms.kr', phone: '010-5555-7777', custom_role_id: 'role_clean' },
+    { id: 'user_worker_kim_c', role: 'WORKER', name: '김위생 사원', email: 'kim.clean@fms.kr', phone: '010-5555-8888', custom_role_id: 'role_clean' },
+    { id: 'user_worker_park_s', role: 'WORKER', name: '박보안 대원', email: 'park.sec@fms.kr', phone: '010-7777-8888', custom_role_id: 'role_sec' },
+    { id: 'user_worker_kang_e', role: 'WORKER', name: '강전기 기사', email: 'kang.elec@fms.kr', phone: '010-8888-9999', custom_role_id: 'role_elec' },
+    { id: 'user_worker_song_v', role: 'WORKER', name: '송승강 엔지니어', email: 'song.elev@fms.kr', phone: '010-9999-1111', custom_role_id: 'role_elev' }
   ];
   for (const u of users) {
-    db.prepare('INSERT INTO users (id, company_id, role, name, phone, custom_role_id) VALUES (?, ?, ?, ?, ?, ?)').run(
-      u.id, 'comp_central_tower', u.role, u.name, u.phone, u.custom_role_id
+    db.prepare('INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)').run(
+      u.id, 'comp_central_tower', u.role, u.name, u.email, demoPwHash, u.phone, u.custom_role_id
     );
   }
 
