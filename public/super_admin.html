@@ -368,6 +368,9 @@
             <button onclick="copyWebUrl()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded transition-colors whitespace-nowrap">
               주소 복사
             </button>
+            <button onclick="impersonateCompany()" class="h-9 px-3.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold text-xs rounded transition-colors whitespace-nowrap">
+              사이트 열기
+            </button>
           </div>
         </div>
 
@@ -419,7 +422,7 @@
       <div id="card-report-limit" class="card-box space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-bold text-[#002B41]">리포트 사용량 현황</h3>
-          <button onclick="charge100()" class="px-3 py-1 rounded text-xs bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold whitespace-nowrap">
+          <button onclick="charge100(this)" id="btn-charge-report-100" class="px-3 py-1 rounded text-xs bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold whitespace-nowrap">
             +100건 충전
           </button>
         </div>
@@ -436,6 +439,34 @@
 
           <div class="text-[11px] text-slate-500 pt-0.5">
             잔여 가능 건수: <strong class="text-slate-900" id="remain-text">100건</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 4-1: 문자·알림톡 발송량 및 충전 내역 -->
+      <div id="card-message-limit" class="card-box space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-bold text-[#002B41]">문자·카카오 알림톡 발송량 및 충전 내역</h3>
+          <div class="flex items-center space-x-1.5">
+            <button onclick="chargeDetailMessages(100, this)" class="px-2.5 py-1 rounded text-xs bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold whitespace-nowrap">+100건 충전</button>
+            <button onclick="chargeDetailMessages(500, this)" class="px-2.5 py-1 rounded text-xs bg-[#002B41] hover:bg-[#001F30] text-white font-bold whitespace-nowrap">+500건 충전</button>
+            <button onclick="selectedCompany && openMessageLogsModal(selectedCompany.id)" class="px-2.5 py-1 rounded text-xs border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold whitespace-nowrap">발송 이력</button>
+          </div>
+        </div>
+        <div class="space-y-1.5 text-xs">
+          <div class="flex justify-between items-center text-slate-700">
+            <span>당월 발송량: <strong class="text-slate-900" id="detail-msg-usage-text">0건 / 50건</strong></span>
+            <span class="font-bold text-[#0084B4]" id="detail-msg-pct">0%</span>
+          </div>
+          <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+            <div id="detail-msg-bar" class="bg-[#0084B4] h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="text-[11px] text-slate-500" id="detail-msg-breakdown">알림톡 0 · SMS 0 · LMS 0 (OTP 제외)</div>
+        </div>
+        <div class="pt-2 border-t border-slate-100">
+          <div class="text-[11px] font-bold text-slate-600 mb-1.5">크레딧 충전 내역</div>
+          <div id="detail-msg-credit-logs" class="space-y-1 text-[11px] text-slate-600 max-h-36 overflow-y-auto">
+            <div class="text-slate-400">불러오는 중...</div>
           </div>
         </div>
       </div>
@@ -911,8 +942,68 @@
 
       if (selectedCompany) {
         populateManageForm(selectedCompany);
+        loadCompanyMessageDetail(selectedCompany.id);
       }
       window.scrollTo(0, 0);
+    }
+
+    async function loadCompanyMessageDetail(companyId) {
+      if (!companyId) return;
+      try {
+        const res = await fetch(`/api/super-admin/companies/${companyId}/messages`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const s = data.stats || { used_count: 0, total_limit: 50, usage_pct: 0, alimtalk_count: 0, sms_count: 0, lms_count: 0, otp_count: 0 };
+        const pct = Math.min(100, s.usage_pct || 0);
+        const uEl = document.getElementById('detail-msg-usage-text');
+        const pEl = document.getElementById('detail-msg-pct');
+        const bEl = document.getElementById('detail-msg-bar');
+        const brEl = document.getElementById('detail-msg-breakdown');
+        if (uEl) uEl.textContent = s.enabled ? `${s.used_count}건 / ${s.total_limit}건` : '미사용';
+        if (pEl) pEl.textContent = `${pct}%`;
+        if (bEl) {
+          bEl.style.width = `${pct}%`;
+          bEl.className = `h-2 rounded-full transition-all duration-300 ${s.warning_100 ? 'bg-red-500' : s.warning_80 ? 'bg-amber-500' : 'bg-[#0084B4]'}`;
+        }
+        if (brEl) brEl.textContent = `알림톡 ${s.alimtalk_count} · SMS ${s.sms_count} · LMS ${s.lms_count} (OTP ${s.otp_count}건 제외)`;
+
+        const logsEl = document.getElementById('detail-msg-credit-logs');
+        if (logsEl) {
+          if (!data.credit_logs || data.credit_logs.length === 0) {
+            logsEl.innerHTML = '<div class="text-slate-400">충전 내역이 없습니다.</div>';
+          } else {
+            logsEl.innerHTML = data.credit_logs.map(cl => {
+              const dt = cl.created_at ? new Date(cl.created_at).toLocaleString('ko-KR') : '-';
+              return `<div class="flex items-center justify-between py-1 border-b border-slate-100"><span><strong class="text-[#0084B4]">${cl.delta > 0 ? '+' : ''}${cl.delta}건</strong> · ${cl.reason || '-'}</span><span class="font-mono text-slate-400 text-[10px]">${dt}</span></div>`;
+            }).join('');
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function chargeDetailMessages(delta, btn) {
+      if (!selectedCompany) return;
+      const origText = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = '충전 중...'; }
+      try {
+        const res = await fetch(`/api/super-admin/companies/${selectedCompany.id}/charge-messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delta })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showSAToast(data.message || `+${delta}건 충전 완료`);
+          await loadCompanyMessageDetail(selectedCompany.id);
+          await loadCompanies();
+        } else {
+          showSAToast(data.error || '충전 실패', true);
+        }
+      } catch (e) {
+        showSAToast('오류: ' + e.message, true);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
+      }
     }
 
     function selectAndManageCompany(companyId) {
@@ -1097,25 +1188,41 @@
       }
     }
 
-    async function charge100() {
+    async function charge100(btn) {
       if (!selectedCompany) return;
-      charge100ById(selectedCompany.id);
+      await charge100ById(selectedCompany.id, btn);
     }
 
-    async function charge100ById(companyId) {
+    async function charge100ById(companyId, btn) {
+      const targetBtn = btn || document.getElementById('btn-charge-report-100');
+      const origText = targetBtn ? targetBtn.textContent : '';
+      if (targetBtn) {
+        targetBtn.disabled = true;
+        targetBtn.textContent = '충전 중...';
+      }
       try {
         const res = await fetch(`/api/super-admin/companies/${companyId}/charge-100`, {
           method: 'POST'
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`100건 충전이 완료되었습니다. (총 한도: ${data.monthly_ticket_limit}건)`);
-          loadCompanies();
+          showSAToast(`+100건 충전이 완료되었습니다. (총 한도: ${data.monthly_ticket_limit}건)`);
+          await loadCompanies();
+          const refreshed = currentCompanies.find(c => c.id === companyId);
+          if (refreshed) {
+            selectedCompany = refreshed;
+            populateManageForm(refreshed);
+          }
         } else {
-          alert('충전 실패: ' + data.error);
+          showSAToast('충전 실패: ' + (data.error || '오류'), true);
         }
       } catch (e) {
-        alert('오류: ' + e.message);
+        showSAToast('오류: ' + e.message, true);
+      } finally {
+        if (targetBtn) {
+          targetBtn.disabled = false;
+          targetBtn.textContent = origText || '+100건 충전';
+        }
       }
     }
 
@@ -1181,6 +1288,10 @@
 
         const tbody = document.getElementById('applications-tbody');
         tbody.innerHTML = '';
+
+        if (!currentApplications || currentApplications.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">현재 접수된 가입 신청이 없습니다.</td></tr>';
+        }
 
         let pendingCount = 0;
         currentApplications.forEach(app => {
@@ -1248,14 +1359,14 @@
         const res = await fetch(`/api/super-admin/applications/${appId}/approve`, { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
-          alert(`[${companyName}] 승인이 완료되었습니다!\n개설 주소: ${data.company.web_url}`);
+          showSAToast(`[${companyName}] 승인이 완료되었습니다! (${data.company.web_url})`);
           loadApplications();
           loadCompanies();
         } else {
-          alert('승인 실패: ' + data.error);
+          showSAToast('승인 실패: ' + data.error, true);
         }
       } catch (e) {
-        alert('오류: ' + e.message);
+        showSAToast('오류: ' + e.message, true);
       }
     }
 

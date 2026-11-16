@@ -613,6 +613,9 @@ const server = http.createServer(async (req, res) => {
     // ==========================================
     if (pathname === '/api/events' && method === 'GET') {
       const sseSession = getSession(req);
+      if (!sseSession) {
+        return sendJSON(res, 401, { error: '로그인이 필요합니다.' });
+      }
       const sseCompanyId = sseSession.role === 'SUPER_ADMIN' ? resolveCompanyId(parsedUrl, null, req) : sseSession.companyId;
       if (!sseCompanyId) {
         return sendJSON(res, 400, { error: '테넌트 정보가 필요합니다.' });
@@ -621,11 +624,16 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
       });
       res.write(`event: CONNECTED\ndata: ${JSON.stringify({ message: '실시간 관제 스트림 연결 성공', company_id: sseCompanyId, timestamp: new Date().toISOString() })}\n\n`);
       sseClients.add(res);
+      const keepAliveTimer = setInterval(() => {
+        try { res.write(': keepalive\n\n'); } catch (e) { clearInterval(keepAliveTimer); sseClients.delete(res); }
+      }, 20000);
       req.on('close', () => {
+        clearInterval(keepAliveTimer);
         sseClients.delete(res);
       });
       return;
@@ -2034,15 +2042,21 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/auth/sms/verify' && method === 'POST') {
       const body = await parseBody(req);
-      const { phone, otp, test_mode, tenant } = body;
-      const tenantSlug = (tenant || (parsedUrl.query && parsedUrl.query.tenant) || '').toLowerCase();
+      const { phone, otp, code, test_mode, tenant } = body;
+      const otpVal = String(otp || code || '').trim();
+      let refTenant = '';
+      if (req.headers.referer) {
+        const rm = req.headers.referer.match(/[?&]tenant=([a-zA-Z0-9_-]+)/);
+        if (rm && rm[1]) refTenant = rm[1];
+      }
+      const tenantSlug = (tenant || (parsedUrl.query && parsedUrl.query.tenant) || refTenant || '').toLowerCase();
       const qaBypassEnabled = process.env.ENABLE_QA_OTP_BYPASS !== 'false';
       const isQaContext = qaBypassEnabled && (test_mode === true || tenantSlug.includes('qa') || tenantSlug.includes('test'));
-      if (isQaContext && otp === '000000') {
+      if (isQaContext && otpVal === '000000') {
         return sendJSON(res, 200, { success: true, qa_bypass: true, message: 'QA 테스트 인증이 완료되었습니다.' });
       }
       const record = db.prepare("SELECT * FROM sms_otps WHERE phone = ? AND expires_at > datetime('now')").get(phone);
-      if (record && record.otp_code === otp) {
+      if (record && record.otp_code === otpVal) {
         db.prepare('DELETE FROM sms_otps WHERE phone = ?').run(phone);
         return sendJSON(res, 200, { success: true, message: '인증이 완료되었습니다.' });
       }

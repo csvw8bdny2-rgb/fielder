@@ -2883,6 +2883,22 @@
         });
         if (curVal === 'ALL' || allFloors.includes(curVal)) mFloorFilter.value = curVal;
       }
+
+      // 4. 현장 점검표 이력 건물 필터 (회사 실제 등록 건물만 표시)
+      const chkFilterBldg = document.getElementById('chk-filter-bldg');
+      if (chkFilterBldg) {
+        const curBldgVal = chkFilterBldg.value;
+        chkFilterBldg.innerHTML = '<option value="">전체 동</option>';
+        bList.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b;
+          opt.innerText = b;
+          chkFilterBldg.appendChild(opt);
+        });
+        if (curBldgVal === '' || bList.includes(curBldgVal)) {
+          chkFilterBldg.value = curBldgVal;
+        }
+      }
     }
 
     // 층수관리 화면에서 건물동 변경 시 해당 건물의 층수만 드롭다운에 노출
@@ -5072,7 +5088,8 @@
     function initRealtimeSSE() {
       try {
         if (sseSource) sseSource.close();
-        sseSource = new EventSource('/api/events');
+        const tParam = typeof getTenantParam === 'function' ? getTenantParam() : '';
+        sseSource = new EventSource('/api/events' + (tParam ? `?tenant=${encodeURIComponent(tParam)}` : ''));
 
         sseSource.addEventListener('CONNECTED', () => {
           const badge = document.getElementById('sse-status-badge');

@@ -298,7 +298,7 @@
         <!-- [분기 A: 현장문제 해결 가능 폼] -->
         <div id="form-resolved-section" class="space-y-3.5">
           <div>
-            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">조치 완료 사진 등록 (필수)</span>
+            <span class="block text-[11px] text-[#6D6E6F] mb-1 font-medium">조치 완료 사진 등록 (선택)</span>
             <div onclick="simulatePhotoCapture('done')" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] cursor-pointer">
               <div class="font-medium text-[#1E1F21]" id="photo-status-resolved">완료 사진 첨부하기</div>
             </div>
@@ -472,6 +472,21 @@
       }
       return _origFetch(input, init);
     };
+
+    // ⭐️ 모바일 전용 토스트 알림 (alert 대체)
+    function showMobileToast(msg, isError = false) {
+      let el = document.getElementById('mobile-toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'mobile-toast';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.className = `fixed bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl shadow-lg text-xs font-bold text-white max-w-[340px] text-center ${isError ? 'bg-red-600' : 'bg-[#002B41]'}`;
+      el.classList.remove('hidden');
+      clearTimeout(window._mobToastTimer);
+      window._mobToastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+    }
 
     let currentWorkerEmail = '';
     let currentWorkerPhone = '';
@@ -661,7 +676,7 @@
         const isUnresolved = t.resolution_type === 'UNRESOLVED';
         const isOutsourced = t.resolution_type === 'OUTSOURCING';
         const isWaitingApproval = t.status === 'WAITING_APPROVAL';
-        const isClaimedByMe = t.assignee_id === currentWorkerId;
+        const isClaimedByMe = Boolean(t.started_at && t.assignee_id === currentWorkerId);
         const isClaimedByOther = t.started_at && t.assignee_id && t.assignee_id !== currentWorkerId;
         const isNotClaimedYet = !t.started_at;
 
@@ -768,10 +783,10 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.message || '접수 실패');
+        showMobileToast(data.message || '접수 실패', true);
         return;
       }
-      alert(`작업이 성공적으로 접수되었습니다.\n현장 조치 후 [조치 보고 작성]을 눌러 완료 사진과 코멘트를 등록하세요.`);
+      showMobileToast('작업이 접수되었습니다. 현장 조치 후 [조치 보고]를 등록하세요.');
       await loadWorkerTasks();
     }
 
@@ -863,7 +878,7 @@
         // [해결 가능 경로] - 코멘트 필수, 사진 선택
         const notes = document.getElementById('report-notes-resolved').value.trim();
         if (!notes) {
-          alert('조치 완료 보고 내용을 입력해주세요.');
+          showMobileToast('조치 완료 보고 내용을 입력해주세요.', true);
           return;
         }
 
@@ -879,11 +894,11 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert(data.error || data.message || '조치 완료 보고 등록에 실패했습니다.');
+          showMobileToast(data.error || data.message || '조치 완료 보고 등록에 실패했습니다.', true);
           return;
         }
 
-        alert(`조치 완료 보고가 등록되었습니다.\n(${workerName}님이 완료 처리함 -> 관리자 승인 대기)`);
+        showMobileToast('조치 완료 보고가 등록되었습니다. (관리자 승인 대기)');
         closeWorkerDetail();
         await loadWorkerTasks();
         return;
@@ -1063,7 +1078,7 @@
       const description = document.getElementById('staff-report-desc')?.value.trim() || '';
 
       if (!title && !description) {
-        alert('신고 제목 또는 상세 내용을 입력해주세요.');
+        showMobileToast('신고 제목 또는 상세 내용을 입력해주세요.', true);
         return;
       }
 
@@ -1086,10 +1101,10 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          alert(data.error || data.message || '이상 신고 접수에 실패했습니다.');
+          showMobileToast(data.error || data.message || '이상 신고 접수에 실패했습니다.', true);
           return;
         }
-        alert('관제실에 이상 신고가 즉시 접수되었습니다.');
+        showMobileToast('관제실에 이상 신고가 즉시 접수되었습니다.');
         document.getElementById('staff-report-location').value = '';
         document.getElementById('staff-report-title').value = '';
         document.getElementById('staff-report-desc').value = '';
@@ -1100,7 +1115,7 @@
         if (inp) inp.value = '';
         setWorkerNavTab('tasks');
       } catch (e) {
-        alert('네트워크 오류가 발생했습니다.');
+        showMobileToast('네트워크 오류가 발생했습니다.', true);
       } finally {
         if (btn) { btn.disabled = false; btn.innerText = '관제실에 이상 신고 즉시 전송'; }
       }
@@ -1343,9 +1358,9 @@
       });
 
       const data = await res.json();
-      if (!res.ok) { alert(data.error || '순찰 등록 실패'); return; }
+      if (!res.ok) { showMobileToast(data.error || '순찰 등록 실패', true); return; }
 
-      alert(`[점검 완료]\n${building} ${floor} (${locName}) 점검 일지가 등록되었습니다.`);
+      showMobileToast(`[점검 완료] ${building} ${floor} (${locName}) 일지가 등록되었습니다.`);
       document.getElementById('patrol-loc-name').value = '';
       document.getElementById('patrol-notes').value = '';
       await loadPatrolHistory();
@@ -1449,13 +1464,13 @@
 
       if (st === 'WORKING') {
         btnWorking.className = 'py-2 rounded-lg font-bold bg-[#34A853] text-white transition';
-        alert('근무 상태가 [🟢 현장근무 중]으로 설정되었습니다.');
+        showMobileToast('근무 상태: 🟢 현장근무 중');
       } else if (st === 'REST') {
         btnRest.className = 'py-2 rounded-lg font-bold bg-[#E5983B] text-white transition';
-        alert('근무 상태가 [⚪ 휴게/점심시간]으로 설정되었습니다.');
+        showMobileToast('근무 상태: ⚪ 휴게/점심시간');
       } else {
         btnOff.className = 'py-2 rounded-lg font-bold bg-[#F06A6A] text-white transition';
-        alert('근무 상태가 [🔴 퇴근/대기]로 설정되었습니다.');
+        showMobileToast('근무 상태: 🔴 퇴근/대기');
       }
     }
 

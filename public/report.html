@@ -117,7 +117,7 @@
 
       <!-- 인증번호 입력창 -->
       <div id="code-verify-box" class="hidden flex items-center space-x-2 text-xs pt-1">
-        <input type="text" id="input-code" placeholder="인증번호 4자리 입력" maxlength="6" class="flex-1 h-11 border border-slate-300 rounded-xl px-3 text-xs font-mono font-bold outline-none focus:border-[#13B5EA] bg-white">
+        <input type="text" id="input-code" placeholder="인증번호 6자리 입력" maxlength="6" class="flex-1 h-11 border border-slate-300 rounded-xl px-3 text-xs font-mono font-bold outline-none focus:border-[#13B5EA] bg-white">
         <button type="button" onclick="verifyCode()" class="h-11 px-4 bg-[#13B5EA] hover:bg-[#0EA5E9] text-[#002B41] font-bold text-xs rounded-xl whitespace-nowrap transition">
           확인
         </button>
@@ -278,11 +278,25 @@
       document.getElementById('photo-preview-wrap').classList.add('hidden');
     }
 
+    function showReportToast(msg, isError = false) {
+      let el = document.getElementById('report-toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'report-toast';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.className = `fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl shadow-lg text-xs font-bold text-white whitespace-nowrap max-w-[90vw] truncate ${isError ? 'bg-red-600' : 'bg-[#002B41]'}`;
+      el.classList.remove('hidden');
+      clearTimeout(window._reportToastTimer);
+      window._reportToastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+    }
+
     // 3. 인증번호 발송
     async function sendCode() {
       const phone = document.getElementById('input-phone').value.trim();
       if (!phone || phone.length < 10) {
-        alert('올바른 휴대폰 번호를 입력해주세요.');
+        showReportToast('올바른 휴대폰 번호를 입력해주세요.', true);
         return;
       }
 
@@ -290,21 +304,25 @@
         const res = await fetch('/api/auth/sms/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone })
+          body: JSON.stringify({ phone, tenant: getTenantParam() })
         });
         const data = await res.json();
+        if (!res.ok) {
+          showReportToast(data.message || data.error || '발송에 실패했습니다.', true);
+          return;
+        }
 
         document.getElementById('code-verify-box').classList.remove('hidden');
         document.getElementById('btn-send-code').textContent = '재발송';
 
         if (data.code) {
           document.getElementById('input-code').value = data.code;
-          alert(`[인증번호 전송 완료]\n인증번호 [${data.code}]가 입력되었습니다.\n[확인] 버튼을 눌러주세요.`);
+          showReportToast(`인증번호 [${data.code}]가 입력되었습니다. [확인]을 눌러주세요.`);
         } else {
-          alert('인증번호가 발송되었습니다. 수신된 4자리 숫자를 입력해주세요.');
+          showReportToast('인증번호 6자리가 발송되었습니다.');
         }
       } catch (e) {
-        alert('발송 실패: ' + e.message);
+        showReportToast('발송 실패: ' + e.message, true);
       }
     }
 
@@ -312,13 +330,13 @@
     async function verifyCode() {
       const phone = document.getElementById('input-phone').value.trim();
       const code = document.getElementById('input-code').value.trim();
-      if (!code) return alert('인증번호를 입력해주세요.');
+      if (!code) return showReportToast('인증번호 6자리를 입력해주세요.', true);
 
       try {
         const res = await fetch('/api/auth/sms/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, code })
+          body: JSON.stringify({ phone, otp: code, code, tenant: getTenantParam() })
         });
         const data = await res.json();
 
@@ -331,12 +349,12 @@
           document.getElementById('input-phone').readOnly = true;
           document.getElementById('btn-send-code').textContent = '인증완료';
           document.getElementById('btn-send-code').className = 'h-11 px-3.5 bg-emerald-600 text-white font-semibold text-xs rounded-xl';
-          alert('본인 확인이 완료되었습니다.');
+          showReportToast('본인 확인이 완료되었습니다.');
         } else {
-          alert('인증번호가 일치하지 않습니다.');
+          showReportToast(data.message || '인증번호가 일치하지 않습니다.', true);
         }
       } catch (e) {
-        alert('오류: ' + e.message);
+        showReportToast('오류: ' + e.message, true);
       }
     }
 
@@ -348,19 +366,19 @@
       const locDisplayName = document.getElementById('display-location-name').innerText;
 
       if (!comment && !photoBase64) {
-        alert('불편 내용을 한 줄 적어주시거나 현장 사진을 첨부해주세요.');
+        showReportToast('불편 내용을 적거나 현장 사진을 첨부해주세요.', true);
         document.getElementById('report-comment').focus();
         return;
       }
 
       if (!phone) {
-        alert('조치 결과를 안내받으실 휴대폰 번호를 입력해주세요.');
+        showReportToast('휴대폰 번호를 입력해주세요.', true);
         document.getElementById('input-phone').focus();
         return;
       }
 
       if (!isVerified) {
-        alert('휴대폰 인증을 먼저 완료해주세요. (인증번호 받기 클릭)');
+        showReportToast('휴대폰 인증을 먼저 완료해주세요.', true);
         return;
       }
 
@@ -392,10 +410,10 @@
 
           document.getElementById('modal-success').classList.remove('hidden');
         } else {
-          alert('접수 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'));
+          showReportToast('접수 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'), true);
         }
       } catch (e) {
-        alert('서버 통신 오류: ' + e.message);
+        showReportToast('서버 통신 오류: ' + e.message, true);
       } finally {
         btn.disabled = false;
         btn.textContent = '불편 신고 접수하기';

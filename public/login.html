@@ -55,7 +55,7 @@
         <button onclick="openProcessModal()" class="btn-navy-pill px-4 py-1.5 text-xs">
           전체 진행 프로세스
         </button>
-        <a href="/signup" class="text-xs font-bold text-[#13B5EA] hover:underline">
+        <a id="login-signup-link" href="/signup" class="text-xs font-bold text-[#13B5EA] hover:underline">
           무료 회원가입
         </a>
       </div>
@@ -241,6 +241,8 @@
       if (isMobileClient) {
         const subEl = document.getElementById('login-header-subtitle');
         if (subEl) subEl.textContent = '모바일 현장 콘솔';
+        const signupEl = document.getElementById('login-signup-link');
+        if (signupEl) signupEl.classList.add('hidden');
       }
       const tenant = getLoginTenant();
       if (tenant) {
@@ -348,10 +350,14 @@
       btn.disabled = true;
       btn.textContent = '변경 중...';
       try {
+        const sp = new URLSearchParams(window.location.search);
+        const isMobileClient = sp.get('client') === 'mobile' || (sp.get('redirect') || '').startsWith('/mobile');
+        const pwHeaders = { 'Content-Type': 'application/json' };
+        if (isMobileClient) pwHeaders['X-Client-Type'] = 'mobile';
         const res = await fetch('/api/change-password', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ newPassword: pw1 })
+          headers: pwHeaders,
+          body: JSON.stringify({ newPassword: pw1, client: isMobileClient ? 'mobile' : 'console' })
         });
         const data = await res.json();
         if (!res.ok) {
