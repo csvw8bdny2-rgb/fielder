@@ -134,7 +134,7 @@
             <span class="px-2 py-0.5 rounded bg-[#EBF7FD] text-[#007EA8] text-[10px] font-bold">초기 설정 가이드</span>
             <h3 class="text-sm font-bold text-[#1E1F21]">시작하기 전에 아래 4단계를 완료해보세요</h3>
           </div>
-          <button onclick="document.getElementById('onboarding-checklist-card').classList.add('hidden'); localStorage.setItem('fielder_onboarding_dismissed','1');" class="text-xs text-[#6D6E6F] hover:text-[#1E1F21]">닫기</button>
+          <button onclick="document.getElementById('onboarding-checklist-card').classList.add('hidden'); localStorage.setItem('fielder_onboarding_dismissed_' + (getTenantParam() || 'default'),'1');" class="text-xs text-[#6D6E6F] hover:text-[#1E1F21]">닫기</button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
           <button onclick="navTo('settings'); setSettingsTab('locations');" id="ob-step-1" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
@@ -1969,6 +1969,35 @@
     </div>
   </div>
 
+  <!-- ⭐️ 작업지시 수정 전용 모달 (prompt() 대체) -->
+  <div id="modal-edit-workorder" class="hidden fixed inset-0 bg-[#002B41]/60 z-[60] flex items-center justify-center p-4 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EDECEB] space-y-4">
+      <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
+        <h3 class="text-sm font-bold text-[#1E1F21]">작업지시 정보 수정</h3>
+        <button type="button" onclick="closeEditWorkOrderModal()" class="text-[#A0A1A2] hover:text-[#1E1F21] text-lg font-bold">×</button>
+      </div>
+      <input type="hidden" id="edit-wo-id">
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-[#1E1F21] mb-1">작업 지시 제목 <span class="text-[#F06A6A]">*</span></label>
+          <input type="text" id="edit-wo-title" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 text-sm font-semibold text-[#1E1F21] outline-none focus:border-[#0084B4]">
+        </div>
+        <div>
+          <label class="block font-bold text-[#1E1F21] mb-1">완료 예정일</label>
+          <input type="date" id="edit-wo-due-date" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 text-xs font-semibold text-[#1E1F21] bg-white outline-none focus:border-[#0084B4]">
+        </div>
+        <div>
+          <label class="block font-bold text-[#1E1F21] mb-1">지시 사항 코멘트</label>
+          <textarea id="edit-wo-notes" rows="3" class="w-full border border-[#D5D3CF] rounded-lg p-3 text-xs text-[#1E1F21] outline-none focus:border-[#0084B4]"></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end space-x-2 pt-2 border-t border-[#EDECEB]">
+        <button type="button" onclick="closeEditWorkOrderModal()" class="px-4 py-2 border border-[#D5D3CF] text-[#6D6E6F] rounded-lg text-xs font-semibold hover:bg-[#FAF9F8]">취소</button>
+        <button type="button" id="btn-save-edit-wo" onclick="submitEditWorkOrder()" class="px-4 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white rounded-lg text-xs font-bold shadow-xs">수정 저장</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ⭐️ 3-1. 현장 처리사항 코멘트 확인 전용 모달 -->
   <div id="modal-process-comment" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EDECEB] space-y-4 relative">
@@ -2348,7 +2377,8 @@
     function updateOnboardingChecklist() {
       const card = document.getElementById('onboarding-checklist-card');
       if (!card) return;
-      if (localStorage.getItem('fielder_onboarding_dismissed') === '1') {
+      const dismissKey = 'fielder_onboarding_dismissed_' + (getTenantParam() || 'default');
+      if (localStorage.getItem(dismissKey) === '1') {
         card.classList.add('hidden');
         return;
       }
@@ -3655,26 +3685,50 @@
       await loadTickets();
     }
 
-    async function editWorkOrderPrompt(ticketId) {
+    function openEditWorkOrderModal(ticketId) {
       const t = currentTickets.find(x => x.id === ticketId);
       if (!t) return;
-      const newTitle = prompt('수정할 작업 지시 제목:', t.title || '');
-      if (newTitle === null) return;
-      if (!newTitle.trim()) { alert('제목을 입력해주세요.'); return; }
-      const newDue = prompt('완료 예정일 (YYYY-MM-DD, 비워두면 미지정):', t.due_date || '');
-      if (newDue === null) return;
-      const res = await fetch(`/api/tickets/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle.trim(), due_date: newDue.trim() || null })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToastNotification(data.error || '수정 실패', 'ERROR');
-        return;
+      document.getElementById('edit-wo-id').value = t.id;
+      document.getElementById('edit-wo-title').value = t.title || '';
+      document.getElementById('edit-wo-due-date').value = t.due_date || '';
+      document.getElementById('edit-wo-notes').value = t.instruction_notes || '';
+      document.getElementById('modal-edit-workorder').classList.remove('hidden');
+    }
+
+    function closeEditWorkOrderModal() {
+      document.getElementById('modal-edit-workorder').classList.add('hidden');
+    }
+
+    async function submitEditWorkOrder() {
+      const ticketId = document.getElementById('edit-wo-id').value;
+      const title = document.getElementById('edit-wo-title').value.trim();
+      const dueDate = document.getElementById('edit-wo-due-date').value.trim();
+      const notes = document.getElementById('edit-wo-notes').value.trim();
+      if (!title) { showToastNotification('작업 지시 제목을 입력해주세요.', 'ERROR'); return; }
+
+      const btn = document.getElementById('btn-save-edit-wo');
+      if (btn) { btn.disabled = true; btn.innerText = '저장 중...'; }
+      try {
+        const res = await fetch(`/api/tickets/${ticketId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, due_date: dueDate || null, instruction_notes: notes })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToastNotification(data.error || data.message || '수정 실패', 'ERROR');
+          return;
+        }
+        closeEditWorkOrderModal();
+        showToastNotification('작업지시가 수정되었습니다.');
+        await loadTickets();
+        const detailModal = document.getElementById('modal-process-detail');
+        if (detailModal && !detailModal.classList.contains('hidden')) {
+          openProcessDetailModal(ticketId);
+        }
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '수정 저장'; }
       }
-      showToastNotification('작업지시가 수정되었습니다.');
-      await loadTickets();
     }
 
     async function submitWorkOrder() {
@@ -3691,7 +3745,7 @@
       const locName = document.getElementById('wo-form-location-name').value.trim();
       const dueDate = document.getElementById('wo-form-due-date')?.value || '';
 
-      if (!title) { alert('작업 지시 제목을 입력하세요.'); return; }
+      if (!title) { showToastNotification('작업 지시 제목을 입력하세요.', 'ERROR'); return; }
 
       const btn = document.getElementById('btn-submit-workorder');
       if (btn) { btn.disabled = true; btn.innerText = '발송 중...'; }
@@ -3901,7 +3955,7 @@
 
         const actBox = document.getElementById('dtl-quick-action-box');
         actBox.innerHTML = `
-          <button onclick="editWorkOrderPrompt('${ticket.id}').then(() => openProcessDetailModal('${ticket.id}'));" class="px-3 py-2 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded-lg text-xs">
+          <button onclick="openEditWorkOrderModal('${ticket.id}');" class="px-3 py-2 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded-lg text-xs">
             수정
           </button>
           <button onclick="cancelWorkOrder('${ticket.id}').then(() => closeProcessDetailModal());" class="px-3 py-2 bg-red-50 border border-red-200 hover:bg-red-100 text-[#F06A6A] font-bold rounded-lg text-xs">
@@ -4051,7 +4105,7 @@
           </td>
           <td class="px-4 py-3 whitespace-nowrap">${statusBadge}</td>
           <td class="px-4 py-3 text-right whitespace-nowrap space-x-1">
-            <button onclick="editWorkOrderPrompt('${t.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] rounded text-[11px] font-semibold">수정</button>
+            <button onclick="openEditWorkOrderModal('${t.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] rounded text-[11px] font-semibold">수정</button>
             <button onclick="cancelWorkOrder('${t.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-[11px] font-medium">취소</button>
           </td>
         `;
@@ -4308,17 +4362,19 @@
       const desc = document.getElementById('new-loc-desc').value.trim();
       const code = 'LOC_' + floor + '_' + Math.random().toString(36).substring(2, 7).toUpperCase();
 
-      if (!name) { alert('구역명을 입력하세요.'); return; }
+      if (!name) { showToastNotification('구역명을 입력하세요.', 'ERROR'); return; }
 
-      await fetch('/api/locations', {
+      const locRes = await fetch('/api/locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ building, floor, name, code, description: desc })
       });
+      const locData = await locRes.json();
+      if (!locRes.ok) { showToastNotification(locData.error || '구역 등록 실패', 'ERROR'); return; }
 
       document.getElementById('new-loc-name').value = '';
       document.getElementById('new-loc-desc').value = '';
-      alert(`[${building} ${floor}] ${name} 구역이 등록되었습니다.\n(모바일 접수 QR 코드가 자동 생성되었습니다)`);
+      showToastNotification(`[${building} ${floor}] ${name} 구역이 등록되었습니다.`);
       await loadLocations();
     }
 
@@ -4329,17 +4385,17 @@
       const name = document.getElementById('new-loc-name').value.trim();
       const desc = document.getElementById('new-loc-desc').value.trim();
 
-      if (!name) { alert('구역명을 입력하세요.'); return; }
+      if (!name) { showToastNotification('구역명을 입력하세요.', 'ERROR'); return; }
 
       const res = await fetch('/api/locations/' + id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ building, floor, name, description: desc })
       });
-      if (!res.ok) { alert('수정 중 오류가 발생했습니다.'); return; }
+      if (!res.ok) { showToastNotification('수정 중 오류가 발생했습니다.', 'ERROR'); return; }
 
       cancelLocationEdit();
-      alert('구역 정보가 수정되었습니다.');
+      showToastNotification('구역 정보가 수정되었습니다.');
       await loadLocations();
     }
 
@@ -4462,25 +4518,7 @@
     async function loadUsers() {
       const res = await fetch('/api/users');
       currentUsers = await res.json();
-
-      // ⭐️ 관리자 계정 최신 이름을 상단 헤더 프로필에 즉시 자동 연동
-      const adminUser = currentUsers.find(u => u.role === 'ADMIN' || u.id === 'user_admin');
-      if (adminUser && adminUser.name) {
-        const nameEl = document.getElementById('header-user-name');
-        const roleEl = document.getElementById('header-user-role');
-        const avatarEl = document.getElementById('header-user-avatar');
-        if (nameEl) nameEl.innerText = adminUser.name;
-        if (roleEl) roleEl.innerText = '총괄 관리자';
-        if (avatarEl) avatarEl.innerText = adminUser.name.charAt(0);
-
-        try {
-          let u = JSON.parse(sessionStorage.getItem('fielder_user') || localStorage.getItem('fielder_user') || '{}');
-          u.name = adminUser.name;
-          u.email = adminUser.email;
-          localStorage.setItem('fielder_user', JSON.stringify(u));
-          sessionStorage.setItem('fielder_user', JSON.stringify(u));
-        } catch(e){}
-      }
+      updateOnboardingChecklist();
 
       // 상단 미니 대시보드 KPI 갱신
       const total = currentUsers.length;
@@ -4787,11 +4825,11 @@
       const role = document.getElementById('new-user-role').value;
       const groupId = document.getElementById('new-user-group').value;
 
-      if (!name) { alert('이름을 입력하세요.'); return; }
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('유효한 이메일(로그인 ID)을 입력하세요.'); return; }
-      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { alert('올바른 휴대폰 번호 형식을 입력하세요.'); return; }
-      if (password && password.length < 8) { alert('비밀번호는 최소 8자 이상이어야 합니다.'); return; }
-      if (role === 'WORKER' && !groupId) { alert('현장 실무자는 소속 직무 그룹을 선택해야 합니다.'); return; }
+      if (!name) { showToastNotification('이름을 입력하세요.', 'ERROR'); return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToastNotification('유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
+      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { showToastNotification('올바른 휴대폰 번호 형식을 입력하세요.', 'ERROR'); return; }
+      if (password && password.length < 8) { showToastNotification('비밀번호는 최소 8자 이상이어야 합니다.', 'ERROR'); return; }
+      if (role === 'WORKER' && !groupId) { showToastNotification('현장 실무자는 소속 직무 그룹을 선택해야 합니다.', 'ERROR'); return; }
 
       const btn = document.getElementById('btn-user-submit');
       if (btn) { btn.disabled = true; btn.innerText = '등록 중...'; }
@@ -4832,11 +4870,11 @@
       const role = document.getElementById('new-user-role').value;
       const groupId = document.getElementById('new-user-group').value;
 
-      if (!name) { alert('이름을 입력하세요.'); return; }
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('유효한 이메일(로그인 ID)을 입력하세요.'); return; }
-      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { alert('올바른 휴대폰 번호 형식을 입력하세요.'); return; }
-      if (password && password.length < 8) { alert('비밀번호는 최소 8자 이상이어야 합니다.'); return; }
-      if (role === 'WORKER' && !groupId) { alert('현장 실무자는 소속 직무 그룹을 선택해야 합니다.'); return; }
+      if (!name) { showToastNotification('이름을 입력하세요.', 'ERROR'); return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToastNotification('유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
+      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { showToastNotification('올바른 휴대폰 번호 형식을 입력하세요.', 'ERROR'); return; }
+      if (password && password.length < 8) { showToastNotification('비밀번호는 최소 8자 이상이어야 합니다.', 'ERROR'); return; }
+      if (role === 'WORKER' && !groupId) { showToastNotification('현장 실무자는 소속 직무 그룹을 선택해야 합니다.', 'ERROR'); return; }
 
       const btn = document.getElementById('btn-user-update');
       if (btn) { btn.disabled = true; btn.innerText = '수정 중...'; }

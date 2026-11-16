@@ -288,14 +288,7 @@ function seedDefaultTenantData(companyId) {
     insertRole.run(r.id, companyId, r.name, r.category);
   }
 
-  const shortSlug = companyId.replace(/^comp_/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase() || 'TENANT';
-  const locs = [
-    { id: `loc_1f_lobby_${companyId}`, building: '본관', floor: '1F', code: `${shortSlug}-1F-01`, name: '1층 메인 로비', category: 'FACILITY', desc: '주 출입구 및 안내 데스크' }
-  ];
-  const insertLoc = db.prepare('INSERT OR IGNORE INTO locations (id, company_id, building, floor, code, name, category, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))');
-  for (const l of locs) {
-    insertLoc.run(l.id, companyId, l.building, l.floor, l.code, l.name, l.category, l.desc);
-  }
+  // 신규 테넌트는 구역 빈 상태로 시작 (온보딩에서 직접 등록)
 
   const defaultTemplates = [
     {
@@ -1209,7 +1202,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (role === 'ADMIN') {
-        db.prepare('UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = "")').run(cleanName, companyId);
+        db.prepare("UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = '')").run(cleanName, companyId);
       }
 
       broadcastSSE('USER_UPDATED', { action: 'CREATE', id, company_id: companyId }, companyId);
@@ -2507,7 +2500,7 @@ const server = http.createServer(async (req, res) => {
 
   } catch (err) {
     console.error('Server Error:', err);
-    sendJSON(res, 500, { error: 'INTERNAL_SERVER_ERROR', message: '서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' });
+    sendJSON(res, 500, { error: '서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.' });
   }
 });
 
