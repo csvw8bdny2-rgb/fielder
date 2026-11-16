@@ -273,6 +273,39 @@ function initDatabase() {
   try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_company_name ON custom_roles(company_id, LOWER(TRIM(name)));"); } catch (e) {}
   try { db.exec("ALTER TABLE locations ADD COLUMN building TEXT DEFAULT '본관';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN buildings TEXT DEFAULT '[\"본관\", \"별관\"]';"); } catch (e) {}
+  try { db.exec("ALTER TABLE companies ADD COLUMN address TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE companies ADD COLUMN contact_phone TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE companies ADD COLUMN message_monthly_limit INTEGER DEFAULT 50;"); } catch (e) {}
+  try { db.exec("ALTER TABLE companies ADD COLUMN message_extra_credit INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.exec("ALTER TABLE companies ADD COLUMN message_enabled INTEGER DEFAULT 1;"); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      recipient_phone TEXT NOT NULL,
+      template_code TEXT,
+      content_preview TEXT,
+      provider TEXT NOT NULL DEFAULT 'mock',
+      provider_msg_id TEXT,
+      status TEXT NOT NULL DEFAULT 'SENT',
+      fail_reason TEXT,
+      cost_units INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_message_logs_company_created ON message_logs(company_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS message_credit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id TEXT NOT NULL,
+      delta INTEGER NOT NULL,
+      reason TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
   try { db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN buildings_config TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}

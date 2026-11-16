@@ -85,16 +85,8 @@
         </button>
 
         <button onclick="showManageView()" id="nav-btn-manage" class="w-full text-left px-3.5 py-2.5 rounded-lg text-slate-300 hover:bg-[#001F30] hover:text-white font-medium transition-all">
-          회사 상세 관리
+          회사 상세 · 사용량 관리
         </button>
-
-        <a href="#card-master-account" onclick="showManageView()" class="block px-3.5 py-2.5 rounded-lg text-slate-300 hover:bg-[#001F30] hover:text-white font-medium transition-colors">
-          마스터 계정 관리
-        </a>
-
-        <a href="#card-report-limit" onclick="showManageView()" class="block px-3.5 py-2.5 rounded-lg text-slate-300 hover:bg-[#001F30] hover:text-white font-medium transition-colors">
-          리포트 사용량 관리
-        </a>
 
         <button onclick="handleLogout()" class="w-full text-left px-3.5 py-2.5 rounded-lg text-slate-400 hover:bg-[#001F30] hover:text-white font-medium transition-colors">
           로그아웃
@@ -151,7 +143,7 @@
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <span class="text-xs font-semibold text-slate-500 block mb-1">전체 고객사</span>
           <div class="flex items-baseline space-x-1.5">
-            <span class="text-2xl font-bold text-[#002B41]" id="stat-total-companies">0</span>
+            <span class="text-2xl font-bold text-[#002B41]" id="stat-total-companies">...</span>
             <span class="text-xs text-slate-600 font-medium">개사</span>
           </div>
         </div>
@@ -159,7 +151,7 @@
         <div class="bg-white p-5 rounded-xl border border-[#B3DCEB] shadow-xs">
           <span class="text-xs font-semibold text-[#006080] block mb-1">유료 고객사 (ENTERPRISE / PRO)</span>
           <div class="flex items-baseline space-x-1.5">
-            <span class="text-2xl font-bold text-[#006080]" id="stat-paid-companies">0</span>
+            <span class="text-2xl font-bold text-[#006080]" id="stat-paid-companies">...</span>
             <span class="text-xs text-[#006080] font-medium">개사</span>
           </div>
         </div>
@@ -167,7 +159,7 @@
         <div class="bg-white p-5 rounded-xl border border-[#C5E8D6] shadow-xs">
           <span class="text-xs font-semibold text-[#1E7E51] block mb-1">무료 고객사 (FREE 100건)</span>
           <div class="flex items-baseline space-x-1.5">
-            <span class="text-2xl font-bold text-[#1E7E51]" id="stat-free-companies">0</span>
+            <span class="text-2xl font-bold text-[#1E7E51]" id="stat-free-companies">...</span>
             <span class="text-xs text-[#1E7E51] font-medium">개사</span>
           </div>
         </div>
@@ -175,11 +167,35 @@
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <span class="text-xs font-semibold text-slate-500 block mb-1">당월 리포트 발행량</span>
           <div class="flex items-baseline space-x-1.5">
-            <span class="text-2xl font-bold text-[#002B41]" id="stat-total-reports">0</span>
+            <span class="text-2xl font-bold text-[#002B41]" id="stat-total-reports">...</span>
             <span class="text-xs text-slate-600 font-medium">건</span>
           </div>
         </div>
 
+      </div>
+
+      <!-- 문자·카카오 알림톡 월간 요약 카드 -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span class="text-xs font-semibold text-slate-500 block">당월 전체 문자·알림톡 발송량</span>
+            <span class="text-[11px] text-slate-400">OTP 본인확인 제외 · 실패 건 제외</span>
+          </div>
+          <div class="text-right">
+            <span class="text-xl font-bold text-[#002B41]" id="stat-total-messages">...</span>
+            <span class="text-xs text-slate-600 font-medium">건</span>
+          </div>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span class="text-xs font-semibold text-slate-500 block">당월 예상 발송 비용 (모의 집계)</span>
+            <span class="text-[11px] text-slate-400">알림톡 8원 / SMS 12원 / LMS 35원 / MMS 80원 기준</span>
+          </div>
+          <div class="text-right">
+            <span class="text-xl font-bold text-[#0084B4]" id="stat-total-message-cost">...</span>
+            <span class="text-xs text-slate-600 font-medium">원</span>
+          </div>
+        </div>
       </div>
 
       <!-- ================= 그룹 1 : 유료 고객사 리스트 ================= -->
@@ -198,13 +214,14 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
                 <tr>
-                  <th class="py-3 px-4">고객사명</th>
-                  <th class="py-3 px-4">웹 관제 주소</th>
-                  <th class="py-3 px-4">구독 플랜</th>
-                  <th class="py-3 px-4">마스터 관리자</th>
-                  <th class="py-3 px-4">리포트 사용량</th>
-                  <th class="py-3 px-4 text-center">상태</th>
-                  <th class="py-3 px-4 text-right">관리</th>
+                  <th class="py-3 px-4 whitespace-nowrap">고객사명</th>
+                  <th class="py-3 px-4 whitespace-nowrap">웹 관제 주소</th>
+                  <th class="py-3 px-4 whitespace-nowrap">구독 플랜</th>
+                  <th class="py-3 px-4 whitespace-nowrap">마스터 관리자</th>
+                  <th class="py-3 px-4 whitespace-nowrap">리포트 사용량</th>
+                  <th class="py-3 px-4 whitespace-nowrap">발송량</th>
+                  <th class="py-3 px-4 text-center whitespace-nowrap">상태</th>
+                  <th class="py-3 px-4 text-right whitespace-nowrap">관리</th>
                 </tr>
               </thead>
               <tbody id="paid-companies-tbody" class="divide-y divide-slate-100 text-slate-800">
@@ -231,13 +248,14 @@
             <table class="w-full text-left text-xs border-collapse">
               <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
                 <tr>
-                  <th class="py-3 px-4">고객사명</th>
-                  <th class="py-3 px-4">웹 관제 주소</th>
-                  <th class="py-3 px-4">플랜</th>
-                  <th class="py-3 px-4">마스터 관리자</th>
-                  <th class="py-3 px-4">리포트 소진율</th>
-                  <th class="py-3 px-4 text-center">상태</th>
-                  <th class="py-3 px-4 text-right">관리</th>
+                  <th class="py-3 px-4 whitespace-nowrap">고객사명</th>
+                  <th class="py-3 px-4 whitespace-nowrap">웹 관제 주소</th>
+                  <th class="py-3 px-4 whitespace-nowrap">플랜</th>
+                  <th class="py-3 px-4 whitespace-nowrap">마스터 관리자</th>
+                  <th class="py-3 px-4 whitespace-nowrap">리포트 소진율</th>
+                  <th class="py-3 px-4 whitespace-nowrap">발송량</th>
+                  <th class="py-3 px-4 text-center whitespace-nowrap">상태</th>
+                  <th class="py-3 px-4 text-right whitespace-nowrap">관리</th>
                 </tr>
               </thead>
               <tbody id="free-companies-tbody" class="divide-y divide-slate-100 text-slate-800">
@@ -339,15 +357,15 @@
           <label class="block font-semibold text-slate-600">웹 관제 주소</label>
           <div class="flex flex-wrap items-center gap-2">
             <div class="flex items-center">
-              <input type="text" id="input-subdomain" placeholder="도메인" class="h-9 border border-slate-300 rounded-l px-3 text-xs font-mono font-bold outline-none focus:border-[#13B5EA]">
-              <span class="h-9 px-2.5 bg-slate-100 border border-l-0 border-slate-300 rounded-r flex items-center text-slate-600 font-mono text-xs">
-                .fielder.kr
+              <span class="h-9 px-2.5 bg-slate-100 border border-r-0 border-slate-300 rounded-l flex items-center text-slate-600 font-mono text-xs whitespace-nowrap">
+                /?tenant=
               </span>
+              <input type="text" id="input-subdomain" placeholder="도메인 슬러그" class="h-9 border border-slate-300 rounded-r px-3 text-xs font-mono font-bold outline-none focus:border-[#13B5EA]">
             </div>
-            <button onclick="updateSubdomain()" class="h-9 px-3.5 bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs rounded transition-colors">
+            <button onclick="updateSubdomain()" class="h-9 px-3.5 bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs rounded transition-colors whitespace-nowrap">
               도메인 변경
             </button>
-            <button onclick="copyWebUrl()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded transition-colors">
+            <button onclick="copyWebUrl()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded transition-colors whitespace-nowrap">
               주소 복사
             </button>
           </div>
@@ -357,10 +375,10 @@
           <label class="block font-semibold text-slate-600">현장 모바일 접수 링크</label>
           <div class="flex items-center space-x-2">
             <input type="text" id="input-mobile-url" readonly class="flex-1 h-9 border border-slate-200 bg-slate-50 rounded px-3 text-xs font-mono text-slate-600">
-            <button onclick="copyMobileUrl()" class="h-9 px-3.5 bg-[#13B5EA] hover:bg-[#0EA5E9] text-[#002B41] font-bold text-xs rounded transition-colors">
+            <button onclick="copyMobileUrl()" class="h-9 px-3.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold text-xs rounded transition-colors whitespace-nowrap">
               링크 복사
             </button>
-            <button onclick="openMobileWindow()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded">
+            <button onclick="openMobileWindow()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded whitespace-nowrap">
               미리보기
             </button>
           </div>
@@ -387,12 +405,12 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2 pt-1">
-          <button onclick="impersonateCompany()" class="h-9 px-3.5 bg-[#002B41] hover:bg-[#001F30] text-white font-bold text-xs rounded transition-colors">
+          <button onclick="impersonateCompany()" class="h-9 px-3.5 bg-[#002B41] hover:bg-[#001F30] text-white font-bold text-xs rounded transition-colors whitespace-nowrap">
             이 회사로 대리 로그인
           </button>
           
-          <button onclick="resetMasterPassword()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded transition-colors">
-            비밀번호 초기화 ('1234')
+          <button onclick="resetMasterPassword()" class="h-9 px-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs rounded transition-colors whitespace-nowrap">
+            임시 비밀번호 발급
           </button>
         </div>
       </div>
@@ -401,7 +419,7 @@
       <div id="card-report-limit" class="card-box space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-bold text-[#002B41]">리포트 사용량 현황</h3>
-          <button onclick="charge100()" class="btn-sky px-3 py-1 rounded text-xs">
+          <button onclick="charge100()" class="px-3 py-1 rounded text-xs bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold whitespace-nowrap">
             +100건 충전
           </button>
         </div>
@@ -541,10 +559,10 @@
         </div>
 
         <div class="space-y-1">
-          <label class="block font-semibold text-slate-700">서브도메인 (영문 슬러그) <span class="text-rose-500">*</span></label>
+          <label class="block font-semibold text-slate-700">접속 슬러그 (영문) <span class="text-rose-500">*</span></label>
           <div class="flex items-center">
-            <input type="text" id="new-comp-subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="예: halla" onkeyup="updateNewDomainPreview(this.value)" class="flex-1 h-9 border border-slate-300 rounded-l-lg px-3 font-mono font-bold outline-none focus:border-[#13B5EA]">
-            <span class="h-9 px-3 bg-slate-100 border border-l-0 border-slate-300 rounded-r-lg flex items-center text-slate-500 font-mono text-xs">.fielder.kr</span>
+            <span class="h-9 px-3 bg-slate-100 border border-r-0 border-slate-300 rounded-l-lg flex items-center text-slate-500 font-mono text-xs whitespace-nowrap">/?tenant=</span>
+            <input type="text" id="new-comp-subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="예: halla" onkeyup="updateNewDomainPreview(this.value)" class="flex-1 h-9 border border-slate-300 rounded-r-lg px-3 font-mono font-bold outline-none focus:border-[#13B5EA]">
           </div>
           <p class="text-[11px] text-slate-400 mt-0.5">실제 접속 주소: <span id="new-domain-preview" class="font-mono text-[#0084B4] font-semibold">/?tenant=halla</span></p>
         </div>
@@ -567,8 +585,8 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label class="block font-semibold text-slate-700">초기 비밀번호</label>
-            <input type="text" id="new-comp-password" value="1234" class="w-full h-9 border border-slate-300 rounded-lg px-3 outline-none focus:border-[#13B5EA]">
+            <label class="block font-semibold text-slate-700">초기 임시 비밀번호 (선택)</label>
+            <input type="text" id="new-comp-password" placeholder="미입력 시 랜덤 자동 생성" class="w-full h-9 border border-slate-300 rounded-lg px-3 outline-none focus:border-[#13B5EA]">
           </div>
           <div class="space-y-1">
             <label class="block font-semibold text-slate-700">구독 플랜</label>
@@ -581,12 +599,70 @@
         </div>
 
         <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-200">
-          <button type="button" onclick="closeCreateCompanyModal()" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">취소</button>
-          <button type="submit" id="btn-submit-create-comp" class="btn-sky px-5 py-2 rounded-lg shadow-sm">즉시 개설 및 프로비저닝</button>
+          <button type="button" onclick="closeCreateCompanyModal()" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 whitespace-nowrap">취소</button>
+          <button type="submit" id="btn-submit-create-comp" class="px-5 py-2 rounded-lg shadow-sm bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold whitespace-nowrap">즉시 개설 및 프로비저닝</button>
         </div>
       </form>
     </div>
   </div>
+
+  <!-- 1회성 임시 비밀번호 안내 모달 -->
+  <div id="modal-temp-password" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-bold text-[#002B41]" id="temp-pw-modal-title">개설 및 임시 비밀번호 안내</h3>
+        <button onclick="closeTempPasswordModal()" class="text-slate-400 hover:text-slate-600 text-base">✕</button>
+      </div>
+      <p class="text-slate-600 leading-relaxed" id="temp-pw-modal-desc">아래 임시 비밀번호는 1회만 표시됩니다. 첫 로그인 시 새 비밀번호로 변경해야 합니다.</p>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+        <code id="temp-pw-value" class="text-base font-mono font-extrabold text-[#002B41] tracking-wider">-</code>
+        <button onclick="copyTempPassword()" class="px-3 py-1.5 rounded-lg bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold text-xs whitespace-nowrap">복사</button>
+      </div>
+      <div id="temp-pw-links" class="space-y-1 text-[11px] text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200 hidden"></div>
+      <div class="flex justify-end">
+        <button onclick="closeTempPasswordModal()" class="px-4 py-2 rounded-lg bg-[#002B41] text-white font-bold text-xs whitespace-nowrap">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 문자·알림톡 월간 발송 이력 & 충전 모달 -->
+  <div id="modal-message-logs" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="text-sm font-bold text-[#002B41]" id="msg-modal-title">문자·알림톡 발송 이력</h3>
+          <span class="text-[11px] text-slate-500" id="msg-modal-subtitle">-</span>
+        </div>
+        <button onclick="closeMessageLogsModal()" class="text-slate-400 hover:text-slate-600 text-base">✕</button>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <div class="space-x-3 text-[11px] text-slate-700" id="msg-modal-stats">-</div>
+        <div class="flex items-center space-x-1.5">
+          <button onclick="chargeCompanyMessages(100)" class="px-2.5 py-1 rounded bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold whitespace-nowrap">+100건 충전</button>
+          <button onclick="chargeCompanyMessages(500)" class="px-2.5 py-1 rounded bg-[#002B41] hover:bg-[#001F30] text-white font-bold whitespace-nowrap">+500건 충전</button>
+          <button onclick="toggleCompanyMessages()" id="btn-toggle-msg-enabled" class="px-2.5 py-1 rounded border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold whitespace-nowrap">사용 전환</button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left text-[11px] border-collapse">
+          <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold sticky top-0">
+            <tr>
+              <th class="py-2 px-3 whitespace-nowrap">일시</th>
+              <th class="py-2 px-3 whitespace-nowrap">채널</th>
+              <th class="py-2 px-3 whitespace-nowrap">목적</th>
+              <th class="py-2 px-3 whitespace-nowrap">수신자</th>
+              <th class="py-2 px-3">내용 요약</th>
+              <th class="py-2 px-3 whitespace-nowrap">상태</th>
+            </tr>
+          </thead>
+          <tbody id="msg-modal-tbody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 토스트 알림 -->
+  <div id="sa-toast" class="hidden fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-xs font-bold text-white bg-[#002B41] border border-white/10"></div>
 
   <!-- ================= JavaScript ================= -->
   <script>
@@ -631,13 +707,48 @@
         }
       });
 
+      let totalMessages = 0;
+      let totalMessageCost = 0;
+      currentCompanies.forEach(c => {
+        if (c.message_stats) {
+          totalMessages += Number(c.message_stats.used_count || 0);
+          totalMessageCost += Number(c.message_stats.estimated_cost_krw || 0);
+        }
+      });
+
       document.getElementById('stat-total-companies').textContent = currentCompanies.length;
       document.getElementById('stat-paid-companies').textContent = paidList.length;
       document.getElementById('stat-free-companies').textContent = freeList.length;
       document.getElementById('stat-total-reports').textContent = totalReports.toLocaleString();
+      const msgStatEl = document.getElementById('stat-total-messages');
+      if (msgStatEl) msgStatEl.textContent = totalMessages.toLocaleString();
+      const msgCostEl = document.getElementById('stat-total-message-cost');
+      if (msgCostEl) msgCostEl.textContent = totalMessageCost.toLocaleString();
+
+      const buildMessageCell = (c) => {
+        const ms = c.message_stats || { enabled: true, used_count: 0, total_limit: 50, usage_pct: 0, alimtalk_count: 0, sms_count: 0, lms_count: 0 };
+        const tip = `알림톡 ${ms.alimtalk_count} / SMS ${ms.sms_count} / LMS ${ms.lms_count}`;
+        if (!ms.enabled) {
+          return `<td class="py-3 px-4 whitespace-nowrap" title="${tip}"><button onclick="event.stopPropagation(); openMessageLogsModal('${c.id}')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">미사용</button></td>`;
+        }
+        const barColor = ms.warning_100 ? 'bg-red-500' : ms.warning_80 ? 'bg-amber-500' : 'bg-[#0084B4]';
+        const txtColor = ms.warning_100 ? 'text-red-600 font-bold' : ms.warning_80 ? 'text-amber-700 font-bold' : 'text-slate-700';
+        const pct = Math.min(100, ms.usage_pct || 0);
+        return `
+          <td class="py-3 px-4 min-w-[120px] cursor-pointer" title="${tip}" onclick="event.stopPropagation(); openMessageLogsModal('${c.id}')">
+            <div class="flex justify-between text-[11px] ${txtColor} mb-1 whitespace-nowrap">
+              <span>${ms.used_count} / ${ms.total_limit}</span>
+              <span>${pct}%</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+              <div class="${barColor} h-1.5 rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </td>
+        `;
+      };
 
       if (paidList.length === 0) {
-        paidTbody.innerHTML = `<tr><td colspan="7" class="py-5 text-center text-slate-400">등록된 유료 고객사가 없습니다.</td></tr>`;
+        paidTbody.innerHTML = `<tr><td colspan="8" class="py-5 text-center text-slate-400">등록된 유료 고객사가 없습니다.</td></tr>`;
       } else {
         paidList.forEach(c => {
           const used = c.monthly_used_count || 0;
@@ -647,28 +758,28 @@
           const tr = document.createElement('tr');
           tr.className = 'company-row border-b border-slate-100';
           tr.onclick = (e) => {
-            if (!e.target.closest('button')) selectAndManageCompany(c.id);
+            if (!e.target.closest('button') && !e.target.closest('a')) selectAndManageCompany(c.id);
           };
           tr.innerHTML = `
             <td class="py-3 px-4">
-              <span class="font-bold text-[#002B41] block text-sm">${c.name}</span>
+              <span class="font-bold text-[#002B41] block text-sm whitespace-nowrap">${c.name}</span>
             </td>
-            <td class="py-3 px-4 font-mono font-medium text-slate-700">
+            <td class="py-3 px-4 font-mono font-medium text-slate-700 whitespace-nowrap">
               <a href="/?tenant=${c.subdomain}" target="_blank" class="hover:underline text-[#0084B4]">
-                ${c.subdomain}.fielder.kr
+                /?tenant=${c.subdomain}
               </a>
             </td>
-            <td class="py-3 px-4">
-              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#E8F4F8] text-[#006080] border border-[#B3DCEB]">
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#E8F4F8] text-[#006080] border border-[#B3DCEB] whitespace-nowrap">
                 ${c.plan} (${limit}건)
               </span>
             </td>
             <td class="py-3 px-4">
-              <span class="font-semibold text-slate-800 block">${c.admin_name || '마스터'}</span>
+              <span class="font-semibold text-slate-800 block whitespace-nowrap">${c.admin_name || '마스터'}</span>
               <span class="text-[11px] text-slate-500 font-mono">${c.admin_email || '-'}</span>
             </td>
             <td class="py-3 px-4 min-w-[140px]">
-              <div class="flex justify-between text-[11px] font-medium text-slate-600 mb-1">
+              <div class="flex justify-between text-[11px] font-medium text-slate-600 mb-1 whitespace-nowrap">
                 <span>${used} / ${limit}건</span>
                 <span class="font-bold text-slate-800">${pct}%</span>
               </div>
@@ -676,13 +787,14 @@
                 <div class="bg-[#0084B4] h-1.5 rounded-full" style="width: ${pct}%"></div>
               </div>
             </td>
-            <td class="py-3 px-4 text-center">
-              <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            ${buildMessageCell(c)}
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                 정상
               </span>
             </td>
-            <td class="py-3 px-4 text-right">
-              <button onclick="selectAndManageCompany('${c.id}')" class="px-2.5 py-1 rounded bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs transition-colors">
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              <button onclick="selectAndManageCompany('${c.id}')" class="px-2.5 py-1 rounded bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs transition-colors whitespace-nowrap">
                 관리
               </button>
             </td>
@@ -692,7 +804,7 @@
       }
 
       if (freeList.length === 0) {
-        freeTbody.innerHTML = `<tr><td colspan="7" class="py-5 text-center text-slate-400">등록된 무료 고객사가 없습니다.</td></tr>`;
+        freeTbody.innerHTML = `<tr><td colspan="8" class="py-5 text-center text-slate-400">등록된 무료 고객사가 없습니다.</td></tr>`;
       } else {
         freeList.forEach(c => {
           const used = c.monthly_used_count || 0;
@@ -702,28 +814,28 @@
           const tr = document.createElement('tr');
           tr.className = 'company-row border-b border-slate-100';
           tr.onclick = (e) => {
-            if (!e.target.closest('button')) selectAndManageCompany(c.id);
+            if (!e.target.closest('button') && !e.target.closest('a')) selectAndManageCompany(c.id);
           };
           tr.innerHTML = `
             <td class="py-3 px-4">
-              <span class="font-bold text-[#002B41] block text-sm">${c.name}</span>
+              <span class="font-bold text-[#002B41] block text-sm whitespace-nowrap">${c.name}</span>
             </td>
-            <td class="py-3 px-4 font-mono font-medium text-slate-700">
+            <td class="py-3 px-4 font-mono font-medium text-slate-700 whitespace-nowrap">
               <a href="/?tenant=${c.subdomain}" target="_blank" class="hover:underline text-[#0084B4]">
-                ${c.subdomain}.fielder.kr
+                /?tenant=${c.subdomain}
               </a>
             </td>
-            <td class="py-3 px-4">
-              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#EDF7F2] text-[#1E7E51] border border-[#C5E8D6]">
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#EDF7F2] text-[#1E7E51] border border-[#C5E8D6] whitespace-nowrap">
                 FREE (${limit}건)
               </span>
             </td>
             <td class="py-3 px-4">
-              <span class="font-semibold text-slate-800 block">${c.admin_name || '마스터'}</span>
+              <span class="font-semibold text-slate-800 block whitespace-nowrap">${c.admin_name || '마스터'}</span>
               <span class="text-[11px] text-slate-500 font-mono">${c.admin_email || '-'}</span>
             </td>
             <td class="py-3 px-4 min-w-[140px]">
-              <div class="flex justify-between text-[11px] font-medium text-slate-600 mb-1">
+              <div class="flex justify-between text-[11px] font-medium text-slate-600 mb-1 whitespace-nowrap">
                 <span>${used} / ${limit}건</span>
                 <span class="font-bold text-slate-800">${pct}%</span>
               </div>
@@ -731,8 +843,9 @@
                 <div class="bg-[#13B5EA] h-1.5 rounded-full" style="width: ${pct}%"></div>
               </div>
             </td>
-            <td class="py-3 px-4 text-center">
-              <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            ${buildMessageCell(c)}
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                 정상
               </span>
             </td>
@@ -960,18 +1073,27 @@
 
     async function resetMasterPassword() {
       if (!selectedCompany) return;
-      if (!confirm(`[${selectedCompany.name}] 마스터 비밀번호를 '1234'로 초기화하시겠습니까?`)) return;
+      if (!confirm(`[${selectedCompany.name}] 마스터 계정에 새 랜덤 임시 비밀번호를 발급하시겠습니까?`)) return;
 
       try {
         const res = await fetch(`/api/super-admin/companies/${selectedCompany.id}/reset-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ new_password: '1234' })
+          body: JSON.stringify({})
         });
         const data = await res.json();
-        alert(data.message || '초기화되었습니다.');
+        if (res.ok && data.temp_password) {
+          openTempPasswordModal(
+            `[${selectedCompany.name}] 임시 비밀번호 발급`,
+            '아래 임시 비밀번호가 발급되었습니다. 1회만 표시되므로 복사하여 전달하세요.',
+            data.temp_password
+          );
+          showSAToast('임시 비밀번호가 발급되었습니다.');
+        } else {
+          showSAToast(data.error || data.message || '초기화에 실패했습니다.', true);
+        }
       } catch (e) {
-        alert('오류: ' + e.message);
+        showSAToast('오류: ' + e.message, true);
       }
     }
 
@@ -1071,24 +1193,24 @@
           let actionBtns = '';
 
           if (app.status === 'PENDING_REVIEW') {
-            statusBadge = '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">심사 대기</span>';
+            statusBadge = '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">심사 대기</span>';
             actionBtns = `
-              <button onclick="approveApplication('${app.id}', '${app.company_name}')" class="px-2.5 py-1 rounded bg-[#13B5EA] hover:bg-[#0EA5E9] text-[#002B41] font-bold text-xs transition-colors">
+              <button onclick="approveApplication('${app.id}', '${app.company_name}')" class="px-2.5 py-1 rounded bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold text-xs transition-colors whitespace-nowrap">
                 승인
               </button>
-              <button onclick="rejectApplication('${app.id}', '${app.company_name}')" class="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100 text-slate-600 font-medium text-xs transition-colors">
+              <button onclick="rejectApplication('${app.id}', '${app.company_name}')" class="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100 text-slate-600 font-medium text-xs transition-colors whitespace-nowrap">
                 반려
               </button>
             `;
           } else if (app.status === 'APPROVED') {
-            statusBadge = '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">개설 완료</span>';
+            statusBadge = '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">개설 완료</span>';
             actionBtns = `
-              <a href="/?tenant=${app.requested_slug}" target="_blank" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs inline-block">
+              <button type="button" onclick="window.open('/?tenant=${encodeURIComponent(app.requested_slug)}', '_blank')" class="px-2.5 py-1 rounded bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs inline-block whitespace-nowrap">
                 사이트 열기
-              </a>
+              </button>
             `;
           } else {
-            statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">반려됨 (${app.review_note || '사유 없음'})</span>`;
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">반려 (${app.review_note || '사유 없음'})</span>`;
             actionBtns = `<span class="text-slate-400 text-xs">-</span>`;
           }
 
@@ -1171,6 +1293,121 @@
       document.getElementById('new-domain-preview').textContent = `/?tenant=${slug || 'company'}`;
     }
 
+    function showSAToast(msg, isError = false) {
+      const el = document.getElementById('sa-toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.className = `fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-xs font-bold text-white border border-white/10 ${isError ? 'bg-red-600' : 'bg-[#002B41]'}`;
+      el.classList.remove('hidden');
+      clearTimeout(window._saToastTimer);
+      window._saToastTimer = setTimeout(() => el.classList.add('hidden'), 3500);
+    }
+
+    function openTempPasswordModal(title, desc, tempPw, companyLinks = null) {
+      document.getElementById('temp-pw-modal-title').textContent = title;
+      document.getElementById('temp-pw-modal-desc').textContent = desc;
+      document.getElementById('temp-pw-value').textContent = tempPw || '-';
+      const linksEl = document.getElementById('temp-pw-links');
+      if (companyLinks) {
+        linksEl.innerHTML = `<div>웹 콘솔: <span class="font-mono text-[#0084B4]">${companyLinks.web_url}</span></div><div>모바일: <span class="font-mono text-[#0084B4]">${companyLinks.mobile_url}</span></div>`;
+        linksEl.classList.remove('hidden');
+      } else {
+        linksEl.classList.add('hidden');
+      }
+      document.getElementById('modal-temp-password').classList.remove('hidden');
+    }
+    function closeTempPasswordModal() {
+      document.getElementById('modal-temp-password').classList.add('hidden');
+    }
+    function copyTempPassword() {
+      const val = document.getElementById('temp-pw-value').textContent;
+      navigator.clipboard?.writeText(val);
+      showSAToast('임시 비밀번호가 복사되었습니다.');
+    }
+
+    let currentMsgCompanyId = null;
+    let currentMsgEnabled = true;
+    async function openMessageLogsModal(companyId) {
+      currentMsgCompanyId = companyId;
+      document.getElementById('modal-message-logs').classList.remove('hidden');
+      document.getElementById('msg-modal-tbody').innerHTML = '<tr><td colspan="6" class="py-6 text-center text-slate-400">불러오는 중...</td></tr>';
+      try {
+        const res = await fetch(`/api/super-admin/companies/${companyId}/messages`);
+        const data = await res.json();
+        if (!res.ok) {
+          showSAToast(data.error || '조회 실패', true);
+          return;
+        }
+        const s = data.stats || {};
+        currentMsgEnabled = !!s.enabled;
+        document.getElementById('msg-modal-title').textContent = `[${data.company.name}] 문자·알림톡 발송 이력 (${data.month})`;
+        document.getElementById('msg-modal-subtitle').textContent = `/?tenant=${data.company.subdomain} · 예상 비용 ${Number(s.estimated_cost_krw || 0).toLocaleString()}원`;
+        document.getElementById('msg-modal-stats').innerHTML = `사용: <strong>${s.used_count} / ${s.total_limit}건</strong> (${s.usage_pct}%) · 알림톡 ${s.alimtalk_count} · SMS ${s.sms_count} · LMS ${s.lms_count} · OTP ${s.otp_count}(제외)`;
+        const toggleBtn = document.getElementById('btn-toggle-msg-enabled');
+        if (toggleBtn) toggleBtn.textContent = currentMsgEnabled ? '발송 비활성화' : '발송 활성화';
+
+        const tbody = document.getElementById('msg-modal-tbody');
+        tbody.innerHTML = '';
+        if (!data.logs || data.logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-slate-400">당월 발송 이력이 없습니다.</td></tr>';
+          return;
+        }
+        data.logs.forEach(l => {
+          const tr = document.createElement('tr');
+          const dt = l.created_at ? new Date(l.created_at).toLocaleString('ko-KR') : '-';
+          const badge = l.status === 'FAILED'
+            ? '<span class="px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-bold whitespace-nowrap">실패</span>'
+            : '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold whitespace-nowrap">완료</span>';
+          tr.innerHTML = `
+            <td class="py-2 px-3 font-mono text-slate-500 whitespace-nowrap">${dt}</td>
+            <td class="py-2 px-3 font-bold whitespace-nowrap">${l.channel}</td>
+            <td class="py-2 px-3 whitespace-nowrap">${l.purpose}</td>
+            <td class="py-2 px-3 font-mono whitespace-nowrap">${l.recipient_phone}</td>
+            <td class="py-2 px-3 text-slate-700">${l.content_preview || '-'}</td>
+            <td class="py-2 px-3 whitespace-nowrap">${badge}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        showSAToast('발송 이력 조회 중 오류가 발생했습니다.', true);
+      }
+    }
+    function closeMessageLogsModal() {
+      document.getElementById('modal-message-logs').classList.add('hidden');
+    }
+    async function chargeCompanyMessages(delta) {
+      if (!currentMsgCompanyId) return;
+      const res = await fetch(`/api/super-admin/companies/${currentMsgCompanyId}/charge-messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showSAToast(data.message);
+        await openMessageLogsModal(currentMsgCompanyId);
+        loadCompanies();
+      } else {
+        showSAToast(data.error || '충전 실패', true);
+      }
+    }
+    async function toggleCompanyMessages() {
+      if (!currentMsgCompanyId) return;
+      const res = await fetch(`/api/super-admin/companies/${currentMsgCompanyId}/charge-messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_enabled: !currentMsgEnabled })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showSAToast(data.message);
+        await openMessageLogsModal(currentMsgCompanyId);
+        loadCompanies();
+      } else {
+        showSAToast(data.error || '전환 실패', true);
+      }
+    }
+
     async function submitCreateCompany(e) {
       e.preventDefault();
       const btn = document.getElementById('btn-submit-create-comp');
@@ -1195,22 +1432,28 @@
             admin_name: adminName,
             admin_email: adminEmail,
             admin_phone: adminPhone,
-            password: password || '1234',
+            password: password || undefined,
             plan
           })
         });
 
         const data = await res.json();
         if (res.ok) {
-          alert(`[${name}] 고객사가 성공적으로 개설되었습니다!\n웹 접속 주소: ${data.company.web_url}\n모바일 주소: ${data.company.mobile_url}`);
           closeCreateCompanyModal();
           loadCompanies();
           showDashboardView();
+          showSAToast(`[${name}] 고객사가 성공적으로 개설되었습니다.`);
+          openTempPasswordModal(
+            `[${name}] 개설 완료 · 임시 비밀번호`,
+            '아래 임시 비밀번호는 1회만 표시됩니다. 첫 로그인 시 새 비밀번호로 변경해야 합니다.',
+            data.temp_password || '-',
+            data.company
+          );
         } else {
-          alert('개설 실패: ' + data.error);
+          showSAToast('개설 실패: ' + (data.error || '오류'), true);
         }
       } catch (err) {
-        alert('서버 연결 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+        showSAToast('서버 연결 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', true);
       } finally {
         btn.disabled = false;
         btn.textContent = '즉시 개설 및 프로비저닝';

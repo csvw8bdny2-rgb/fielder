@@ -1313,6 +1313,26 @@
                   <span class="text-[11px] text-[#64748B]">텍스트 길이에 맞춰 헤더 폭이 자동으로 조절됩니다.</span>
                 </div>
               </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[#002B41] font-bold text-xs mb-1.5">회사 주소</label>
+                  <input type="text" id="setting-company-address" placeholder="예: 서울특별시 강남구 테헤란로 123" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-4 text-sm outline-none focus:border-[#0084B4] focus:ring-1 focus:ring-[#13B5EA] text-[#1E1F21] bg-white transition shadow-2xs">
+                </div>
+                <div>
+                  <label class="block text-[#002B41] font-bold text-xs mb-1.5">대표 연락처</label>
+                  <input type="text" id="setting-company-phone" placeholder="예: 02-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-4 text-sm outline-none focus:border-[#0084B4] focus:ring-1 focus:ring-[#13B5EA] text-[#1E1F21] bg-white transition shadow-2xs">
+                </div>
+              </div>
+              <div id="company-message-usage-card" class="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] flex items-center justify-between text-xs">
+                <div>
+                  <span class="font-bold text-[#002B41]">이번 달 문자·카카오 알림톡 발송량</span>
+                  <span id="company-msg-breakdown" class="block text-[11px] text-[#64748B] mt-0.5">집계 불러오는 중...</span>
+                </div>
+                <div class="text-right">
+                  <span id="company-msg-count" class="font-extrabold text-[#002B41]">- / -</span>
+                  <span id="company-msg-badge" class="hidden ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap"></span>
+                </div>
+              </div>
             </div>
 
             <!-- 실시간 동적 렌더링 미리보기 (텍스트 길이에 맞춰 자동 폭 확장) -->
@@ -2465,6 +2485,32 @@
       document.getElementById('header-company-logo').innerText = data.logo_url || 'FMS';
       document.getElementById('setting-company-name').value = data.name;
       document.getElementById('setting-company-logo').value = data.logo_url || 'FMS';
+      const addrEl = document.getElementById('setting-company-address');
+      if (addrEl) addrEl.value = data.address || '';
+      const phoneEl = document.getElementById('setting-company-phone');
+      if (phoneEl) phoneEl.value = data.contact_phone || '';
+
+      if (data.message_stats) {
+        const ms = data.message_stats;
+        const msgCountEl = document.getElementById('company-msg-count');
+        const msgBreakEl = document.getElementById('company-msg-breakdown');
+        const msgBadgeEl = document.getElementById('company-msg-badge');
+        if (msgCountEl) msgCountEl.innerText = ms.enabled ? `${ms.used_count} / ${ms.total_limit}건` : '미사용';
+        if (msgBreakEl) msgBreakEl.innerText = `알림톡 ${ms.alimtalk_count}건 · SMS ${ms.sms_count}건 · LMS ${ms.lms_count}건 (OTP ${ms.otp_count}건 제외)`;
+        if (msgBadgeEl) {
+          msgBadgeEl.classList.add('hidden');
+          if (!ms.enabled) {
+            msgBadgeEl.innerText = '비활성';
+            msgBadgeEl.className = 'ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 whitespace-nowrap';
+          } else if (ms.warning_100) {
+            msgBadgeEl.innerText = '한도 초과';
+            msgBadgeEl.className = 'ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 whitespace-nowrap';
+          } else if (ms.warning_80) {
+            msgBadgeEl.innerText = `${ms.usage_pct}% 임박`;
+            msgBadgeEl.className = 'ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap';
+          }
+        }
+      }
       document.getElementById('usage-count').innerText = data.monthly_used_count;
       document.getElementById('usage-limit').innerText = data.monthly_ticket_limit;
       const pct = Math.min(100, Math.round((data.monthly_used_count / data.monthly_ticket_limit) * 100));
@@ -2721,6 +2767,8 @@
           body: JSON.stringify({
             name,
             logo_url: logo,
+            address: document.getElementById('setting-company-address')?.value.trim() || '',
+            contact_phone: document.getElementById('setting-company-phone')?.value.trim() || '',
             buildings_config: currentBuildingsConfig
           })
         });
@@ -5050,10 +5098,15 @@
         sseSource.addEventListener('TICKET_UPDATED', onEvent);
         sseSource.addEventListener('TICKET_CLAIMED', onEvent);
         sseSource.addEventListener('TICKET_ASSIGNED', onEvent);
-        sseSource.addEventListener('PATROL_SUBMITTED', () => showToastNotification('📋 [현장 순찰] 새로운 순찰 점검 일지가 등록되었습니다.'));
+        sseSource.addEventListener('PATROL_SUBMITTED', async () => {
+          if (typeof loadPatrolLogs === 'function') await loadPatrolLogs();
+          await loadTickets();
+          showToastNotification('📋 [현장 순찰] 새로운 순찰 점검 일지가 등록되었습니다.');
+        });
         sseSource.addEventListener('INSPECTION_TEMPLATE_UPDATED', () => loadInspectionTemplates());
-        sseSource.addEventListener('INSPECTION_LOG_SUBMITTED', () => {
-          loadInspectionLogs();
+        sseSource.addEventListener('INSPECTION_LOG_SUBMITTED', async () => {
+          await loadInspectionLogs();
+          await loadTickets();
           showToastNotification('📋 [현장 점검표] 실무자의 새로운 점검 결과가 등록되었습니다.');
         });
         sseSource.addEventListener('LOCATION_UPDATED', () => loadLocations());
