@@ -205,20 +205,15 @@
         <!-- 좌측: 신고 원본 정보 & 사진 (디폴트: 빈 상태 안내, 티켓 선택 시 표시) -->
         <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-[#EDECEB] shadow-xs space-y-4">
           <!-- A. 디폴트 빈 상태 (관리자 직접 작업지시 모드) -->
-          <div id="wo-left-empty-state" class="py-12 px-6 bg-[#FAF9F8] rounded-2xl border border-dashed border-[#D5D3CF] text-center space-y-3">
-            <div class="w-12 h-12 mx-auto rounded-2xl bg-white border border-[#EDECEB] flex items-center justify-center font-bold text-base text-[#6D6E6F] shadow-2xs">
+          <div id="wo-left-empty-state" class="py-12 px-6 bg-[#FAF9F8] rounded-2xl border border-dashed border-[#D5D3CF] text-center space-y-2.5">
+            <div class="w-11 h-11 mx-auto rounded-xl bg-white border border-[#EDECEB] flex items-center justify-center text-base text-[#6D6E6F] shadow-2xs">
               📋
             </div>
             <div class="space-y-1">
-              <h3 class="font-bold text-[#1E1F21] text-sm">선택된 접수 건 없음 (신규 지시 작성)</h3>
-              <p class="text-xs text-[#6D6E6F] max-w-xs mx-auto leading-relaxed">
-                실시간 모니터링 리스트에서 접수 건의 <b>[작업지시]</b>를 클릭하면 해당 신고 원본과 사진이 이곳에 자동 로드됩니다.
+              <h3 class="font-bold text-[#1E1F21] text-sm">선택된 접수 건 없음</h3>
+              <p class="text-xs text-[#6D6E6F]">
+                우측에서 신규 지시를 작성하거나 모니터링에서 접수 건을 선택하세요.
               </p>
-            </div>
-            <div class="pt-2">
-              <span class="inline-block px-3 py-1 bg-white border border-[#D5D3CF] text-[#1E1F21] rounded-lg text-[11px] font-semibold">
-                우측 양식에서 층수/구역/항목을 직접 지정하여 신규 지시를 발송할 수 있습니다.
-              </span>
             </div>
           </div>
 
@@ -2183,8 +2178,7 @@
     }
 
     let currentBuildingsConfig = {
-      '본관': { basement: 'B2', ground: 8, hasRooftop: true, floors: ['B2', 'B1', '1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F', 'RF'] },
-      '별관': { basement: 'NONE', ground: 3, hasRooftop: false, floors: ['1F', '2F', '3F'] }
+      '본관': { basement: 'NONE', ground: 1, hasRooftop: false, floors: ['1F'] }
     };
     let activeConfigBuilding = '본관';
 

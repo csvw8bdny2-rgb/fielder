@@ -83,8 +83,8 @@ function initDatabase() {
       admin_name TEXT,
       admin_email TEXT,
       admin_phone TEXT,
-      buildings TEXT DEFAULT '["본관", "별관"]',
-      floors TEXT DEFAULT '["B2", "B1", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F"]',
+      buildings TEXT DEFAULT '["본관"]',
+      floors TEXT DEFAULT '["1F"]',
       buildings_config TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -271,11 +271,10 @@ function initDatabase() {
     db.exec("UPDATE companies SET subdomain = 'central' WHERE id = 'comp_central_tower' AND (subdomain IS NULL OR subdomain = '' OR subdomain = 'null');");
   } catch(e) {}
 
-  // 기본 건물동 및 운영 층수 데이터 보장
+  // 기본 건물동 및 운영 층수 데이터 보장 (기본: 본관 1층만 존재)
   try {
     const defaultBc = JSON.stringify({
-      '본관': { basement: 'B2', ground: 8, hasRooftop: true, floors: ['B2', 'B1', '1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F', 'RF'] },
-      '별관': { basement: 'NONE', ground: 3, hasRooftop: false, floors: ['1F', '2F', '3F'] }
+      '본관': { basement: 'NONE', ground: 1, hasRooftop: false, floors: ['1F'] }
     });
     db.prepare(`
       UPDATE companies 
@@ -284,14 +283,14 @@ function initDatabase() {
     `).run(defaultBc);
   } catch (e) {}
 
-  // 기본 건물동 및 운영 층수 데이터 보장
+  // 기본 건물동 및 운영 층수 데이터 보장 (기본: 본관 1층만 존재)
   try {
     db.exec(`
       UPDATE companies 
-      SET buildings = '["본관", "별관"]' 
+      SET buildings = '["본관"]' 
       WHERE (buildings IS NULL OR buildings = '');
       UPDATE companies 
-      SET floors = '["B2", "B1", "1F", "2F", "3F", "4F", "5F", "6F", "7F", "8F"]' 
+      SET floors = '["1F"]' 
       WHERE (floors IS NULL OR floors = '');
     `);
   } catch (e) {}

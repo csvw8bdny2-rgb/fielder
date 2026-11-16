@@ -229,9 +229,7 @@ function seedDefaultTenantData(companyId) {
 
   const shortSlug = companyId.replace(/^comp_/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase() || 'TENANT';
   const locs = [
-    { id: `loc_1f_lobby_${companyId}`, building: '본관', floor: '1F', code: `${shortSlug}-1F-01`, name: '1층 메인 로비', category: 'FACILITY', desc: '주 출입구 및 안내 데스크' },
-    { id: `loc_1f_restroom_${companyId}`, building: '본관', floor: '1F', code: `${shortSlug}-1F-02`, name: '1층 공용 화장실', category: 'CLEANING', desc: '1층 남녀 공용 화장실' },
-    { id: `loc_b1_elec_${companyId}`, building: '본관', floor: 'B1', code: `${shortSlug}-B1-01`, name: '지하 1층 전기실', category: 'ELECTRICAL', desc: '수배전반 및 비상발전기' }
+    { id: `loc_1f_lobby_${companyId}`, building: '본관', floor: '1F', code: `${shortSlug}-1F-01`, name: '1층 메인 로비', category: 'FACILITY', desc: '주 출입구 및 안내 데스크' }
   ];
   const insertLoc = db.prepare('INSERT OR IGNORE INTO locations (id, company_id, building, floor, code, name, category, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))');
   for (const l of locs) {
@@ -300,16 +298,24 @@ function provisionTenant({ name, company_name, subdomain, adminName, admin_name,
   const featStr = typeof features === 'object' ? JSON.stringify(features) : '{"checklists":true,"realtime_sse":true,"public_qr":true,"outsource":true}';
   const limit = parseInt(monthlyTicketLimit || monthly_ticket_limit, 10) || 100;
 
+  const defaultBuildings = JSON.stringify(['본관']);
+  const defaultFloors = JSON.stringify(['1F']);
+  const defaultBuildingsConfig = JSON.stringify({
+    '본관': { basement: 'NONE', ground: 1, hasRooftop: false, floors: ['1F'] }
+  });
+
   db.prepare(`
     INSERT INTO companies (
       id, name, subdomain, logo_url, plan, status,
       monthly_ticket_limit, monthly_used_count,
       storage_limit_mb, storage_used_mb, enabled_features,
-      admin_name, admin_email, admin_phone
-    ) VALUES (?, ?, ?, 'Fielder', ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?)
+      admin_name, admin_email, admin_phone,
+      buildings, floors, buildings_config
+    ) VALUES (?, ?, ?, 'Fielder', ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, companyName, slug, plan || 'FREE', limit, featStr,
-    adminN, adminE || `admin@${slug}.fielder.kr`, adminP
+    adminN, adminE || `admin@${slug}.fielder.kr`, adminP,
+    defaultBuildings, defaultFloors, defaultBuildingsConfig
   );
 
   const userId = 'user_admin_' + slug;
@@ -379,11 +385,10 @@ const server = http.createServer(async (req, res) => {
       if (!company) {
         company = db.prepare('SELECT * FROM companies WHERE id = ?').get('comp_central_tower');
       }
-      let buildings = ['본관', '별관'];
-      let floors = ['B2', 'B1', '1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F'];
+      let buildings = ['본관'];
+      let floors = ['1F'];
       let buildingsConfig = {
-        '본관': { basement: 'B2', ground: 8, hasRooftop: true, floors: ['B2', 'B1', '1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F', 'RF'] },
-        '별관': { basement: 'NONE', ground: 3, hasRooftop: false, floors: ['1F', '2F', '3F'] }
+        '본관': { basement: 'NONE', ground: 1, hasRooftop: false, floors: ['1F'] }
       };
 
       try {
