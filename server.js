@@ -572,7 +572,8 @@ const server = http.createServer(async (req, res) => {
     // 2. 구역 및 층수(Floor) / 건물동(Building) 위치 관리 API
     // ==========================================
     if (pathname === '/api/locations' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const locs = db.prepare('SELECT * FROM locations WHERE company_id = ?').all(companyId);
       locs.sort((a, b) => {
         const bldgA = a.building || '본관';
@@ -587,33 +588,49 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/locations' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { building, floor, name, code, description } = body;
-      if (!name || !floor) return sendJSON(res, 400, { error: '층수와 구역명을 입력하세요.' });
+      if (!name || !name.trim() || !floor) return sendJSON(res, 400, { error: '층수와 구역명을 입력하세요.' });
+      const cleanName = name.trim();
       const id = 'loc_' + Date.now();
       const locCode = code || `LOC-${floor}-${Math.floor(10 + Math.random() * 90)}`;
       db.prepare(`
         INSERT INTO locations (id, company_id, building, floor, code, name, category, description, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'MAIN_TOWER', ?, datetime('now'))
-      `).run(id, companyId, building || '본관', floor, locCode, name, description || '');
-      broadcastSSE('LOCATION_UPDATED', { action: 'CREATE', id });
+        VALUES (?, ?, ?, ?, ?, ?, 'MAIN_TOWER', ?, ?)
+      `).run(id, companyId, building || '본관', floor, locCode, cleanName, description || '', new Date().toISOString());
+      broadcastSSE('LOCATION_UPDATED', { action: 'CREATE', id, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, message: '새 위치/구역이 등록되었습니다.' });
     }
     if (pathname.match(/^\/api\/locations\/([^/]+)$/) && method === 'DELETE') {
       const locId = pathname.split('/')[3];
-      db.prepare('DELETE FROM locations WHERE id = ?').run(locId);
-      broadcastSSE('LOCATION_UPDATED', { action: 'DELETE', id: locId });
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+
+      const locRow = db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
+      if (!locRow) return sendJSON(res, 404, { error: '구역을 찾을 수 없습니다.' });
+
+      const ticketRef = db.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE location_id = ? AND company_id = ? AND status != 'CANCELLED'").get(locId, companyId).cnt;
+      if (ticketRef > 0) {
+        return sendJSON(res, 409, { error: '작업지시나 신고 이력에서 사용 중인 구역은 삭제할 수 없습니다.' });
+      }
+
+      db.prepare('DELETE FROM locations WHERE id = ? AND company_id = ?').run(locId, companyId);
+      broadcastSSE('LOCATION_UPDATED', { action: 'DELETE', id: locId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '위치가 삭제되었습니다.' });
     }
     if (pathname.match(/^\/api\/locations\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const locId = pathname.split('/')[3];
-      const { building, floor, name, code, description } = await parseBody(req);
+      const body = await parseBody(req);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const { building, floor, name, code, description } = body;
       db.prepare(`
         UPDATE locations
         SET building = ?, floor = ?, name = ?, code = ?, description = ?
-        WHERE id = ?
-      `).run(building || '본관', floor, name, code || `LOC-${floor}-EDIT`, description || '', locId);
-      broadcastSSE('LOCATION_UPDATED', { action: 'UPDATE', id: locId });
+        WHERE id = ? AND company_id = ?
+      `).run(building || '본관', floor, (name || '').trim(), code || `LOC-${floor}-EDIT`, description || '', locId, companyId);
+      broadcastSSE('LOCATION_UPDATED', { action: 'UPDATE', id: locId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '구역 정보가 수정되었습니다.' });
     }
 
@@ -838,10 +855,10 @@ const server = http.createServer(async (req, res) => {
           name: '관리자 작업 지시',
           status: t.assigned_at ? 'COMPLETED' : (t.status === 'PENDING' ? 'PENDING' : 'COMPLETED'),
           timestamp: t.assigned_at || t.created_at,
-          actor: '운영관리소',
+          actor: t.reporter_name || '관리자',
           target: t.target_type === 'INDIVIDUAL' ? `개인: ${t.assignee_name || '실무자'}` : `직무그룹: ${t.target_group_name || '전체 그룹'} (선착순)`,
           instruction_title: t.instruction_title || t.title,
-          instruction_notes: t.instruction_notes || '현장 점검 및 조치 바람',
+          instruction_notes: t.instruction_notes || '',
           instruction_photo_url: t.instruction_photo_url
         },
         {
@@ -860,7 +877,7 @@ const server = http.createServer(async (req, res) => {
           actor: t.completed_by_name || t.claimed_by_name || '담당 실무자',
           resolution_type: t.resolution_type || (t.status === 'COMPLETED' ? 'RESOLVED' : null),
           notes: t.completion_notes || t.unresolved_reason || '',
-          photo_url: t.completion_photo_url || t.unresolved_photo_url || (t.status === 'COMPLETED' ? 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80' : null)
+          photo_url: t.completion_photo_url || t.unresolved_photo_url || null
         },
         {
           step: 5,
@@ -1169,10 +1186,27 @@ const server = http.createServer(async (req, res) => {
       const id = 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
       const nowIso = new Date().toISOString();
 
-      db.prepare(`
-        INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, is_active, must_change_password, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-      `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, cleanPhone, custom_role_id || null, isTemp, nowIso);
+      let validRoleId = null;
+      if (custom_role_id && String(custom_role_id).trim()) {
+        const roleRow = db.prepare('SELECT id FROM custom_roles WHERE id = ? AND company_id = ?').get(String(custom_role_id).trim(), companyId);
+        if (!roleRow) {
+          return sendJSON(res, 400, { error: '유효하지 않은 직무 그룹입니다.' });
+        }
+        validRoleId = roleRow.id;
+      }
+
+      try {
+        db.prepare(`
+          INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, is_active, must_change_password, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, cleanPhone, validRoleId, isTemp, nowIso);
+      } catch (insertErr) {
+        console.error('User insert error:', insertErr);
+        if (String(insertErr.message || '').includes('UNIQUE')) {
+          return sendJSON(res, 409, { error: `이미 등록된 이메일 [${cleanEmail}] 입니다.` });
+        }
+        return sendJSON(res, 400, { error: '사용자 등록에 실패했습니다. 입력값을 확인해주세요.' });
+      }
 
       if (role === 'ADMIN') {
         db.prepare('UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = "")').run(cleanName, companyId);
@@ -1297,7 +1331,8 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ 4-1. 모바일 현장순찰 일지 API
     // ==========================================
     if (pathname === '/api/patrol' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const logs = db.prepare(`
         SELECT p.*, u.role as user_role 
         FROM patrol_logs p 
@@ -1310,7 +1345,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/patrol' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { user_id, worker_name, building, floor, location_name, check_items, notes, photo_url } = body;
       const id = 'pt_' + Date.now();
       db.prepare(`
@@ -1333,7 +1369,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/roles' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const roles = db.prepare(`
         SELECT r.*, count(u.id) as worker_count 
         FROM custom_roles r 
@@ -1406,7 +1443,8 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ 4-2. 현장 점검표 템플릿 및 점검 수행 이력 API
     // ==========================================
     if (pathname === '/api/inspections/templates' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const templates = db.prepare(`
         SELECT t.*, r.name as role_display_name
         FROM inspection_templates t
@@ -1418,7 +1456,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/inspections/templates' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { title, target_role_id, target_role_name, building, frequency, items, description } = body;
       if (!title) return sendJSON(res, 400, { error: '점검표 명칭을 입력하세요.' });
       const id = 'tmpl_' + Date.now();
@@ -1470,7 +1509,8 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 점검 일정(주기별 완료/누락 현황) API
     if (pathname === '/api/inspections/schedule' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const dateStr = (parsedUrl.query?.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
       const baseDate = new Date(dateStr + 'T00:00:00Z');
       const dayOfWeek = baseDate.getUTCDay(); // 0=Sun..6=Sat
@@ -1524,7 +1564,8 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 점검표별 기간 통계 API
     if (pathname === '/api/inspections/statistics' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const todayStr = new Date().toISOString().slice(0, 10);
       const endDate = (parsedUrl.query?.endDate || todayStr).slice(0, 10);
       const startDefault = new Date(new Date(endDate + 'T00:00:00Z').getTime() - 6 * 86400000).toISOString().slice(0, 10);
@@ -1603,7 +1644,8 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 점검 결과 이력 API
     if (pathname === '/api/inspections/logs' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const logs = db.prepare(`
         SELECT * FROM inspection_logs
         WHERE company_id = ?
@@ -1613,7 +1655,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/inspections/logs' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const limitCheck = checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });

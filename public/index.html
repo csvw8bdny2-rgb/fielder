@@ -127,6 +127,47 @@
 
       </div>
 
+      <!-- ⭐️ 초기 설정 온보딩 체크리스트 (미완료 시 자동 노출) -->
+      <div id="onboarding-checklist-card" class="hidden bg-white p-4 sm:p-5 rounded-2xl border border-[#13B5EA]/40 shadow-xs space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="px-2 py-0.5 rounded bg-[#EBF7FD] text-[#007EA8] text-[10px] font-bold">초기 설정 가이드</span>
+            <h3 class="text-sm font-bold text-[#1E1F21]">시작하기 전에 아래 4단계를 완료해보세요</h3>
+          </div>
+          <button onclick="document.getElementById('onboarding-checklist-card').classList.add('hidden'); localStorage.setItem('fielder_onboarding_dismissed','1');" class="text-xs text-[#6D6E6F] hover:text-[#1E1F21]">닫기</button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+          <button onclick="navTo('settings'); setSettingsTab('locations');" id="ob-step-1" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
+            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
+            <div>
+              <div class="font-bold text-[#1E1F21]">1) 구역 등록</div>
+              <div class="text-[10px] text-[#6D6E6F]">관리할 층/구역 추가</div>
+            </div>
+          </button>
+          <button onclick="navTo('settings'); setSettingsTab('roles');" id="ob-step-2" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
+            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
+            <div>
+              <div class="font-bold text-[#1E1F21]">2) 직무그룹</div>
+              <div class="text-[10px] text-[#6D6E6F]">시설/미화/보안 등 팀 구성</div>
+            </div>
+          </button>
+          <button onclick="navTo('settings'); setSettingsTab('users');" id="ob-step-3" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
+            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+            <div>
+              <div class="font-bold text-[#1E1F21]">3) 직원 등록</div>
+              <div class="text-[10px] text-[#6D6E6F]">현장 실무자 계정 초대</div>
+            </div>
+          </button>
+          <button onclick="navTo('workorders');" id="ob-step-4" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
+            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">4</span>
+            <div>
+              <div class="font-bold text-[#1E1F21]">4) 첫 작업지시</div>
+              <div class="text-[10px] text-[#6D6E6F]">현장 작업 발송 테스트</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
       <!-- 현장 모니터링 통합 제어 바 (층수 선택 & 키워드 검색 대폭 확대) -->
       <div class="bg-white p-4 sm:p-5 rounded-2xl border border-[#EDECEB] shadow-xs space-y-3">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F4F3F2] pb-3">
@@ -2249,13 +2290,16 @@
       }
       const d = new Date(s);
       if (isNaN(d.getTime())) return dtStr;
-      return new Intl.DateTimeFormat('ko-KR', {
+      const parts = new Intl.DateTimeFormat('sv-SE', {
         timeZone: 'Asia/Seoul',
-        ...(withDate ? { month: '2-digit', day: '2-digit' } : {}),
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
       }).format(d);
+      return withDate ? parts : parts.slice(11);
     }
 
     async function init() {
@@ -2291,11 +2335,44 @@
       try { await loadInspectionTemplates(); } catch (e) { console.warn('loadInspectionTemplates fallback:', e); }
       try { await loadInspectionLogs(); } catch (e) { console.warn('loadInspectionLogs fallback:', e); }
       try { initRealtimeSSE(); } catch (e) { console.warn('SSE fallback:', e); }
+      updateOnboardingChecklist();
 
       // 외부 클릭 시 구역명 인라인 편집 자동 취소 (화면 정리)
       document.addEventListener('click', (e) => {
         if (!e.target.closest('[id^="loc-cell-"]') && activeInlineLocId) {
           cancelAllInlineLocationEdits(null);
+        }
+      });
+    }
+
+    function updateOnboardingChecklist() {
+      const card = document.getElementById('onboarding-checklist-card');
+      if (!card) return;
+      if (localStorage.getItem('fielder_onboarding_dismissed') === '1') {
+        card.classList.add('hidden');
+        return;
+      }
+      const s1 = (currentLocations || []).length > 0;
+      const s2 = (currentRoles || []).length > 0;
+      const s3 = (currentUsers || []).some(u => u.role === 'WORKER');
+      const s4 = (currentTickets || []).length > 0;
+
+      if (s1 && s2 && s3 && s4) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+
+      [s1, s2, s3, s4].forEach((done, idx) => {
+        const el = document.getElementById(`ob-step-${idx + 1}`);
+        if (!el) return;
+        const icon = el.querySelector('.ob-icon');
+        if (done) {
+          el.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50/50 text-left flex items-center space-x-2.5 transition';
+          if (icon) { icon.className = 'ob-icon w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0'; icon.innerText = '✓'; }
+        } else {
+          el.className = 'p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition';
+          if (icon) { icon.className = 'ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0'; icon.innerText = String(idx + 1); }
         }
       });
     }
@@ -3750,16 +3827,48 @@
           stBadge.className = 'px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#E5983B]/15 text-[#E5983B]';
         }
 
-        const initialPhoto = timeline[0]?.photo_url || 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80';
-        document.getElementById('dtl-photo-initial').src = initialPhoto;
-        document.getElementById('dtl-photo-initial-caption').innerText = `${timeline[0]?.actor || '신고자'} 전송 (${ticket.created_at.substring(0, 16)})`;
+        const initialPhoto = timeline[0]?.photo_url || null;
+        const initImgEl = document.getElementById('dtl-photo-initial');
+        if (initImgEl) {
+          if (initialPhoto) {
+            initImgEl.src = initialPhoto;
+            initImgEl.classList.remove('hidden');
+            if (initImgEl.parentElement) initImgEl.parentElement.querySelector('.no-photo-msg')?.remove();
+          } else {
+            initImgEl.src = '';
+            initImgEl.classList.add('hidden');
+            if (initImgEl.parentElement && !initImgEl.parentElement.querySelector('.no-photo-msg')) {
+              const p = document.createElement('div');
+              p.className = 'no-photo-msg h-32 flex items-center justify-center bg-[#FAF9F8] rounded-xl border border-dashed border-[#D5D3CF] text-xs text-[#A0A1A2] font-medium';
+              p.innerText = '사진 없음';
+              initImgEl.parentElement.insertBefore(p, initImgEl.nextSibling);
+            }
+          }
+        }
+        document.getElementById('dtl-photo-initial-caption').innerText = `${timeline[0]?.actor || '신고자'} (${formatKST(ticket.created_at)})`;
 
-        const actionPhoto = timeline[3]?.photo_url || 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80';
-        document.getElementById('dtl-photo-action').src = actionPhoto;
+        const actionPhoto = timeline[3]?.photo_url || null;
+        const actImgEl = document.getElementById('dtl-photo-action');
+        if (actImgEl) {
+          if (actionPhoto) {
+            actImgEl.src = actionPhoto;
+            actImgEl.classList.remove('hidden');
+            if (actImgEl.parentElement) actImgEl.parentElement.querySelector('.no-photo-msg')?.remove();
+          } else {
+            actImgEl.src = '';
+            actImgEl.classList.add('hidden');
+            if (actImgEl.parentElement && !actImgEl.parentElement.querySelector('.no-photo-msg')) {
+              const p = document.createElement('div');
+              p.className = 'no-photo-msg h-32 flex items-center justify-center bg-[#FAF9F8] rounded-xl border border-dashed border-[#D5D3CF] text-xs text-[#A0A1A2] font-medium';
+              p.innerText = '사진 없음';
+              actImgEl.parentElement.insertBefore(p, actImgEl.nextSibling);
+            }
+          }
+        }
         document.getElementById('dtl-photo-action-label').innerText = 
           ticket.status === 'COMPLETED' ? '2. 조치 완료 확인 사진' :
           ticket.resolution_type === 'UNRESOLVED' ? '2. 현장 미해결 증빙 사진' : '2. 현장 조치 진행 사진';
-        document.getElementById('dtl-photo-action-caption').innerText = `${ticket.completed_by_name || ticket.claimed_by_name || '실무자'} 현장 등록`;
+        document.getElementById('dtl-photo-action-caption').innerText = actionPhoto ? `${ticket.completed_by_name || ticket.claimed_by_name || '실무자'} 현장 등록` : '등록된 사진 없음';
 
         const tlContainer = document.getElementById('dtl-timeline-container');
         tlContainer.innerHTML = '';
@@ -3775,7 +3884,7 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="font-bold text-xs ${isDone ? 'text-[#1E1F21]' : isWait ? 'text-[#E5983B]' : 'text-[#A0A1A2]'}">${step.step}단계: ${step.name}</span>
-              <span class="text-[10px] text-[#6D6E6F] font-mono">${step.timestamp ? step.timestamp.substring(0, 16) : '대기중'}</span>
+              <span class="text-[10px] text-[#6D6E6F] font-mono">${step.timestamp ? formatKST(step.timestamp) : '대기중'}</span>
             </div>
             <div class="text-[11px] text-[#6D6E6F] space-y-0.5">
               ${step.actor ? `<div><span class="font-semibold text-[#1E1F21]">담당/행위자:</span> ${step.actor} ${step.phone ? `(${step.phone})` : ''}</div>` : ''}
@@ -3791,15 +3900,22 @@
         });
 
         const actBox = document.getElementById('dtl-quick-action-box');
-        actBox.innerHTML = '';
+        actBox.innerHTML = `
+          <button onclick="editWorkOrderPrompt('${ticket.id}').then(() => openProcessDetailModal('${ticket.id}'));" class="px-3 py-2 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded-lg text-xs">
+            수정
+          </button>
+          <button onclick="cancelWorkOrder('${ticket.id}').then(() => closeProcessDetailModal());" class="px-3 py-2 bg-red-50 border border-red-200 hover:bg-red-100 text-[#F06A6A] font-bold rounded-lg text-xs">
+            작업 취소
+          </button>
+        `;
         if (ticket.status === 'WAITING_APPROVAL') {
-          actBox.innerHTML = `
+          actBox.innerHTML += `
             <button onclick="closeProcessDetailModal(); openApproveModal('${ticket.id}');" class="px-4 py-2 bg-[#8250DF] hover:bg-[#6e3ec7] text-white font-bold rounded-lg shadow-sm text-xs">
               관리자 마감 승인하기 →
             </button>
           `;
         } else if (ticket.resolution_type === 'UNRESOLVED') {
-          actBox.innerHTML = `
+          actBox.innerHTML += `
             <button onclick="closeProcessDetailModal(); moveToWorkOrder('${ticket.id}');" class="px-4 py-2 bg-[#F06A6A] hover:bg-red-700 text-white font-bold rounded-lg shadow-sm text-xs">
               후속 자재 발주 / 재지시 발송 →
             </button>
@@ -4229,7 +4345,13 @@
 
     async function deleteLocation(id) {
       if (!confirm('이 구역을 삭제하시겠습니까? (연관된 QR 및 작업 데이터에 영향을 줄 수 있습니다)')) return;
-      await fetch('/api/locations/' + id, { method: 'DELETE' });
+      const res = await fetch('/api/locations/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToastNotification(data.error || '삭제할 수 없습니다.', 'ERROR');
+        return;
+      }
+      showToastNotification(data.message || '구역이 삭제되었습니다.');
       await loadLocations();
     }
 
@@ -4822,10 +4944,12 @@
 
     function showToastNotification(msg, type = 'SUCCESS') {
       const toast = document.createElement('div');
-      const isSuccess = type === 'SUCCESS';
-      toast.className = 'fixed top-20 right-6 z-50 bg-[#0084B4] text-white px-5 py-3.5 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold flex items-center space-x-3 transition-all duration-300 border-2 border-[#13B5EA] shadow-[#0084B4]/30 transform translate-y-0';
+      const isError = type === 'ERROR';
+      toast.className = isError
+        ? 'fixed top-20 right-6 z-50 bg-red-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold flex items-center space-x-3 transition-all duration-300 border-2 border-red-400 shadow-red-600/30 transform translate-y-0'
+        : 'fixed top-20 right-6 z-50 bg-[#0084B4] text-white px-5 py-3.5 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold flex items-center space-x-3 transition-all duration-300 border-2 border-[#13B5EA] shadow-[#0084B4]/30 transform translate-y-0';
       toast.innerHTML = `
-        <span class="w-6 h-6 rounded-full bg-white text-[#0084B4] flex items-center justify-center font-black text-xs shadow-xs">✓</span>
+        <span class="w-6 h-6 rounded-full bg-white ${isError ? 'text-red-600' : 'text-[#0084B4]'} flex items-center justify-center font-black text-xs shadow-xs">${isError ? '✕' : '✓'}</span>
         <span>${msg}</span>
       `;
       document.body.appendChild(toast);
@@ -5195,7 +5319,7 @@
       const tbody = document.getElementById('blocked-users-body');
       tbody.innerHTML = '';
       if (!Array.isArray(data) || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" class="py-6 text-center text-xs text-[#6D6E6F]">차단된 연락처가 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="py-6 text-center text-xs text-[#6D6E6F]">차단된 연락처가 없습니다. 차단된 번호는 문자 발송 및 QR 신고에서 제외됩니다.</td></tr>';
         return;
       }
       data.forEach(b => {

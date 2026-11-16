@@ -371,12 +371,23 @@ function initDatabase() {
     console.error('Password hash migration error:', e);
   }
 
-  // ⭐️ QA 테스트 데이터 정리 (central QA 잔여 데이터 및 qatest-20261116 테넌트 제거)
+  // ⭐️ QA 테스트 데이터 정리 (central QA 잔여 데이터 및 qatest/qatest2 테넌트 제거)
   try {
     db.prepare("DELETE FROM tickets WHERE company_id = 'comp_central_tower' AND (title LIKE '%[QA]%' OR title = '[QA] 테스트 작업지시')").run();
     db.prepare("DELETE FROM users WHERE company_id = 'comp_central_tower' AND (name = 'QA테스터' OR name LIKE '%QA테스터%')").run();
     db.prepare("DELETE FROM custom_roles WHERE company_id = 'comp_central_tower' AND (name = 'QA테스트팀' OR name LIKE '%QA테스트팀%')").run();
-    db.prepare("DELETE FROM companies WHERE subdomain = 'qatest-20261116' OR id = 'comp_qatest-20261116'").run();
+    const qaComps = db.prepare("SELECT id FROM companies WHERE subdomain IN ('qatest-20261116', 'qatest2-20261116') OR id IN ('comp_qatest-20261116', 'comp_qatest2-20261116')").all();
+    for (const qc of qaComps) {
+      db.prepare('DELETE FROM inspection_logs WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM inspection_templates WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM patrol_logs WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM blocked_users WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM tickets WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM locations WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM custom_roles WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM users WHERE company_id = ?').run(qc.id);
+      db.prepare('DELETE FROM companies WHERE id = ?').run(qc.id);
+    }
     // 이번 달 실제 티켓 수 재계산 반영
     db.prepare(`
       UPDATE companies

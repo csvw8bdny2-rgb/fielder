@@ -146,11 +146,12 @@
           <div class="space-y-1 text-left text-xs">
             <label class="block font-semibold text-slate-200">비밀번호</label>
             <input type="password" id="user-password" required minlength="8" placeholder="비밀번호 (최소 8자 이상)" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+            <p class="text-[11px] text-slate-400 mt-1">• 영문/숫자/특수문자 조합 최소 8자 이상 입력해주세요.</p>
           </div>
 
           <div class="space-y-1 text-left text-xs">
             <label class="block font-semibold text-slate-200">비밀번호 확인</label>
-            <input type="password" id="user-password-confirm" required minlength="4" placeholder="비밀번호 재입력" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+            <input type="password" id="user-password-confirm" required minlength="8" placeholder="비밀번호 재입력" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
           </div>
 
           <button type="submit" class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center mt-3 shadow-md">
@@ -177,15 +178,15 @@
           </div>
 
           <div class="space-y-1 text-left text-xs">
-            <label class="block font-semibold text-slate-200">희망 서브도메인 (영문 주소)</label>
+            <label class="block font-semibold text-slate-200">회사 고유 식별자 (영문/숫자)</label>
             <div class="flex items-center">
-              <input type="text" id="subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="central" onkeyup="updateDomainPreview(this.value)" class="flex-1 h-11 border border-[#005B82] rounded-l-xl px-4 text-sm font-mono font-bold outline-none focus:border-[#13B5EA] bg-[#001F30] text-white transition-colors">
-              <span class="h-11 px-3 bg-[#001522] border border-l-0 border-[#005B82] rounded-r-xl flex items-center text-slate-400 font-mono text-xs">
-                .fielder.kr
+              <span class="h-11 px-3 bg-[#001522] border border-r-0 border-[#005B82] rounded-l-xl flex items-center text-slate-400 font-mono text-xs">
+                ?tenant=
               </span>
+              <input type="text" id="subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="company" onkeyup="updateDomainPreview(this.value)" class="flex-1 h-11 border border-[#005B82] rounded-r-xl px-4 text-sm font-mono font-bold outline-none focus:border-[#13B5EA] bg-[#001F30] text-white transition-colors">
             </div>
             <p class="text-[11px] text-slate-400 mt-1">
-              생성될 주소: <span class="text-[#13B5EA] font-mono font-semibold" id="domain-preview">https://central.fielder.kr</span>
+              실제 접속 주소: <span class="text-[#13B5EA] font-mono font-semibold" id="domain-preview">https://fielder-h1j5.onrender.com/?tenant=company</span>
             </p>
           </div>
 
@@ -438,10 +439,10 @@
           document.getElementById('step4-title').textContent = '가입 완료';
           document.getElementById('step4-desc').textContent = '회사 계정 및 100건 무료 리포트가 발급되었습니다.';
           document.getElementById('result-company-name').textContent = data.company.name;
-          document.getElementById('result-web-url').textContent = `/?tenant=${data.company.subdomain}`;
+          document.getElementById('result-web-url').textContent = data.company.web_url;
           document.getElementById('result-web-url').href = data.company.web_url;
           document.getElementById('row-result-mobile').classList.remove('hidden');
-          document.getElementById('result-mobile-url').textContent = `/mobile?tenant=${data.company.subdomain}`;
+          document.getElementById('result-mobile-url').textContent = data.company.mobile_url;
           document.getElementById('result-mobile-url').href = data.company.mobile_url;
           document.getElementById('result-status-text').textContent = '즉시 활성화 완료 (100건 무료)';
           document.getElementById('result-status-text').className = 'font-bold text-emerald-400';
