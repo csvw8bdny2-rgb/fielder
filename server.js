@@ -51,7 +51,12 @@ function getSession(req) {
         role_title: '통합 슈퍼 관리자'
       };
     } else {
-      user = db.prepare("SELECT id, company_id, role, name, phone, email, is_active FROM users WHERE id = ?").get(sess.user_id);
+      user = db.prepare(`
+        SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.is_active, u.custom_role_id, r.name as role_name
+        FROM users u
+        LEFT JOIN custom_roles r ON u.custom_role_id = r.id
+        WHERE u.id = ?
+      `).get(sess.user_id);
     }
     if (!user) return null;
 
@@ -1980,7 +1985,10 @@ const server = http.createServer(async (req, res) => {
           id: session.user.id,
           name: session.user.name,
           email: session.user.email,
+          phone: session.user.phone || '',
           role: session.role,
+          custom_role_id: session.user.custom_role_id || null,
+          role_name: session.user.role_name || '',
           company_id: session.companyId,
           company_name: companyInfo ? companyInfo.name : '플랫폼 본부',
           subdomain: companyInfo ? (companyInfo.subdomain || 'central') : 'central'

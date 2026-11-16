@@ -1843,6 +1843,57 @@
     </div>
   </div>
 
+  <!-- ⭐️ 사용자 접속주소 발송(문자/카톡) 모달 -->
+  <div id="modal-send-access" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EDECEB] space-y-4">
+      <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#13B5EA]"></span>
+          <h3 class="text-sm font-bold text-[#1E1F21]">사용자 접속주소 보내기</h3>
+        </div>
+        <button onclick="closeSendAccessModal()" class="text-[#A0A1A2] hover:text-[#1E1F21] text-lg font-bold">×</button>
+      </div>
+
+      <div class="p-3 bg-[#FAF9F8] rounded-xl border border-[#EDECEB] space-y-1 text-xs">
+        <div class="flex justify-between">
+          <span class="text-[#6D6E6F]">수신자</span>
+          <b id="send-access-user-name" class="text-[#1E1F21]"></b>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[#6D6E6F]">연락처</span>
+          <b id="send-access-user-phone" class="text-[#1E1F21] font-mono"></b>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[#6D6E6F]">로그인 ID</span>
+          <b id="send-access-user-email" class="text-[#0084B4] font-mono"></b>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-[#1E1F21] mb-1.5">전송할 안내 문구 (수정 가능)</label>
+        <textarea id="send-access-message" rows="6" class="w-full border border-[#D5D3CF] rounded-xl p-3 text-xs bg-white text-[#1E1F21] leading-relaxed outline-none focus:border-[#0084B4]"></textarea>
+        <input type="hidden" id="send-access-target-phone">
+        <input type="hidden" id="send-access-target-url">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2.5 pt-1">
+        <button type="button" onclick="sendAccessViaSMS()" class="h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs transition">
+          <span>💬</span>
+          <span>문자(SMS) 발송</span>
+        </button>
+        <button type="button" onclick="sendAccessViaKakao()" class="h-10 bg-[#FEE500] hover:bg-[#F4DC00] text-[#191919] rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs transition border border-[#E5CE00]">
+          <span>💛</span>
+          <span>카톡 / 공유하기</span>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-[#EDECEB]">
+        <button type="button" onclick="copyAccessInviteText()" class="text-xs font-bold text-[#0084B4] hover:underline">📋 안내 문구 전체 복사</button>
+        <button type="button" onclick="closeSendAccessModal()" class="px-4 py-1.5 border border-[#D5D3CF] text-[#6D6E6F] rounded-lg text-xs font-semibold hover:bg-[#FAF9F8]">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ⭐️ 3-1. 현장 처리사항 코멘트 확인 전용 모달 -->
   <div id="modal-process-comment" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EDECEB] space-y-4 relative">
@@ -4231,6 +4282,7 @@
           <td class="px-3.5 py-2.5 font-medium text-[#1E1F21] truncate">${u.role_name || '<i class="text-[#A0A1A2]">전체 총괄</i>'}</td>
           <td class="px-3.5 py-2.5 text-[#6D6E6F] truncate">${u.phone || '-'}</td>
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap space-x-1.5 pr-4">
+            <button onclick="openSendAccessModal('${u.id}')" class="px-2.5 py-1 bg-[#EBF7FD] border border-[#13B5EA]/40 text-[#007EA8] hover:bg-[#DDF2FB] font-bold rounded text-[11px] shadow-2xs">접속주소 보내기</button>
             <button onclick="editUser('${u.id}')" class="px-2.5 py-1 ${isSelected ? 'bg-[#0084B4] text-white font-bold' : 'bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold'} rounded text-[11px] shadow-2xs">${isSelected ? '수정 중 ✏️' : '수정'}</button>
             <button onclick="openPasswordResetModal('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email || ''}')" class="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-bold rounded text-[11px] shadow-2xs">비번 재설정</button>
             <button onclick="deleteUser('${u.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-medium text-[11px]">삭제</button>
@@ -4272,6 +4324,77 @@
       alert(data.message || '비밀번호가 재설정되었습니다.');
       closePasswordResetModal();
       await loadUsers();
+    }
+
+    function openSendAccessModal(userId) {
+      const u = currentUsers.find(user => user.id === userId);
+      if (!u) return;
+
+      const tenant = getTenantParam() || 'central';
+      const compName = document.getElementById('header-company-name')?.innerText || 'Fielder';
+      const emailParam = u.email ? `&email=${encodeURIComponent(u.email)}` : '';
+      const targetUrl = u.role === 'ADMIN'
+        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${emailParam}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
+        : `${window.location.origin}/mobile?tenant=${encodeURIComponent(tenant)}${emailParam}`;
+
+      const msg = `[${compName}] 현장 접속 안내\n${u.name}님, 아래 전용 주소로 접속하여 본인 계정으로 로그인해주세요.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 로그인 ID: ${u.email || '-'}\n▶ 초기 비밀번호: 등록된 비밀번호 (미설정 시 1234)`;
+
+      document.getElementById('send-access-user-name').innerText = `${u.name} (${u.role === 'ADMIN' ? '관리자' : '실무자'})`;
+      document.getElementById('send-access-user-phone').innerText = u.phone || '미등록';
+      document.getElementById('send-access-user-email').innerText = u.email || '-';
+      document.getElementById('send-access-message').value = msg;
+      document.getElementById('send-access-target-phone').value = (u.phone || '').replace(/[^0-9+]/g, '');
+      document.getElementById('send-access-target-url').value = targetUrl;
+
+      document.getElementById('modal-send-access').classList.remove('hidden');
+    }
+
+    function closeSendAccessModal() {
+      document.getElementById('modal-send-access').classList.add('hidden');
+    }
+
+    function sendAccessViaSMS() {
+      const phone = document.getElementById('send-access-target-phone').value;
+      const msg = document.getElementById('send-access-message').value;
+      if (!phone) {
+        alert('수신자의 전화번호가 등록되어 있지 않습니다.\n안내 문구를 복사하여 직접 전송하거나 사용자 정보에 연락처를 먼저 등록해주세요.');
+        return;
+      }
+      const sep = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? '&' : '?';
+      window.location.href = `sms:${phone}${sep}body=${encodeURIComponent(msg)}`;
+    }
+
+    async function sendAccessViaKakao() {
+      const msg = document.getElementById('send-access-message').value;
+      const url = document.getElementById('send-access-target-url').value;
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'Fielder 현장 접속 안내',
+            text: msg,
+            url: url
+          });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(msg);
+        alert('접속 안내 문구가 클립보드에 복사되었습니다!\n카카오톡 대화방에 붙여넣기(Ctrl+V / Cmd+V)하여 바로 전송하세요.');
+      } catch (e) {
+        alert('안내 문구를 복사하여 카카오톡으로 전송해주세요.');
+      }
+    }
+
+    async function copyAccessInviteText() {
+      const msg = document.getElementById('send-access-message').value;
+      try {
+        await navigator.clipboard.writeText(msg);
+        showToastNotification('접속 주소 및 안내 문구가 복사되었습니다.');
+      } catch (e) {
+        alert('복사에 실패했습니다. 텍스트를 직접 선택하여 복사해주세요.');
+      }
     }
 
     function editUser(id) {

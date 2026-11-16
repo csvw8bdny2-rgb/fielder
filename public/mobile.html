@@ -31,24 +31,18 @@
     <!-- ============================================== -->
     <div id="view-worker" class="flex-1 flex flex-col h-full bg-[#FAF9F8]">
       
-      <!-- 상단 헤더 & 계정 전환 (디자인 레퍼런스 다크 네이비 스타일) -->
+      <!-- 상단 헤더 (로그인된 본인 계정 전용) -->
       <div class="bg-[#002B41] px-5 py-3 border-b border-[#001F30] text-white flex items-center justify-between">
         <div class="flex items-center space-x-2.5">
           <span id="mobile-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-7 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">Fielder</span>
           <div>
-            <span class="text-[10px] text-slate-300 block leading-tight" id="worker-group-label">전기/기계설비팀</span>
-            <select id="worker-select-switch" data-native="true" onchange="switchWorkerAccount()" class="text-xs font-bold text-white bg-transparent outline-none block cursor-pointer">
-              <option value="user_worker_kang_e" class="bg-[#002B41] text-white" data-group="role_elec" data-group-name="전기/기계설비팀">강전기 기사</option>
-              <option value="user_worker_choi" class="bg-[#002B41] text-white" data-group="role_maint" data-group-name="영선/시설보수팀">최영선 반장</option>
-              <option value="user_worker_lee_m" class="bg-[#002B41] text-white" data-group="role_maint" data-group-name="영선/시설보수팀">이영선 기사</option>
-              <option value="user_worker_jung_c" class="bg-[#002B41] text-white" data-group="role_clean" data-group-name="환경/미화청결팀">정미화 조장</option>
-              <option value="user_worker_park_c" class="bg-[#002B41] text-white" data-group="role_clean" data-group-name="환경/미화청결팀">박청결 사원</option>
-              <option value="user_worker_park_s" class="bg-[#002B41] text-white" data-group="role_sec" data-group-name="보안/방재안전팀">박보안 대원</option>
-            </select>
+            <span class="text-[10px] text-slate-300 block leading-tight" id="worker-group-label">소속 확인 중...</span>
+            <span id="worker-name-display" class="text-xs font-bold text-white block">로그인 확인 중...</span>
           </div>
         </div>
         <div class="flex items-center space-x-2">
           <button onclick="loadWorkerTasks()" class="text-[11px] text-slate-300 hover:text-white font-medium">새로고침</button>
+          <button onclick="logoutMobile()" class="text-[10px] text-slate-300 hover:text-white border border-white/20 px-1.5 py-0.5 rounded">로그아웃</button>
           <div id="worker-task-count" class="w-6 h-6 rounded-full bg-[#13B5EA] text-[#002B41] text-[11px] font-black flex items-center justify-center">
             0
           </div>
@@ -439,18 +433,63 @@
     let isSmsVerified = false;
     let hasReportPhoto = false;
     let hasCompletePhoto = false;
-    let currentWorkerId = 'user_worker_kang_e';
-    let currentWorkerGroupId = 'role_elec';
+    let currentWorkerId = '';
+    let currentWorkerName = '';
+    let currentWorkerGroupId = '';
+    let currentWorkerGroupName = '현장 실무팀';
+    let currentWorkerEmail = '';
+    let currentWorkerPhone = '';
     let currentResolutionMode = 'RESOLVED'; // 'RESOLVED' or 'UNRESOLVED'
 
+    async function logoutMobile() {
+      if (!confirm('로그아웃하시겠습니까?')) return;
+      try { await fetch('/api/logout', { method: 'POST' }); } catch(e){}
+      const tenant = new URLSearchParams(window.location.search).get('tenant') || '';
+      location.href = '/login' + (tenant ? '?tenant=' + encodeURIComponent(tenant) : '');
+    }
+
     async function init() {
-      // 1. URL 쿼리 파라미터 파싱 (테넌트, 사용자, 모드 지원)
+      // 1. URL 쿼리 파라미터 파싱
       const urlParams = new URLSearchParams(window.location.search);
       const tenant = urlParams.get('tenant');
-      const userId = urlParams.get('user_id');
+      const emailParam = urlParams.get('email');
       const mode = urlParams.get('mode');
 
-      // 2. 테넌트 정보 동적 로드 (로고 및 회사명 반영)
+      // 2. 본인 로그인 세션 필수 확인 (본인 계정만 접속 가능)
+      if (mode !== 'qr') {
+        try {
+          const meRes = await fetch('/api/me');
+          if (!meRes.ok) {
+            const redirectUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            const emailQs = emailParam ? `&email=${encodeURIComponent(emailParam)}` : '';
+            location.href = `/login?redirect=${redirectUrl}${emailQs}`;
+            return;
+          }
+          const meData = await meRes.json();
+          if (!meData.logged_in || !meData.user) {
+            const redirectUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            const emailQs = emailParam ? `&email=${encodeURIComponent(emailParam)}` : '';
+            location.href = `/login?redirect=${redirectUrl}${emailQs}`;
+            return;
+          }
+          currentWorkerId = meData.user.id;
+          currentWorkerName = meData.user.name || '실무자';
+          currentWorkerEmail = meData.user.email || '';
+          currentWorkerPhone = meData.user.phone || '';
+          currentWorkerGroupId = meData.user.custom_role_id || '';
+          currentWorkerGroupName = meData.user.role_name || (meData.user.role === 'SITE_MANAGER' ? '관제 관리자' : '현장 실무팀');
+
+          const nameDisplay = document.getElementById('worker-name-display');
+          if (nameDisplay) nameDisplay.innerText = currentWorkerName;
+          const groupLabel = document.getElementById('worker-group-label');
+          if (groupLabel) groupLabel.innerText = currentWorkerGroupName;
+        } catch (err) {
+          location.href = '/login';
+          return;
+        }
+      }
+
+      // 3. 테넌트 정보 동적 로드 (로고 및 회사명 반영)
       if (tenant) {
         try {
           const res = await fetch(`/api/settings/company?tenant=${tenant}`);
@@ -463,23 +502,6 @@
           }
         } catch (e) {
           console.error('Tenant load error:', e);
-        }
-      }
-
-      // 3. 특정 작업자 ID 전달 시 자동 스위칭
-      if (userId) {
-        const sel = document.getElementById('worker-select-switch');
-        if (sel) {
-          for (let i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value === userId) {
-              sel.selectedIndex = i;
-              currentWorkerId = sel.options[i].value;
-              currentWorkerGroupId = sel.options[i].getAttribute('data-group');
-              const groupLabel = document.getElementById('worker-group-label');
-              if (groupLabel) groupLabel.innerText = sel.options[i].getAttribute('data-group-name');
-              break;
-            }
-          }
         }
       }
 
@@ -503,15 +525,6 @@
         opt.innerText = l.name;
         select.appendChild(opt);
       });
-    }
-
-    function switchWorkerAccount() {
-      const sel = document.getElementById('worker-select-switch');
-      const opt = sel.options[sel.selectedIndex];
-      currentWorkerId = opt.value;
-      currentWorkerGroupId = opt.getAttribute('data-group');
-      document.getElementById('worker-group-label').innerText = opt.getAttribute('data-group-name');
-      loadWorkerTasks();
     }
 
     async function loadWorkerTasks() {
@@ -620,8 +633,7 @@
 
     // [신규] 실무자 현장 접수 (선착순 할당)
     async function claimWorkerTask(ticketId) {
-      const sel = document.getElementById('worker-select-switch');
-      const workerName = sel.options[sel.selectedIndex].text;
+      const workerName = currentWorkerName || '실무자';
       
       if (!confirm(`[${workerName}] 님으로 이 작업을 현장 접수하시겠습니까?\n접수 시 본인에게 작업이 할당되며 조치 보고(카메라/코멘트)가 활성화됩니다.`)) return;
 
@@ -724,8 +736,7 @@
     // 최종 보고 제출 (해결 가능 vs 해결 불가능 vs 외주 의뢰 API 분기 호출)
     async function submitFinalReport() {
       const id = document.getElementById('report-ticket-id').value;
-      const sel = document.getElementById('worker-select-switch');
-      const workerName = sel.options[sel.selectedIndex].text;
+      const workerName = currentWorkerName || '실무자';
 
       if (currentResolutionMode === 'RESOLVED') {
         // [해결 가능 경로]
@@ -1058,8 +1069,7 @@
 
     // ⭐️ [신규] 현장 순찰 점검 일지 제출
     async function submitPatrolLog() {
-      const sel = document.getElementById('worker-select-switch');
-      const workerName = sel.options[sel.selectedIndex].text;
+      const workerName = currentWorkerName || '실무자';
       const building = document.getElementById('patrol-building').value;
       const floor = document.getElementById('patrol-floor').value;
       const locName = document.getElementById('patrol-loc-name').value.trim() || `${building} ${floor} 공용 복도`;
@@ -1188,10 +1198,8 @@
 
     // ⭐️ [신규] 내 정보 탭 동기화
     async function updateProfileTab() {
-      const sel = document.getElementById('worker-select-switch');
-      const opt = sel.options[sel.selectedIndex];
-      const workerName = opt.text;
-      const groupName = opt.getAttribute('data-group-name') || '실무팀';
+      const workerName = currentWorkerName || '실무자';
+      const groupName = currentWorkerGroupName || '실무팀';
 
       const nameEl = document.getElementById('profile-name');
       const roleEl = document.getElementById('profile-role');
