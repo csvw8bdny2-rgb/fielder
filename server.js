@@ -273,6 +273,15 @@ function sendMessage(companyId, opts = {}) {
   }
 }
 
+function getClientIp(req) {
+  const xff = req.headers['x-forwarded-for'];
+  if (xff && process.env.TRUST_PROXY !== 'false') {
+    const parts = String(xff).split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1]; // rightmost proxy-appended IP
+  }
+  return req.socket?.remoteAddress || 'unknown';
+}
+
 // ⭐️ 입력값 검증 및 로그인 시도 제한 헬퍼
 function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -593,6 +602,9 @@ const server = http.createServer(async (req, res) => {
         pathname.startsWith('/api/users') ||
         pathname.startsWith('/api/roles') ||
         pathname.startsWith('/api/blocked-users') ||
+        pathname === '/api/analytics' ||
+        pathname === '/api/inspections/stats' ||
+        pathname === '/api/inspections/statistics' ||
         (pathname.startsWith('/api/settings/') && method !== 'GET') ||
         (pathname.startsWith('/api/locations') && method !== 'GET') ||
         (pathname.startsWith('/api/inspections/templates') && method !== 'GET');
@@ -1560,7 +1572,7 @@ const server = http.createServer(async (req, res) => {
         id,
         temp_password: isTemp ? rawPw : undefined,
         message: isTemp
-          ? `사용자가 등록되었습니다. 임시 비밀번호 [${rawPw}]를 전달하세요. (첫 로그인 시 변경 필수)`
+          ? '사용자가 등록되었습니다. 안내된 임시 비밀번호를 전달하세요. (첫 로그인 시 변경 필수)'
           : '사용자가 등록되었습니다.'
       });
     }
@@ -1671,7 +1683,7 @@ const server = http.createServer(async (req, res) => {
 
       db.prepare('UPDATE users SET password = ?, must_change_password = 1 WHERE id = ? AND company_id = ?').run(hashPassword(rawPw), userId, companyId);
       broadcastSSE('USER_UPDATED', { action: 'PASSWORD_RESET', id: userId, company_id: companyId }, companyId);
-      return sendJSON(res, 200, { success: true, temp_password: rawPw, message: `임시 비밀번호 [${rawPw}]로 재설정되었습니다. (첫 로그인 시 변경 필수)` });
+      return sendJSON(res, 200, { success: true, temp_password: rawPw, message: '임시 비밀번호가 재설정되었습니다. (첫 로그인 시 변경 필수)' });
     }
 
     // ==========================================
@@ -1692,9 +1704,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/patrol' && method === 'POST') {
       const body = await parseBody(req);
+      const reqSession = getSession(req);
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const { user_id, worker_name, building, floor, location_name, check_items, notes, photo_url } = body;
+      const { building, floor, location_name, check_items, notes, photo_url } = body;
+      const sessionUserId = (reqSession && reqSession.user && reqSession.user.id) || 'user_worker';
+      const sessionWorkerName = (reqSession && reqSession.user && reqSession.user.name) || '현장 실무자';
 
       let parsedItems = {};
       if (typeof check_items === 'string') {
@@ -1719,8 +1734,8 @@ const server = http.createServer(async (req, res) => {
       `).run(
         id,
         companyId,
-        user_id || 'user_worker_choi',
-        worker_name || '현장 실무자',
+        sessionUserId,
+        sessionWorkerName,
         building || '',
         floor || '',
         location_name || '순찰 구역',
@@ -1728,7 +1743,7 @@ const server = http.createServer(async (req, res) => {
         cleanNotes,
         photo_url || ''
       );
-      broadcastSSE('PATROL_SUBMITTED', { id, worker_name, location_name, company_id: companyId }, companyId);
+      broadcastSSE('PATROL_SUBMITTED', { id, worker_name: sessionWorkerName, location_name, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, message: '현장 순찰 점검 일지가 등록되었습니다.' });
     }
 
@@ -1887,7 +1902,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/inspections/schedule' && method === 'GET') {
       const companyId = resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const dateStr = (parsedUrl.query?.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const kstTodayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const dateStr = (parsedUrl.query?.date || kstTodayStr).slice(0, 10);
       const baseDate = new Date(dateStr + 'T00:00:00Z');
       const dayOfWeek = baseDate.getUTCDay(); // 0=Sun..6=Sat
       const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -1942,7 +1958,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/inspections/statistics' && method === 'GET') {
       const companyId = resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
       const endDate = (parsedUrl.query?.endDate || todayStr).slice(0, 10);
       const startDefault = new Date(new Date(endDate + 'T00:00:00Z').getTime() - 6 * 86400000).toISOString().slice(0, 10);
       const startDate = (parsedUrl.query?.startDate || startDefault).slice(0, 10);
@@ -2031,13 +2047,16 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/inspections/logs' && method === 'POST') {
       const body = await parseBody(req);
+      const reqSession = getSession(req);
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const limitCheck = checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
-      const { template_id, template_title, worker_id, worker_name, role_name, building, floor, location_name, results, notes, photo_url } = body;
+      const { template_id, template_title, role_name, building, floor, location_name, results, notes, photo_url } = body;
+      const sessionWorkerId = (reqSession && reqSession.user && reqSession.user.id) || null;
+      const sessionWorkerName = (reqSession && reqSession.user && reqSession.user.name) || '현장 실무자';
 
       let parsedResults = {};
       if (typeof results === 'string') {
@@ -2084,8 +2103,8 @@ const server = http.createServer(async (req, res) => {
         companyId,
         template_id || null,
         template_title || '현장 점검표',
-        worker_id || null,
-        worker_name || '현장 실무자',
+        sessionWorkerId,
+        sessionWorkerName,
         role_name || '직무 미지정',
         building || '',
         floor || '',
@@ -2096,36 +2115,70 @@ const server = http.createServer(async (req, res) => {
         photo_url || ''
       );
       consumeTicketLimit(companyId);
-      broadcastSSE('INSPECTION_LOG_SUBMITTED', { id, worker_name, template_title, location_name, status: computedStatus, company_id: companyId }, companyId);
+      broadcastSSE('INSPECTION_LOG_SUBMITTED', { id, worker_name: sessionWorkerName, template_title, location_name, status: computedStatus, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, status: computedStatus, message: '현장 점검 결과가 성공적으로 등록되었습니다.' });
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)$/) && method === 'GET') {
       const logId = pathname.split('/')[4];
-      const log = db.prepare('SELECT * FROM inspection_logs WHERE id = ?').get(logId);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const log = db.prepare('SELECT * FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
       if (!log) return sendJSON(res, 404, { error: '기록을 찾을 수 없습니다.' });
       return sendJSON(res, 200, log);
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)\/confirm$/) && method === 'POST') {
       const logId = pathname.split('/')[4];
-      const log = db.prepare('SELECT company_id, is_confirmed, worker_name FROM inspection_logs WHERE id = ?').get(logId);
+      const reqSession = getSession(req);
+      const isManager = reqSession && (reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN');
+      if (!isManager) return sendJSON(res, 403, { error: '관리자 권한이 필요합니다.' });
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+
+      const log = db.prepare('SELECT company_id, is_confirmed, worker_name FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
       if (!log) return sendJSON(res, 404, { error: '기록을 찾을 수 없습니다.' });
       const nextStatus = log.is_confirmed ? 0 : 1;
+      const confirmerName = (reqSession.user && reqSession.user.name) || '관리자';
       db.prepare(`
         UPDATE inspection_logs
         SET is_confirmed = ?,
             confirmed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END,
-            confirmed_by = CASE WHEN ? = 1 THEN '김관리 소장' ELSE NULL END
-        WHERE id = ?
-      `).run(nextStatus, nextStatus, nextStatus, logId);
+            confirmed_by = CASE WHEN ? = 1 THEN ? ELSE NULL END
+        WHERE id = ? AND company_id = ?
+      `).run(nextStatus, nextStatus, nextStatus, confirmerName, logId, companyId);
       broadcastSSE('INSPECTION_LOG_SUBMITTED', { id: logId, is_confirmed: nextStatus, action: 'CONFIRM', company_id: log.company_id }, log.company_id);
       return sendJSON(res, 200, { success: true, is_confirmed: nextStatus, message: nextStatus ? '확인 완료되었습니다.' : '확인이 취소되었습니다.' });
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const logId = pathname.split('/')[4];
-      const logRow = db.prepare('SELECT company_id FROM inspection_logs WHERE id = ?').get(logId);
-      const companyId = (logRow && logRow.company_id) || resolveCompanyId(parsedUrl, null, req);
-      const { building, floor, location_name, status, notes, results, is_confirmed } = await parseBody(req);
-      const resultsStr = results !== undefined ? (typeof results === 'object' ? JSON.stringify(results) : results) : null;
+      const reqSession = getSession(req);
+      const isManager = reqSession && (reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN');
+      if (!isManager) return sendJSON(res, 403, { error: '관리자 권한이 필요합니다.' });
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+
+      const logRow = db.prepare('SELECT company_id, results, status FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
+      if (!logRow) return sendJSON(res, 404, { error: '기록을 찾을 수 없습니다.' });
+
+      const { building, floor, location_name, notes, results, is_confirmed } = await parseBody(req);
+      let resultsStr = null;
+      let nextComputedStatus = null;
+      if (results !== undefined) {
+        let parsedRes = {};
+        if (typeof results === 'string') {
+          try { parsedRes = JSON.parse(results); } catch (e) { parsedRes = {}; }
+        } else if (results && typeof results === 'object') {
+          parsedRes = results;
+        }
+        resultsStr = JSON.stringify(parsedRes);
+        const vals = Object.values(parsedRes);
+        const isBad = vals.some(v => {
+          const s = String(v || '').trim();
+          return s === '불량' || s === '이상' || s === '아니오' || s.toUpperCase() === 'BAD' || s.toUpperCase() === 'FAIL' || v === false;
+        });
+        const isWarn = !isBad && vals.some(v => String(v || '').trim() === '주의');
+        nextComputedStatus = isBad ? '불량' : (isWarn ? '주의' : '양호');
+      }
+
       db.prepare(`
         UPDATE inspection_logs
         SET building = COALESCE(?, building),
@@ -2135,8 +2188,8 @@ const server = http.createServer(async (req, res) => {
             notes = COALESCE(?, notes),
             results = COALESCE(?, results),
             is_confirmed = COALESCE(?, is_confirmed)
-        WHERE id = ?
-      `).run(building || null, floor || null, location_name || null, status || null, notes || null, resultsStr, is_confirmed !== undefined ? is_confirmed : null, logId);
+        WHERE id = ? AND company_id = ?
+      `).run(building || null, floor || null, location_name || null, nextComputedStatus, notes || null, resultsStr, is_confirmed !== undefined ? is_confirmed : null, logId, companyId);
       broadcastSSE('INSPECTION_LOG_SUBMITTED', { id: logId, action: 'UPDATE', company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '점검 결과가 수정되었습니다.' });
     }
@@ -2152,7 +2205,7 @@ const server = http.createServer(async (req, res) => {
       const cleanPhone = String(phone || '').trim();
       if (!cleanPhone || !isValidPhone(cleanPhone)) return sendJSON(res, 400, { error: '올바른 휴대폰 번호를 입력하세요.' });
 
-      const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+      const clientIp = getClientIp(req);
       const nowMs = Date.now();
       const prune = (arr, winMs) => arr.filter(t => nowMs - t < winMs);
       const phoneKey = `p:${cleanPhone}`;
@@ -2197,16 +2250,12 @@ const server = http.createServer(async (req, res) => {
       if (!cleanPhone || !isValidPhone(cleanPhone)) {
         return sendJSON(res, 400, { error: 'INVALID_PHONE', message: '올바른 휴대폰 번호를 입력해주세요.' });
       }
-      let refTenant = '';
-      if (req.headers.referer) {
-        const rm = req.headers.referer.match(/[?&]tenant=([a-zA-Z0-9_-]+)/);
-        if (rm && rm[1]) refTenant = rm[1];
-      }
-      const tenantSlug = (tenant || (parsedUrl.query && parsedUrl.query.tenant) || refTenant || '').toLowerCase();
-      // S2: QA 우회는 env가 명시적으로 'true'이고 qa/test 테넌트일 때만 허용 (기본 꺼짐, test_mode 제거)
+      // S2 & Item 4: QA 우회는 env가 명시적으로 'true'이고 DB 상의 회사 subdomain이 qa/test일 때만 허용
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const dbComp = companyId ? db.prepare("SELECT id, subdomain FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId) : null;
+      const dbSlug = (dbComp && dbComp.subdomain ? dbComp.subdomain : '').toLowerCase();
       const qaBypassEnabled = process.env.ENABLE_QA_OTP_BYPASS === 'true';
-      const isQaContext = qaBypassEnabled && (tenantSlug.includes('qa') || tenantSlug.includes('test'));
-      const companyId = resolveCompanyId(parsedUrl, body, req) || 'unknown';
+      const isQaContext = qaBypassEnabled && dbSlug && (dbSlug.includes('qa') || dbSlug.includes('test'));
 
       const issueVerifyToken = () => {
         const token = 'qrt_' + crypto.randomBytes(24).toString('hex');
@@ -2214,7 +2263,7 @@ const server = http.createServer(async (req, res) => {
         db.prepare(`
           INSERT INTO qr_verify_tokens (token, company_id, phone, expires_at, created_at)
           VALUES (?, ?, ?, datetime('now', '+10 minutes'), ?)
-        `).run(token, companyId, cleanPhone, nowIso);
+        `).run(token, companyId || 'unknown', cleanPhone, nowIso);
         return token;
       };
 
@@ -2841,7 +2890,7 @@ const server = http.createServer(async (req, res) => {
       const email = rawIdentifier.toLowerCase();
       const password = (body.password || '').trim();
       const tenant = (body.tenant || (parsedUrl.query && parsedUrl.query.tenant) || '').trim().toLowerCase();
-      const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+      const clientIp = getClientIp(req);
       const rateKey = `${clientIp}:${email}`;
 
       const rl = checkLoginRateLimit(rateKey);
@@ -2856,10 +2905,13 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '비밀번호를 입력해주세요.' });
       }
 
-      // 1) 슈퍼 관리자 계정 체크 (환경변수 우선)
+      // 1) 슈퍼 관리자 계정 체크 (환경변수 필수 - 기본 비밀번호 미사용)
       const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'admin@fielder.kr').toLowerCase();
       if (email === superAdminEmail) {
-        const superAdminPw = process.env.SUPER_ADMIN_PASSWORD || 'admin1234';
+        const superAdminPw = process.env.SUPER_ADMIN_PASSWORD;
+        if (!superAdminPw) {
+          return sendJSON(res, 503, { error: '슈퍼 관리자 비밀번호 환경변수(SUPER_ADMIN_PASSWORD)가 설정되지 않아 로그인할 수 없습니다.' });
+        }
         if (password !== superAdminPw) {
           recordLoginFailure(rateKey);
           return sendJSON(res, 401, { error: '이메일 또는 비밀번호가 일치하지 않습니다.' });
