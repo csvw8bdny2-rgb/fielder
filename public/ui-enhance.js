@@ -141,10 +141,18 @@
       const item = document.createElement('div');
       const isSelected = idx === selectEl.selectedIndex;
       item.className = 'kf-select-option' + (isSelected ? ' kf-selected' : '') + (opt.disabled ? ' kf-disabled' : '');
-      item.innerHTML = `
-        <span style="overflow:hidden;text-overflow:ellipsis;">${opt.text}</span>
-        ${isSelected ? '<span style="color:#13B5EA;font-weight:900;">✓</span>' : ''}
-      `;
+      const labelSpan = document.createElement('span');
+      labelSpan.style.overflow = 'hidden';
+      labelSpan.style.textOverflow = 'ellipsis';
+      labelSpan.textContent = opt.text;
+      item.appendChild(labelSpan);
+      if (isSelected) {
+        const checkSpan = document.createElement('span');
+        checkSpan.style.color = '#13B5EA';
+        checkSpan.style.fontWeight = '900';
+        checkSpan.textContent = '✓';
+        item.appendChild(checkSpan);
+      }
       if (!opt.disabled) {
         item.addEventListener('click', function(e) {
           e.stopPropagation();

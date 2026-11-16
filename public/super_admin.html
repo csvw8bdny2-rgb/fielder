@@ -504,9 +504,9 @@
         <p class="text-xs text-red-600">삭제 시 해당 고객사의 모든 시설 데이터가 영구 제거됩니다.</p>
 
         <div class="flex items-center space-x-2 text-xs">
-          <input type="password" id="delete-pwd-input" placeholder="비밀번호 입력" class="max-w-xs h-9 border border-red-300 rounded px-3 outline-none focus:border-red-500">
-          <button onclick="deleteCurrentTeam()" class="h-9 px-3.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors">
-            팀 삭제
+          <input type="text" id="delete-pwd-input" placeholder="삭제할 회사명을 정확히 입력" class="max-w-xs h-9 border border-red-300 rounded px-3 outline-none focus:border-red-500">
+          <button onclick="deleteCurrentTeam()" class="h-9 px-3.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded transition-colors whitespace-nowrap">
+            회사 삭제
           </button>
         </div>
       </div>
@@ -1248,25 +1248,30 @@
 
     async function deleteCurrentTeam() {
       if (!selectedCompany) return;
-      const pwd = document.getElementById('delete-pwd-input').value;
-      if (!pwd) return alert('확인을 위해 비밀번호를 입력해주세요.');
+      const confirmName = document.getElementById('delete-pwd-input').value.trim();
+      if (!confirmName || confirmName !== selectedCompany.name) {
+        return showSAToast(`확인을 위해 회사명 [${selectedCompany.name}]을 정확히 입력해주세요.`, true);
+      }
 
-      if (!confirm(`경고: [${selectedCompany.name}] 회사의 모든 데이터가 영구 삭제됩니다. 진행하시겠습니까?`)) return;
+      if (!confirm(`[${selectedCompany.name}] 회사를 삭제(보관 전환)하시겠습니까?`)) return;
 
       try {
         const res = await fetch(`/api/super-admin/companies/${selectedCompany.id}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm_name: confirmName })
         });
         const data = await res.json();
         if (res.ok) {
-          alert(data.message || '삭제되었습니다.');
+          document.getElementById('delete-pwd-input').value = '';
+          showSAToast(data.message || '삭제되었습니다.');
           showDashboardView();
           loadCompanies();
         } else {
-          alert('삭제 실패: ' + data.error);
+          showSAToast('삭제 실패: ' + (data.error || '오류'), true);
         }
       } catch (e) {
-        alert('오류: ' + e.message);
+        showSAToast('오류: ' + e.message, true);
       }
     }
 

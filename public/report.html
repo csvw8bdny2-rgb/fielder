@@ -196,9 +196,10 @@
     let photoBase64 = null;
     let isVerified = false;
     let verifiedPhone = '';
+    let qrVerifyToken = '';
     let targetLocationObj = null;
 
-    // 1. 초기 위치 및 회사 정보 자동 로드
+    // 1. 초기 위치 및 회사 정보 자동 로드 (공개 API 사용)
     async function init() {
       const params = new URLSearchParams(window.location.search);
       const tenant = params.get('tenant') || '';
@@ -210,7 +211,7 @@
       // 회사 정보
       if (tenant) {
         try {
-          const res = await fetch(`/api/settings/company?tenant=${tenant}`);
+          const res = await fetch(`/api/public/company?tenant=${encodeURIComponent(tenant)}`);
           if (res.ok) {
             const data = await res.json();
             if (data.name) document.getElementById('report-company-name').innerText = data.name;
@@ -219,10 +220,10 @@
         } catch (e) {}
       }
 
-      // 구역 목록 조회
+      // 구역 목록 조회 (공개 API)
       try {
-        const res = await fetch('/api/locations');
-        const locs = await res.json();
+        const res = await fetch(`/api/public/locations?tenant=${encodeURIComponent(tenant)}`);
+        const locs = res.ok ? await res.json() : [];
 
         // 1) locId로 매칭
         if (locId) {
@@ -239,14 +240,14 @@
 
         if (targetLocationObj) {
           document.getElementById('report-location-id').value = targetLocationObj.id;
-          document.getElementById('display-location-name').innerText = `${targetLocationObj.building || '본관'} ${targetLocationObj.floor || ''} ${targetLocationObj.name}`;
+          document.getElementById('display-location-name').innerText = `${targetLocationObj.building || ''} ${targetLocationObj.floor || ''} ${targetLocationObj.name}`.trim();
         } else if (locName) {
           document.getElementById('display-location-name').innerText = `${locBldg} ${locFloor} ${locName}`.trim();
         } else {
-          document.getElementById('display-location-name').innerText = '본관 1층 로비';
+          document.getElementById('display-location-name').innerText = '현장 공용 구역';
         }
       } catch (e) {
-        document.getElementById('display-location-name').innerText = locName ? `${locFloor} ${locName}` : '현장 구역';
+        document.getElementById('display-location-name').innerText = locName ? `${locFloor} ${locName}`.trim() : '현장 구역';
       }
     }
 
@@ -343,6 +344,7 @@
         if (res.ok) {
           isVerified = true;
           verifiedPhone = phone;
+          qrVerifyToken = data.verification_token || '';
 
           document.getElementById('badge-verified').classList.remove('hidden');
           document.getElementById('code-verify-box').classList.add('hidden');
@@ -391,12 +393,13 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            location_id: locId || 'loc_1f_lobby',
+            location_id: locId || '',
             category: 'FACILITY',
             title: comment ? (comment.length > 30 ? comment.substring(0, 30) + '...' : comment) : '현장 사진 민원 접수',
             description: comment,
             phone: verifiedPhone,
             reporter_phone: verifiedPhone,
+            qr_verify_token: qrVerifyToken,
             photo_url: photoBase64,
             tenant: getTenantParam()
           })

@@ -88,19 +88,19 @@
             <span class="block text-[11px] font-bold text-[#1E1F21]" id="mobile-checklist-title">필수 순찰 점검 체크리스트</span>
             <div id="mobile-checklist-items-body" class="space-y-1.5">
               <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
-                <input type="checkbox" id="chk-fire" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <input type="checkbox" id="chk-fire" class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
                 <span>[소방] 소화전 압력 정상 / 비상구 적치물 없음</span>
               </label>
               <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
-                <input type="checkbox" id="chk-light" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <input type="checkbox" id="chk-light" class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
                 <span>[조명] 복도 및 비상계단 LED 점등 상태 양호</span>
               </label>
               <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
-                <input type="checkbox" id="chk-leak" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <input type="checkbox" id="chk-leak" class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
                 <span>[위생] 화장실 수전 누수 없음 / 악취 및 배수 양호</span>
               </label>
               <label class="flex items-center space-x-2 text-[11px] p-2 bg-[#FAF9F8] rounded-lg cursor-pointer">
-                <input type="checkbox" id="chk-door" checked class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
+                <input type="checkbox" id="chk-door" class="w-4 h-4 text-[#1E1F21] accent-[#1E1F21]">
                 <span>[공용] 방화문 자동 도어클로저 및 승강기 정상</span>
               </label>
             </div>
@@ -1299,24 +1299,36 @@
         try { items = typeof tmpl.items === 'string' ? JSON.parse(tmpl.items) : (tmpl.items || []); } catch (e) {}
 
         const results = {};
+        let missing = false;
         items.forEach(item => {
           if (item.type === 'CHECK') {
             results[item.id] = document.getElementById(`mob-chk-${item.id}`)?.checked || false;
           } else if (item.type === 'YES_NO') {
             const checked = document.querySelector(`input[name="mob-yn-${item.id}"]:checked`);
-            results[item.id] = checked ? checked.value : '네';
+            if (!checked) missing = true;
+            else results[item.id] = checked.value;
           } else if (item.type === 'TEXT') {
-            results[item.id] = document.getElementById(`mob-txt-${item.id}`)?.value.trim() || '';
+            const val = document.getElementById(`mob-txt-${item.id}`)?.value.trim() || '';
+            if (!val) missing = true;
+            results[item.id] = val;
           } else if (item.type === 'RADIO') {
             const checked = document.querySelector(`input[name="mob-rad-${item.id}"]:checked`);
-            results[item.id] = checked ? checked.value : (item.options?.[0] || '');
+            if (!checked) missing = true;
+            else results[item.id] = checked.value;
           } else if (item.type === 'CHECKBOX') {
             const checkboxes = document.querySelectorAll(`input[name="mob-cb-${item.id}"]:checked`);
-            results[item.id] = Array.from(checkboxes).map(c => c.value);
+            const arr = Array.from(checkboxes).map(c => c.value);
+            if (arr.length === 0) missing = true;
+            results[item.id] = arr;
           }
         });
 
-        await fetch('/api/inspections/logs', {
+        if (missing) {
+          showMobileToast('모든 필수 점검 항목을 선택·입력해주세요.', true);
+          return;
+        }
+
+        const insRes = await fetch('/api/inspections/logs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1328,19 +1340,34 @@
             building,
             floor,
             location_name: locName,
-            status: '양호',
-            notes: notes || '현장 점검 완료 (정상)',
+            notes,
             results
           })
         });
+        const insData = await insRes.json().catch(() => ({}));
+        if (!insRes.ok) {
+          showMobileToast(insData.error || insData.message || '점검 등록 실패', true);
+          return;
+        }
+        showMobileToast(`[점검 완료: ${insData.status || '등록'}] ${building} ${floor} 점검 결과가 등록되었습니다.`);
+        document.getElementById('patrol-loc-name').value = '';
+        document.getElementById('patrol-notes').value = '';
+        await loadPatrolHistory();
+        updateProfileTab();
+        return;
       }
 
       const checkItems = {
-        fire: document.getElementById('chk-fire') ? document.getElementById('chk-fire').checked : true,
-        light: document.getElementById('chk-light') ? document.getElementById('chk-light').checked : true,
-        leak: document.getElementById('chk-leak') ? document.getElementById('chk-leak').checked : true,
-        door: document.getElementById('chk-door') ? document.getElementById('chk-door').checked : true
+        fire: document.getElementById('chk-fire')?.checked || false,
+        light: document.getElementById('chk-light')?.checked || false,
+        leak: document.getElementById('chk-leak')?.checked || false,
+        door: document.getElementById('chk-door')?.checked || false
       };
+      const checkedCount = Object.values(checkItems).filter(Boolean).length;
+      if (checkedCount === 0 && !notes) {
+        showMobileToast('점검 항목을 체크하거나 특이사항 메모를 입력해주세요.', true);
+        return;
+      }
 
       const res = await fetch('/api/patrol', {
         method: 'POST',
@@ -1352,8 +1379,8 @@
           floor,
           location_name: locName,
           check_items: checkItems,
-          notes: notes || '전 항목 점검 완료, 특이사항 없음',
-          photo_url: 'patrol_done.jpg'
+          notes,
+          photo_url: ''
         })
       });
 

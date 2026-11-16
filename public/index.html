@@ -4551,8 +4551,7 @@
 
       const tenant = getTenantParam();
       const tenantQs = tenant ? `&tenant=${encodeURIComponent(tenant)}` : '';
-      const targetUrl = `${window.location.origin}/report?locId=${encodeURIComponent(loc.id)}&loc=${encodeURIComponent(loc.name)}&floor=${encodeURIComponent(loc.floor)}&bldg=${encodeURIComponent(loc.building || '본관')}${tenantQs}`;
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
+      const qrApiUrl = `/api/locations/${encodeURIComponent(loc.id)}/qr.svg?size=300${tenantQs}`;
       
       document.getElementById('qr-modal-img').src = qrApiUrl;
       document.getElementById('modal-qr-preview').classList.remove('hidden');
@@ -4565,13 +4564,13 @@
 
     function printLocationQrFromModal() {
       if (!currentQrLoc) return;
-      const locName = currentQrLoc.name;
-      const locFloor = currentQrLoc.floor;
+      const escHtml = (s) => String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+      const locName = escHtml(currentQrLoc.name);
+      const locFloor = escHtml(currentQrLoc.floor);
       const tenant = getTenantParam();
       const tenantQs = tenant ? `&tenant=${encodeURIComponent(tenant)}` : '';
-      const targetUrl = `${window.location.origin}/report?locId=${encodeURIComponent(currentQrLoc.id)}&loc=${encodeURIComponent(locName)}&floor=${encodeURIComponent(locFloor)}&bldg=${encodeURIComponent(currentQrLoc.building || '본관')}${tenantQs}`;
-      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(targetUrl)}`;
-      const compName = document.getElementById('header-company-name').innerText || '통합시설관리본부';
+      const qrSrc = `/api/locations/${encodeURIComponent(currentQrLoc.id)}/qr.svg?size=350${tenantQs}`;
+      const compName = escHtml(document.getElementById('header-company-name').innerText || '통합시설관리본부');
 
       const printWin = window.open('', '_blank');
       printWin.document.write(`
@@ -4617,13 +4616,13 @@
 
     function downloadLocationQrPng() {
       if (!currentQrLoc) return;
-      const targetUrl = `${window.location.origin}/mobile?loc=${encodeURIComponent(currentQrLoc.name)}&floor=${encodeURIComponent(currentQrLoc.floor)}`;
-      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(targetUrl)}`;
+      const tenant = getTenantParam();
+      const tenantQs = tenant ? `&tenant=${encodeURIComponent(tenant)}` : '';
+      const qrSrc = `/api/locations/${encodeURIComponent(currentQrLoc.id)}/qr.png?size=500${tenantQs}`;
       
       const a = document.createElement('a');
       a.href = qrSrc;
       a.download = `QR_${currentQrLoc.floor}_${currentQrLoc.name}.png`;
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -5296,14 +5295,14 @@
       const data = await res.json();
 
       document.getElementById('stat-total').innerText = (data.total_tickets || 0) + ' 건';
-      document.getElementById('stat-lead-time').innerText = (data.avg_lead_time_hours || 0) + ' 시간';
+      document.getElementById('stat-lead-time').innerText = (data.avg_lead_time_hours !== null && data.avg_lead_time_hours !== undefined) ? (data.avg_lead_time_hours + ' 시간') : '-';
       document.getElementById('stat-rate').innerText = (data.completion_rate || 0) + ' %';
-      document.getElementById('stat-bottleneck').innerText = data.bottleneck_step || '데이터 수집 중';
+      document.getElementById('stat-bottleneck').innerText = data.bottleneck_step || '-';
 
       const barContainer = document.getElementById('leadtime-bars');
       barContainer.innerHTML = '';
       if (!data.lead_time_breakdown || data.lead_time_breakdown.length === 0) {
-        barContainer.innerHTML = '<div class="text-xs text-slate-400 py-2">등록된 처리 리드타임 데이터가 없습니다.</div>';
+        barContainer.innerHTML = '<div class="text-xs text-slate-400 py-4 text-center">아직 완료된 작업이 없어요.</div>';
       } else {
         data.lead_time_breakdown.forEach(b => {
           const div = document.createElement('div');
@@ -5879,7 +5878,7 @@
       const goodEl = document.getElementById('chk-kpi-good');
       if (goodEl) goodEl.innerText = goodCount + ' 건';
       const rateEl = document.getElementById('chk-kpi-good-rate');
-      if (rateEl) rateEl.innerText = total > 0 ? `전체 대비 ${Math.round((goodCount / total) * 100)}%` : '전체 대비 100%';
+      if (rateEl) rateEl.innerText = total > 0 ? `전체 대비 ${Math.round((goodCount / total) * 100)}%` : '-';
       const warnEl = document.getElementById('chk-kpi-warn');
       if (warnEl) warnEl.innerText = warnCount + ' 건';
       const logCountEl = document.getElementById('chk-log-total-count');

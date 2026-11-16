@@ -6,11 +6,18 @@
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": ["fielder", "fms", "facility-management"],
+  "keywords": [
+    "fielder",
+    "fms",
+    "facility-management"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "engines": {
     "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

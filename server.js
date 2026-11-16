@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
 const crypto = require('node:crypto');
+const QRCode = require('qrcode');
 const { db, initDatabase, hashPassword, verifyPassword } = require('./db.js');
 
 initDatabase();
@@ -587,13 +588,24 @@ const server = http.createServer(async (req, res) => {
       if (pathname.startsWith('/api/super-admin') && reqSession.role !== 'SUPER_ADMIN') {
         return sendJSON(res, 403, { error: '슈퍼 관리자 권한이 필요합니다.' });
       }
+      const isManagerOrSuper = reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN';
+      const isAdminOnlyEndpoint =
+        pathname.startsWith('/api/users') ||
+        pathname.startsWith('/api/roles') ||
+        pathname.startsWith('/api/blocked-users') ||
+        (pathname.startsWith('/api/settings/') && method !== 'GET') ||
+        (pathname.startsWith('/api/locations') && method !== 'GET') ||
+        (pathname.startsWith('/api/inspections/templates') && method !== 'GET');
+      if (isAdminOnlyEndpoint && !isManagerOrSuper) {
+        return sendJSON(res, 403, { error: '회사 관리자 권한이 필요합니다.' });
+      }
     }
 
     // ⭐️ 공개 회사 기본 정보 (로그인/QR 신고 화면용 최소 정보)
     if (pathname === '/api/public/company' && method === 'GET') {
       const tenant = (parsedUrl.query?.tenant || '').trim();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare('SELECT id, name, subdomain, logo_url, status FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
+      const comp = db.prepare("SELECT id, name, subdomain, logo_url, status FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       return sendJSON(res, 200, comp);
     }
@@ -602,10 +614,44 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/public/locations' && method === 'GET') {
       const tenant = (parsedUrl.query?.tenant || '').trim();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare('SELECT id FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
+      const comp = db.prepare("SELECT id FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? ORDER BY building ASC, floor ASC, name ASC').all(comp.id);
       return sendJSON(res, 200, locs);
+    }
+
+    // ⭐️ [P0-추가 B] 서버 자체 QR SVG/PNG 생성 API (외부 qrserver 의존 제거 + URL 통일)
+    if (pathname.match(/^\/api\/locations\/([^/]+)\/qr\.(svg|png)$/) && method === 'GET') {
+      const locId = pathname.split('/')[3];
+      const ext = pathname.endsWith('.png') ? 'png' : 'svg';
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+
+      const loc = db.prepare('SELECT id, company_id, name, building, floor FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
+      if (!loc) return sendJSON(res, 404, { error: '해당 회사의 구역을 찾을 수 없습니다.' });
+
+      const comp = db.prepare('SELECT subdomain FROM companies WHERE id = ?').get(companyId);
+      const slug = (comp && comp.subdomain) || 'central';
+      const baseOrigin = (process.env.PUBLIC_BASE_URL || `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`).replace(/\/$/, '');
+      const targetUrl = `${baseOrigin}/report?locId=${encodeURIComponent(loc.id)}&tenant=${encodeURIComponent(slug)}`;
+      const size = Math.min(800, Math.max(120, parseInt(parsedUrl.query?.size || '300', 10) || 300));
+
+      if (ext === 'png') {
+        const buf = await QRCode.toBuffer(targetUrl, { width: size, margin: 1 });
+        res.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'no-store',
+          'Content-Disposition': `attachment; filename="qr-${loc.id}.png"`
+        });
+        return res.end(buf);
+      } else {
+        const svg = await QRCode.toString(targetUrl, { type: 'svg', width: size, margin: 1 });
+        res.writeHead(200, {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'no-store'
+        });
+        return res.end(svg);
+      }
     }
 
     // ==========================================
@@ -1350,13 +1396,34 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 201, { success: true, id, ticket_no: ticketNo, message: '이상 신고가 관제실에 즉시 접수되었습니다.' });
     }
 
-    // [POST] /api/tickets/qr (QR 간편 신고 접수)
+    // [POST] /api/tickets/qr (QR 간편 신고 접수 - 서버 인증토큰 및 구역 소속 검증 필수)
     if (pathname === '/api/tickets/qr' && method === 'POST') {
       const body = await parseBody(req);
-      const { location_id, category, title, description, phone, reporter_name, photo_url } = body;
-      const companyId = resolveCompanyId(parsedUrl, body);
+      const { location_id, category, title, description, phone, reporter_name, photo_url, qr_verify_token } = body;
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) {
+        return sendJSON(res, 400, { error: 'TENANT_REQUIRED', message: '회사(테넌트) 정보를 확인할 수 없습니다.' });
+      }
 
-      const isBlocked = db.prepare('SELECT reason FROM blocked_users WHERE phone = ? AND company_id = ?').get(phone, companyId);
+      const cleanPhone = String(phone || '').trim();
+      if (!cleanPhone || !isValidPhone(cleanPhone)) {
+        return sendJSON(res, 400, { error: 'INVALID_PHONE', message: '올바른 휴대폰 번호를 입력해주세요.' });
+      }
+
+      // S1: 서버 발급 단발성 휴대폰 인증 토큰 검증
+      const tokenVal = String(qr_verify_token || body.verification_token || '').trim();
+      if (!tokenVal) {
+        return sendJSON(res, 401, { error: 'PHONE_VERIFICATION_REQUIRED', message: '휴대폰 본인 인증이 필요합니다.' });
+      }
+      const tokenRow = db.prepare(`
+        SELECT token, company_id, phone FROM qr_verify_tokens
+        WHERE token = ? AND company_id = ? AND phone = ? AND used_at IS NULL AND expires_at > datetime('now')
+      `).get(tokenVal, companyId, cleanPhone);
+      if (!tokenRow) {
+        return sendJSON(res, 401, { error: 'INVALID_VERIFICATION_TOKEN', message: '휴대폰 인증이 만료되었거나 유효하지 않습니다. 다시 인증해주세요.' });
+      }
+
+      const isBlocked = db.prepare('SELECT reason FROM blocked_users WHERE phone = ? AND company_id = ?').get(cleanPhone, companyId);
       if (isBlocked) {
         return sendJSON(res, 403, { error: 'BLOCKED_USER', message: `신고가 제한된 연락처입니다: ${isBlocked.reason}` });
       }
@@ -1366,33 +1433,42 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
 
-      let finalLocId = location_id;
-      if (!finalLocId) {
-        const firstLoc = db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
-        if (firstLoc) {
-          finalLocId = firstLoc.id;
-        } else {
-          const defaultLocId = 'loc_' + Date.now();
-          db.prepare(`
-            INSERT INTO locations (id, company_id, code, name, building, floor)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `).run(defaultLocId, companyId, 'LOC-' + Date.now().toString().slice(-6), location_name || '현장 공용 구역', building || '본관', floor || '1F');
-          finalLocId = defaultLocId;
+      // S4 & S5: 구역 소속 검증 (타사 구역 ID 차단 + 구역 없음 500 방지)
+      let finalLocId = location_id ? String(location_id).trim() : '';
+      if (finalLocId) {
+        const validLoc = db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(finalLocId, companyId);
+        if (!validLoc) {
+          return sendJSON(res, 400, { error: 'INVALID_LOCATION', message: '해당 회사의 유효한 구역이 아닙니다.' });
         }
+      } else {
+        const firstLoc = db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
+        if (!firstLoc) {
+          return sendJSON(res, 400, { error: 'NO_LOCATIONS', message: '등록된 시설 구역이 없어 신고를 접수할 수 없습니다. 관리자에게 문의하세요.' });
+        }
+        finalLocId = firstLoc.id;
       }
 
+      const cleanTitle = String(title || '').trim() || 'QR 현장 불편 신고';
       const id = 't_' + Date.now();
       const ticketNo = 'T-' + Math.floor(1000 + Math.random() * 9000);
 
-      db.prepare(`
-        INSERT INTO tickets (
-          id, ticket_no, company_id, location_id, category, title, description, 
-          reporter_type, reporter_name, reporter_phone, photo_url, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PUBLIC_QR', ?, ?, ?, 'PENDING', datetime('now'))
-      `).run(id, ticketNo, companyId, finalLocId, category || 'FACILITY', title, description || '', reporter_name || '방문객', phone, photo_url || null);
+      db.exec('BEGIN');
+      try {
+        db.prepare(`UPDATE qr_verify_tokens SET used_at = datetime('now') WHERE token = ?`).run(tokenVal);
+        db.prepare(`
+          INSERT INTO tickets (
+            id, ticket_no, company_id, location_id, category, title, description, 
+            reporter_type, reporter_name, reporter_phone, photo_url, status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PUBLIC_QR', ?, ?, ?, 'PENDING', datetime('now'))
+        `).run(id, ticketNo, companyId, finalLocId, category || 'FACILITY', cleanTitle, description || '', reporter_name || '방문객', cleanPhone, photo_url || null);
+        db.exec('COMMIT');
+      } catch (err) {
+        try { db.exec('ROLLBACK'); } catch (e) {}
+        throw err;
+      }
 
       consumeTicketLimit(companyId);
-      broadcastSSE('TICKET_CREATED', { ticket_id: id, title, type: 'PUBLIC_QR', company_id: companyId }, companyId);
+      broadcastSSE('TICKET_CREATED', { ticket_id: id, title: cleanTitle, type: 'PUBLIC_QR', company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, ticket_no: ticketNo, message: '신고가 접수되었습니다.' });
     }
 
@@ -1619,6 +1695,23 @@ const server = http.createServer(async (req, res) => {
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { user_id, worker_name, building, floor, location_name, check_items, notes, photo_url } = body;
+
+      let parsedItems = {};
+      if (typeof check_items === 'string') {
+        try { parsedItems = JSON.parse(check_items); } catch (e) { parsedItems = {}; }
+      } else if (check_items && typeof check_items === 'object') {
+        parsedItems = check_items;
+      }
+      const entries = Object.entries(parsedItems);
+      if (entries.length === 0) {
+        return sendJSON(res, 400, { error: '최소 1개 이상의 순찰 점검 항목에 응답해주세요.' });
+      }
+      const hasBad = entries.some(([, v]) => String(v).includes('불량') || String(v).toUpperCase() === 'BAD' || v === false);
+      const cleanNotes = String(notes || '').trim();
+      if (hasBad && !cleanNotes && !photo_url) {
+        return sendJSON(res, 400, { error: '불량 항목이 있는 경우 특이사항 메모 또는 현장 사진 첨부가 필수입니다.' });
+      }
+
       const id = 'pt_' + Date.now();
       db.prepare(`
         INSERT INTO patrol_logs (id, company_id, user_id, worker_name, building, floor, location_name, check_items, notes, photo_url, created_at)
@@ -1628,11 +1721,11 @@ const server = http.createServer(async (req, res) => {
         companyId,
         user_id || 'user_worker_choi',
         worker_name || '현장 실무자',
-        building || '본관',
-        floor || '1F',
+        building || '',
+        floor || '',
         location_name || '순찰 구역',
-        typeof check_items === 'object' ? JSON.stringify(check_items) : (check_items || '{}'),
-        notes || '',
+        JSON.stringify(parsedItems),
+        cleanNotes,
         photo_url || ''
       );
       broadcastSSE('PATROL_SUBMITTED', { id, worker_name, location_name, company_id: companyId }, companyId);
@@ -1944,9 +2037,45 @@ const server = http.createServer(async (req, res) => {
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
-      const { template_id, template_title, worker_id, worker_name, role_name, building, floor, location_name, results, status, notes, photo_url } = body;
+      const { template_id, template_title, worker_id, worker_name, role_name, building, floor, location_name, results, notes, photo_url } = body;
+
+      let parsedResults = {};
+      if (typeof results === 'string') {
+        try { parsedResults = JSON.parse(results); } catch (e) { parsedResults = {}; }
+      } else if (results && typeof results === 'object') {
+        parsedResults = results;
+      }
+
+      const resultValues = Object.values(parsedResults);
+      if (resultValues.length === 0) {
+        return sendJSON(res, 400, { error: '모든 필수 점검 항목에 응답해주세요.' });
+      }
+      if (template_id) {
+        const tmpl = db.prepare('SELECT items FROM inspection_templates WHERE id = ? AND company_id = ?').get(template_id, companyId);
+        if (tmpl && tmpl.items) {
+          try {
+            const tmplItems = JSON.parse(tmpl.items);
+            if (Array.isArray(tmplItems) && tmplItems.length > 0 && resultValues.length < tmplItems.length) {
+              return sendJSON(res, 400, { error: `점검표 항목(${tmplItems.length}개)을 모두 입력해주세요.` });
+            }
+          } catch (e) {}
+        }
+      }
+
+      // S9: 서버에서 결과 기반 status 강제 계산 (하드코딩 '양호' 제거)
+      const isBad = resultValues.some(v => {
+        const s = String(v || '').trim();
+        return s === '불량' || s === '이상' || s === '아니오' || s.toUpperCase() === 'BAD' || s.toUpperCase() === 'FAIL' || v === false;
+      });
+      const isWarn = !isBad && resultValues.some(v => String(v || '').trim() === '주의');
+      const computedStatus = isBad ? '불량' : (isWarn ? '주의' : '양호');
+      const cleanNotes = String(notes || '').trim();
+      if (isBad && !cleanNotes && !photo_url) {
+        return sendJSON(res, 400, { error: '불량 항목이 포함된 경우 메모 또는 현장 사진 첨부가 필수입니다.' });
+      }
+
       const id = 'ins_log_' + Date.now();
-      const resultsStr = typeof results === 'object' ? JSON.stringify(results) : (results || '{}');
+      const resultsStr = JSON.stringify(parsedResults);
       db.prepare(`
         INSERT INTO inspection_logs (id, company_id, template_id, template_title, worker_id, worker_name, role_name, building, floor, location_name, results, status, notes, photo_url, completed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -1958,17 +2087,17 @@ const server = http.createServer(async (req, res) => {
         worker_id || null,
         worker_name || '현장 실무자',
         role_name || '직무 미지정',
-        building || '본관',
-        floor || '1F',
+        building || '',
+        floor || '',
         location_name || '현장 구역',
         resultsStr,
-        status || '양호',
-        notes || '',
+        computedStatus,
+        cleanNotes,
         photo_url || ''
       );
       consumeTicketLimit(companyId);
-      broadcastSSE('INSPECTION_LOG_SUBMITTED', { id, worker_name, template_title, location_name, status, company_id: companyId }, companyId);
-      return sendJSON(res, 201, { success: true, id, message: '현장 점검 결과가 성공적으로 등록되었습니다.' });
+      broadcastSSE('INSPECTION_LOG_SUBMITTED', { id, worker_name, template_title, location_name, status: computedStatus, company_id: companyId }, companyId);
+      return sendJSON(res, 201, { success: true, id, status: computedStatus, message: '현장 점검 결과가 성공적으로 등록되었습니다.' });
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)$/) && method === 'GET') {
       const logId = pathname.split('/')[4];
@@ -2015,11 +2144,31 @@ const server = http.createServer(async (req, res) => {
     // ==========================================
     // 5. SMS & 블랙리스트 & 분석 API
     // ==========================================
+    // S7: OTP 발송 횟수 제한 (번호/IP별) + 로그 마스킹
+    if (!global._otpRateMap) global._otpRateMap = new Map();
     if (pathname === '/api/auth/sms/send' && method === 'POST') {
       const body = await parseBody(req);
       const { phone } = body;
-      if (!phone || !isValidPhone(phone)) return sendJSON(res, 400, { error: '올바른 휴대폰 번호를 입력하세요.' });
-      const blocked = db.prepare('SELECT reason FROM blocked_users WHERE phone = ?').get(phone);
+      const cleanPhone = String(phone || '').trim();
+      if (!cleanPhone || !isValidPhone(cleanPhone)) return sendJSON(res, 400, { error: '올바른 휴대폰 번호를 입력하세요.' });
+
+      const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+      const nowMs = Date.now();
+      const prune = (arr, winMs) => arr.filter(t => nowMs - t < winMs);
+      const phoneKey = `p:${cleanPhone}`;
+      const ipKey = `ip:${clientIp}`;
+      const pHits = prune(global._otpRateMap.get(phoneKey) || [], 24 * 3600 * 1000);
+      const pMinHits = pHits.filter(t => nowMs - t < 60 * 1000);
+      const ipMinHits = prune(global._otpRateMap.get(ipKey) || [], 60 * 1000);
+      if (pMinHits.length >= 3 || pHits.length >= 10 || ipMinHits.length >= 10) {
+        return sendJSON(res, 429, { error: 'RATE_LIMITED', message: '인증번호 요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.' });
+      }
+      pHits.push(nowMs);
+      ipMinHits.push(nowMs);
+      global._otpRateMap.set(phoneKey, pHits);
+      global._otpRateMap.set(ipKey, ipMinHits);
+
+      const blocked = db.prepare('SELECT reason FROM blocked_users WHERE phone = ?').get(cleanPhone);
       if (blocked) {
         return sendJSON(res, 403, { error: 'BLOCKED', message: `신고 제한 연락처입니다: ${blocked.reason}` });
       }
@@ -2027,38 +2176,57 @@ const server = http.createServer(async (req, res) => {
       db.prepare(`
         INSERT OR REPLACE INTO sms_otps (phone, otp_code, expires_at)
         VALUES (?, ?, datetime('now', '+5 minutes'))
-      `).run(phone, otpCode);
+      `).run(cleanPhone, otpCode);
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (companyId) {
         sendMessage(companyId, {
           channel: 'SMS',
           purpose: 'OTP',
-          recipient_phone: phone,
+          recipient_phone: cleanPhone,
           content_preview: '[Fielder] 본인확인 인증번호 6자리 발송'
         });
       }
-      console.log(`[SMS OTP] phone=${phone} code=${otpCode}`);
+      console.log(`[SMS OTP] phone=${maskPhone(cleanPhone)} issued=true`);
       return sendJSON(res, 200, { success: true, message: '인증번호 6자리가 발송되었습니다. (5분 내 입력)' });
     }
     if (pathname === '/api/auth/sms/verify' && method === 'POST') {
       const body = await parseBody(req);
-      const { phone, otp, code, test_mode, tenant } = body;
+      const { phone, otp, code, tenant } = body;
+      const cleanPhone = String(phone || '').trim();
       const otpVal = String(otp || code || '').trim();
+      if (!cleanPhone || !isValidPhone(cleanPhone)) {
+        return sendJSON(res, 400, { error: 'INVALID_PHONE', message: '올바른 휴대폰 번호를 입력해주세요.' });
+      }
       let refTenant = '';
       if (req.headers.referer) {
         const rm = req.headers.referer.match(/[?&]tenant=([a-zA-Z0-9_-]+)/);
         if (rm && rm[1]) refTenant = rm[1];
       }
       const tenantSlug = (tenant || (parsedUrl.query && parsedUrl.query.tenant) || refTenant || '').toLowerCase();
-      const qaBypassEnabled = process.env.ENABLE_QA_OTP_BYPASS !== 'false';
-      const isQaContext = qaBypassEnabled && (test_mode === true || tenantSlug.includes('qa') || tenantSlug.includes('test'));
+      // S2: QA 우회는 env가 명시적으로 'true'이고 qa/test 테넌트일 때만 허용 (기본 꺼짐, test_mode 제거)
+      const qaBypassEnabled = process.env.ENABLE_QA_OTP_BYPASS === 'true';
+      const isQaContext = qaBypassEnabled && (tenantSlug.includes('qa') || tenantSlug.includes('test'));
+      const companyId = resolveCompanyId(parsedUrl, body, req) || 'unknown';
+
+      const issueVerifyToken = () => {
+        const token = 'qrt_' + crypto.randomBytes(24).toString('hex');
+        const nowIso = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO qr_verify_tokens (token, company_id, phone, expires_at, created_at)
+          VALUES (?, ?, ?, datetime('now', '+10 minutes'), ?)
+        `).run(token, companyId, cleanPhone, nowIso);
+        return token;
+      };
+
       if (isQaContext && otpVal === '000000') {
-        return sendJSON(res, 200, { success: true, qa_bypass: true, message: 'QA 테스트 인증이 완료되었습니다.' });
+        const token = issueVerifyToken();
+        return sendJSON(res, 200, { success: true, qa_bypass: true, verification_token: token, message: 'QA 테스트 인증이 완료되었습니다.' });
       }
-      const record = db.prepare("SELECT * FROM sms_otps WHERE phone = ? AND expires_at > datetime('now')").get(phone);
+      const record = db.prepare("SELECT * FROM sms_otps WHERE phone = ? AND expires_at > datetime('now')").get(cleanPhone);
       if (record && record.otp_code === otpVal) {
-        db.prepare('DELETE FROM sms_otps WHERE phone = ?').run(phone);
-        return sendJSON(res, 200, { success: true, message: '인증이 완료되었습니다.' });
+        db.prepare('DELETE FROM sms_otps WHERE phone = ?').run(cleanPhone);
+        const token = issueVerifyToken();
+        return sendJSON(res, 200, { success: true, verification_token: token, message: '인증이 완료되었습니다.' });
       }
       return sendJSON(res, 400, { error: 'INVALID_OTP', message: '인증번호가 일치하지 않거나 만료되었습니다.' });
     }
@@ -2091,31 +2259,48 @@ const server = http.createServer(async (req, res) => {
 
       const completionRate = total > 0 ? Math.round((completed / total) * 1000) / 10 : 0;
 
-      // 리드타임 계산 (완료된 티켓 대상)
-      const completedTickets = db.prepare(`
-        SELECT created_at, completed_at, approved_at
-        FROM tickets
-        WHERE company_id = ? AND status = 'COMPLETED' AND completed_at IS NOT NULL
-      `).all(companyId);
-
-      let totalMinutes = 0;
-      completedTickets.forEach(t => {
-        const start = new Date(t.created_at).getTime();
-        const end = new Date(t.completed_at || t.approved_at).getTime();
-        if (!isNaN(start) && !isNaN(end) && end > start) {
-          totalMinutes += (end - start) / (1000 * 60);
+      // S8: 단계별 실제 소요시간(분) 계산 (SQLite julianday 기반 실측)
+      const formatMinutesKor = (mins) => {
+        if (mins === null || mins === undefined || isNaN(mins)) return '-';
+        const m = Math.max(0, Math.round(mins));
+        if (m >= 60) {
+          const h = Math.floor(m / 60);
+          const r = m % 60;
+          return r > 0 ? `${h}시간 ${r}분` : `${h}시간`;
         }
-      });
+        return `${m}분`;
+      };
 
-      const avgMinutes = completedTickets.length > 0 ? Math.round(totalMinutes / completedTickets.length) : 0;
-      const avgHours = (avgMinutes / 60).toFixed(1);
+      const stepAgg = db.prepare(`
+        SELECT
+          AVG(CASE WHEN assigned_at IS NOT NULL AND created_at IS NOT NULL AND julianday(assigned_at) > julianday(created_at)
+                   THEN (julianday(assigned_at) - julianday(created_at)) * 1440.0 END) as s1_min,
+          COUNT(CASE WHEN assigned_at IS NOT NULL AND created_at IS NOT NULL AND julianday(assigned_at) > julianday(created_at) THEN 1 END) as s1_n,
+          AVG(CASE WHEN started_at IS NOT NULL AND assigned_at IS NOT NULL AND julianday(started_at) > julianday(assigned_at)
+                   THEN (julianday(started_at) - julianday(assigned_at)) * 1440.0 END) as s2_min,
+          COUNT(CASE WHEN started_at IS NOT NULL AND assigned_at IS NOT NULL AND julianday(started_at) > julianday(assigned_at) THEN 1 END) as s2_n,
+          AVG(CASE WHEN completed_at IS NOT NULL AND started_at IS NOT NULL AND julianday(completed_at) > julianday(started_at)
+                   THEN (julianday(completed_at) - julianday(started_at)) * 1440.0 END) as s3_min,
+          COUNT(CASE WHEN completed_at IS NOT NULL AND started_at IS NOT NULL AND julianday(completed_at) > julianday(started_at) THEN 1 END) as s3_n,
+          AVG(CASE WHEN approved_at IS NOT NULL AND completed_at IS NOT NULL AND julianday(approved_at) > julianday(completed_at)
+                   THEN (julianday(approved_at) - julianday(completed_at)) * 1440.0 END) as s4_min,
+          COUNT(CASE WHEN approved_at IS NOT NULL AND completed_at IS NOT NULL AND julianday(approved_at) > julianday(completed_at) THEN 1 END) as s4_n,
+          AVG(CASE WHEN status = 'COMPLETED' AND completed_at IS NOT NULL AND created_at IS NOT NULL AND julianday(completed_at) >= julianday(created_at)
+                   THEN (julianday(completed_at) - julianday(created_at)) * 1440.0 END) as overall_min,
+          COUNT(CASE WHEN status = 'COMPLETED' AND completed_at IS NOT NULL THEN 1 END) as overall_n
+        FROM tickets
+        WHERE company_id = ? AND status != 'CANCELLED'
+      `).get(companyId) || {};
+
+      const avgMinutes = stepAgg.overall_n > 0 && stepAgg.overall_min !== null ? Math.round(stepAgg.overall_min) : 0;
+      const avgHours = stepAgg.overall_n > 0 ? (avgMinutes / 60).toFixed(1) : '0.0';
 
       // 취약/다발 구역 분석 (Hotspots)
       const hotspotsRaw = db.prepare(`
         SELECT l.name as loc_name, l.floor, count(t.id) as count
         FROM tickets t
         LEFT JOIN locations l ON t.location_id = l.id
-        WHERE t.company_id = ?
+        WHERE t.company_id = ? AND t.status != 'CANCELLED'
         GROUP BY t.location_id
         ORDER BY count DESC
         LIMIT 5
@@ -2127,40 +2312,47 @@ const server = http.createServer(async (req, res) => {
         details: `민원/작업 ${h.count}건 발생`
       }));
 
-      // 직무 그룹별 처리 현황 (Group performance)
+      // 직무 그룹별 처리 현황 (target_group_role_id 기준 실측 집계)
       const roles = db.prepare('SELECT id, name, category FROM custom_roles WHERE company_id = ?').all(companyId);
       const groupPerformance = roles.map(r => {
         const tStats = db.prepare(`
           SELECT count(*) as total,
-                 SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp
+                 SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp,
+                 AVG(CASE WHEN status = 'COMPLETED' AND completed_at IS NOT NULL AND created_at IS NOT NULL AND julianday(completed_at) >= julianday(created_at)
+                          THEN (julianday(completed_at) - julianday(created_at)) * 1440.0 END) as avg_min
           FROM tickets
-          WHERE company_id = ? AND (target_group_role_id = ? OR category = ?)
-        `).get(companyId, r.id, r.category);
+          WHERE company_id = ? AND target_group_role_id = ? AND status != 'CANCELLED'
+        `).get(companyId, r.id);
 
         const gTotal = tStats.total || 0;
         const gComp = tStats.comp || 0;
-        const gRate = gTotal > 0 ? Math.round((gComp / gTotal) * 100) + '%' : '0%';
+        const gRate = gTotal > 0 ? Math.round((gComp / gTotal) * 100) + '%' : '-';
+        const gAvg = gComp > 0 && tStats.avg_min !== null ? formatMinutesKor(tStats.avg_min) : '-';
         return {
           group: r.name,
           total: gTotal,
-          avg_time: gTotal > 0 ? (parseFloat(avgHours) > 0 ? avgHours + '시간' : '45분') : '-',
+          completed: gComp,
+          avg_time: gAvg,
           rate: gRate
         };
       });
 
-      // 실무자 개인별 조치 성과 (Worker performance)
+      // 실무자 개인별 조치 성과 (실측 리드타임)
       const workers = db.prepare("SELECT id, name, role FROM users WHERE company_id = ? AND role != 'ADMIN'").all(companyId);
       const workerPerformance = workers.map(w => {
         const wStats = db.prepare(`
           SELECT count(*) as total,
-                 SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp
+                 SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp,
+                 AVG(CASE WHEN status = 'COMPLETED' AND completed_at IS NOT NULL AND created_at IS NOT NULL AND julianday(completed_at) >= julianday(created_at)
+                          THEN (julianday(completed_at) - julianday(created_at)) * 1440.0 END) as avg_min
           FROM tickets
-          WHERE company_id = ? AND (assignee_id = ? OR claimed_by_name = ? OR completed_by_name = ?)
+          WHERE company_id = ? AND status != 'CANCELLED' AND (assignee_id = ? OR claimed_by_name = ? OR completed_by_name = ?)
         `).get(companyId, w.id, w.name, w.name);
 
         const wTotal = wStats.total || 0;
         const wComp = wStats.comp || 0;
-        const wRate = wTotal > 0 ? Math.round((wComp / wTotal) * 100) + '%' : '0%';
+        const wRate = wTotal > 0 ? Math.round((wComp / wTotal) * 100) + '%' : '-';
+        const wAvg = wComp > 0 && wStats.avg_min !== null ? formatMinutesKor(wStats.avg_min) : '-';
 
         return {
           name: w.name,
@@ -2170,8 +2362,8 @@ const server = http.createServer(async (req, res) => {
           assigned_count: wTotal,
           completion_rate: wRate,
           rate: wRate,
-          avg_lead_time: wTotal > 0 ? (parseFloat(avgHours) > 0 ? avgHours + '시간' : '30분') : '-',
-          avg_time: wTotal > 0 ? (parseFloat(avgHours) > 0 ? avgHours + '시간' : '30분') : '-'
+          avg_lead_time: wAvg,
+          avg_time: wAvg
         };
       });
 
@@ -2181,27 +2373,47 @@ const server = http.createServer(async (req, res) => {
                SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp,
                SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as prog
         FROM tickets
-        WHERE company_id = ? AND (target_type = 'OUTSOURCE' OR category = 'ELEVATOR')
+        WHERE company_id = ? AND status != 'CANCELLED' AND (target_type = 'OUTSOURCE' OR resolution_type = 'OUTSOURCING' OR category = 'ELEVATOR')
       `).get(companyId);
 
       const outTotal = outsourceTickets.total || 0;
       const outComp = outsourceTickets.comp || 0;
       const outProg = outsourceTickets.prog || 0;
-      const internalCount = total - outTotal;
+      const internalCount = Math.max(0, total - outTotal);
       const outRatio = total > 0 ? Math.round((outTotal / total) * 1000) / 10 : 0;
-      const internalRatio = total > 0 ? Math.round((internalCount / total) * 1000) / 10 : 100;
+      const internalRatio = total > 0 ? Math.round((internalCount / total) * 1000) / 10 : null;
+
+      // 단계별 실측 breakdown (완료 건 및 유효 단계 표본이 있을 때만 생성)
+      const rawSteps = [
+        { key: '1. 접수 -> 관리자 지시', min: Math.round(stepAgg.s1_min || 0), n: stepAgg.s1_n || 0 },
+        { key: '2. 지시 -> 실무자 착수', min: Math.round(stepAgg.s2_min || 0), n: stepAgg.s2_n || 0 },
+        { key: '3. 현장 조치 작업', min: Math.round(stepAgg.s3_min || 0), n: stepAgg.s3_n || 0 },
+        { key: '4. 완료 보고 -> 최종 승인', min: Math.round(stepAgg.s4_min || 0), n: stepAgg.s4_n || 0 }
+      ];
+      const totalStepMin = rawSteps.reduce((acc, s) => acc + s.min, 0);
+      let leadTimeBreakdown = [];
+      let bottleneckStep = null;
+      if (completed > 0 && totalStepMin > 0) {
+        let maxIdx = 0;
+        rawSteps.forEach((s, idx) => {
+          if (s.min > rawSteps[maxIdx].min) maxIdx = idx;
+        });
+        bottleneckStep = rawSteps[maxIdx].key.replace(/^\d+\.\s*/, '');
+        leadTimeBreakdown = rawSteps.map((s, idx) => ({
+          step: idx === maxIdx ? `${s.key} (최대 병목)` : s.key,
+          minutes: s.min,
+          sample_count: s.n,
+          percentage: Math.round((s.min / totalStepMin) * 100)
+        }));
+      }
 
       return sendJSON(res, 200, {
         total_tickets: total,
-        avg_lead_time_hours: parseFloat(avgHours),
+        completed_tickets: completed,
+        avg_lead_time_hours: completed > 0 ? parseFloat(avgHours) : null,
         completion_rate: completionRate,
-        bottleneck_step: total > 0 ? '현장 조치 작업' : '접수 대기 중',
-        lead_time_breakdown: total > 0 ? [
-          { step: '1. 접수 -> 관리자 지시', minutes: Math.round(avgMinutes * 0.15), percentage: 15 },
-          { step: '2. 지시 -> 실무자 착수', minutes: Math.round(avgMinutes * 0.20), percentage: 20 },
-          { step: '3. 현장 조치 작업 (최대 병목)', minutes: Math.round(avgMinutes * 0.45), percentage: 45 },
-          { step: '4. 완료 보고 -> 최종 승인', minutes: Math.round(avgMinutes * 0.20), percentage: 20 }
-        ] : [],
+        bottleneck_step: bottleneckStep,
+        lead_time_breakdown: leadTimeBreakdown,
         hotspots,
         group_performance: groupPerformance,
         worker_performance: workerPerformance,
@@ -2213,7 +2425,7 @@ const server = http.createServer(async (req, res) => {
           internal_ratio: internalRatio,
           outsource_ratio: outRatio,
           partners: outTotal > 0 ? [
-            { partner: '승강기 유지보수 협력사', count: outTotal, category: '승강기/특수', status: '정상가동' }
+            { partner: '승강기/외주 협력사', count: outTotal, category: '외주/특수', status: '정상가동' }
           ] : []
         }
       });
@@ -2262,9 +2474,9 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // ⭐️ [SUPER ADMIN] 2. 전체 고객사 목록 및 제어 현황
+    // ⭐️ [SUPER ADMIN] 2. 전체 고객사 목록 및 제어 현황 (소프트 삭제 제외)
     if (pathname === '/api/super-admin/companies' && method === 'GET') {
-      const companies = db.prepare('SELECT * FROM companies ORDER BY created_at DESC').all();
+      const companies = db.prepare("SELECT * FROM companies WHERE status != 'DELETED' ORDER BY created_at DESC").all();
       return sendJSON(res, 200, companies.map(c => {
         let features = { checklists: true, realtime_sse: true, public_qr: true, outsource: true };
         try { if (c.enabled_features) features = typeof c.enabled_features === 'string' ? JSON.parse(c.enabled_features) : c.enabled_features; } catch(e){}
@@ -2419,14 +2631,28 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { success: true, message: '고객사 설정 및 권한이 업데이트되었습니다.' });
     }
 
-    // ⭐️ [SUPER ADMIN] 5. 원클릭 +100건 리포트 충전 API
+    // ⭐️ [SUPER ADMIN] 5. 원클릭 +100건 리포트 충전 API (회사 존재 검증 + 감사 로그)
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)\/charge-100$/) && method === 'POST') {
       const companyId = pathname.split('/')[4];
-      db.prepare('UPDATE companies SET monthly_ticket_limit = monthly_ticket_limit + 100 WHERE id = ?').run(companyId);
+      const session = getSession(req);
+      const comp = db.prepare("SELECT id, name, monthly_ticket_limit FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
+      if (!comp) return sendJSON(res, 404, { error: '고객사를 찾을 수 없습니다.' });
+
+      db.exec('BEGIN');
+      try {
+        db.prepare('UPDATE companies SET monthly_ticket_limit = monthly_ticket_limit + 100 WHERE id = ?').run(companyId);
+        db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(companyId, session ? session.user.id : 'super_admin', 'SUPER_ADMIN', 'CHARGE_REPORT_100', 'COMPANY', companyId, '+100 리포트 한도 충전', new Date().toISOString());
+        db.exec('COMMIT');
+      } catch (err) {
+        try { db.exec('ROLLBACK'); } catch (e) {}
+        throw err;
+      }
+
       const updated = db.prepare('SELECT monthly_ticket_limit, monthly_used_count FROM companies WHERE id = ?').get(companyId);
       return sendJSON(res, 200, {
         success: true,
-        message: `+100건이 즉시 충전되었습니다. (총 한도: ${updated.monthly_ticket_limit}건)`,
+        message: `[${comp.name}] +100건이 즉시 충전되었습니다. (총 한도: ${updated.monthly_ticket_limit}건)`,
         monthly_ticket_limit: updated.monthly_ticket_limit
       });
     }
@@ -2436,7 +2662,7 @@ const server = http.createServer(async (req, res) => {
       const companyId = pathname.split('/')[4];
       const body = await parseBody(req);
       const session = getSession(req);
-      const comp = db.prepare('SELECT id, name, message_monthly_limit, message_extra_credit, message_enabled FROM companies WHERE id = ?').get(companyId);
+      const comp = db.prepare("SELECT id, name, message_monthly_limit, message_extra_credit, message_enabled FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '고객사를 찾을 수 없습니다.' });
 
       if (body.message_enabled !== undefined) {
@@ -2445,8 +2671,10 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 200, { success: true, message: `문자/알림톡 발송 기능이 ${nextEnabled ? '활성화' : '비활성화'}되었습니다.` });
       }
 
-      const delta = parseInt(body.delta, 10) || 0;
-      if (delta === 0) return sendJSON(res, 400, { error: '충전 건수를 입력해주세요.' });
+      const delta = parseInt(body.delta, 10);
+      if (!Number.isFinite(delta) || delta < 1 || delta > 10000) {
+        return sendJSON(res, 400, { error: '충전 건수는 1~10,000 사이의 정수만 허용됩니다.' });
+      }
 
       const reason = (body.reason || '').trim() || `슈퍼관리자 추가 크레딧 ${delta > 0 ? '+' : ''}${delta}건`;
       const nowIso = new Date().toISOString();
@@ -2685,8 +2913,8 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 403, { error: '비활성화된 계정입니다. 회사 관리자에게 문의하세요.' });
       }
 
-      // 고객사 정지 상태 확인
-      if (user.company_status === 'SUSPENDED' || user.company_status === 'CLOSED') {
+      // 고객사 정지/삭제 상태 확인
+      if (user.company_status === 'SUSPENDED' || user.company_status === 'CLOSED' || user.company_status === 'DELETED') {
         return sendJSON(res, 403, { error: '해당 고객사 계정은 현재 이용이 정지되었습니다. 관리자에게 문의하세요.' });
       }
 
@@ -2825,34 +3053,37 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '비밀번호는 최소 8자 이상이어야 합니다.' });
       }
       db.prepare("UPDATE users SET password = ?, must_change_password = 1 WHERE company_id = ? AND (role = 'ADMIN' OR email = ?)").run(hashPassword(rawPwd), companyId, comp.admin_email);
-      return sendJSON(res, 200, { success: true, temp_password: rawPwd, message: `[${comp.name}] 마스터 관리자 임시 비밀번호 [${rawPwd}]로 초기화되었습니다.` });
+      return sendJSON(res, 200, { success: true, temp_password: rawPwd, message: `[${comp.name}] 마스터 관리자 임시 비밀번호가 발급되었습니다.` });
     }
 
+    // S6: 회사 삭제 시 confirm_name(회사명 일치) 필수 검증 + 소프트 삭제 + 감사 로그
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)$/) && method === 'DELETE') {
       const companyId = pathname.split('/')[4];
-      const comp = db.prepare('SELECT name FROM companies WHERE id = ?').get(companyId);
+      const body = await parseBody(req);
+      const session = getSession(req);
+      const comp = db.prepare("SELECT id, name, subdomain, status FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '회사를 찾을 수 없습니다.' });
 
+      const confirmName = String(body.confirm_name || '').trim();
+      if (!confirmName || confirmName !== comp.name) {
+        return sendJSON(res, 400, { error: `삭제 확인을 위해 회사명 [${comp.name}]을 정확히 입력해주세요.` });
+      }
+
+      const nowIso = new Date().toISOString();
       db.exec('BEGIN');
       try {
-        db.prepare('DELETE FROM message_credit_logs WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM message_logs WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM inspection_logs WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM inspection_templates WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM patrol_logs WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM blocked_users WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM tickets WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM locations WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM custom_roles WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM users WHERE company_id = ?').run(companyId);
-        db.prepare('DELETE FROM companies WHERE id = ?').run(companyId);
+        db.prepare("UPDATE companies SET status = 'DELETED', deleted_at = ?, subdomain = ? WHERE id = ?")
+          .run(nowIso, `${comp.subdomain}__deleted_${Date.now()}`, companyId);
+        db.prepare("UPDATE users SET is_active = 0 WHERE company_id = ?").run(companyId);
+        db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(companyId, session ? session.user.id : 'super_admin', 'SUPER_ADMIN', 'COMPANY_SOFT_DELETE', 'COMPANY', companyId, `소프트 삭제 확인: ${comp.name}`, nowIso);
         db.exec('COMMIT');
       } catch (err) {
-        db.exec('ROLLBACK');
+        try { db.exec('ROLLBACK'); } catch (e) {}
         throw err;
       }
 
-      return sendJSON(res, 200, { success: true, message: '[' + comp.name + '] 회사와 관련된 모든 데이터가 안전하게 삭제되었습니다.' });
+      return sendJSON(res, 200, { success: true, message: `[${comp.name}] 회사가 안전하게 삭제(보관 전환)되었습니다.` });
     }
 
     // ==========================================
