@@ -6,6 +6,11 @@ services:
     autoDeploy: true
     buildCommand: npm install
     startCommand: node server.js
+    # Render Starter 이상 플랜에서 아래 Disk 마운트 시 배포/재시작 시에도 SQLite DB 영구 보존
+    # disk:
+    #   name: fielder-db
+    #   mountPath: /var/data
+    #   sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: 22.14.0

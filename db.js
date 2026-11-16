@@ -3,7 +3,13 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
-const DB_PATH = path.join(__dirname, 'fms.db');
+// ⭐️ Render Persistent Disk (/var/data) 또는 환경변수(DB_PATH) 우선 사용 (컨테이너 재배포 시 DB 초기화 방지)
+const PERSISTENT_DIR = process.env.DB_DIR || (fs.existsSync('/var/data') ? '/var/data' : __dirname);
+if (!fs.existsSync(PERSISTENT_DIR)) {
+  try { fs.mkdirSync(PERSISTENT_DIR, { recursive: true }); } catch (e) {}
+}
+const DB_PATH = process.env.DB_PATH || path.join(PERSISTENT_DIR, 'fms.db');
+console.log(`💾 SQLite DB 경로: ${DB_PATH} (Persistent Disk: ${PERSISTENT_DIR === '/var/data' || !!process.env.DB_PATH})`);
 const db = new DatabaseSync(DB_PATH);
 
 db.exec('PRAGMA foreign_keys = ON;');
@@ -405,31 +411,34 @@ function initDatabase() {
   // 기존 구역에 건물(본관) 기본값 설정
   db.exec("UPDATE locations SET building = '본관' WHERE building IS NULL OR building = '';");
 
-  // 본관 8층 및 별관 샘플 구역 없으면 보강
-  const has8F = db.prepare("SELECT count(*) as cnt FROM locations WHERE floor = '8F' OR name LIKE '%8층%'").get().cnt;
-  if (has8F === 0) {
-    db.prepare(`
-      INSERT INTO locations (id, company_id, floor, building, code, name, category, description)
-      VALUES ('loc_8f_exec', 'comp_central_tower', '8F', '본관', 'LOC-8F-01', '본관 8층 임원실 및 대회의실', 'OFFICE', 'VIP 접견실 및 통신설비')
-    `).run();
-  }
-  const hasAnnex = db.prepare("SELECT count(*) as cnt FROM locations WHERE building = '별관'").get().cnt;
-  if (hasAnnex === 0) {
-    db.prepare(`
-      INSERT INTO locations (id, company_id, floor, building, code, name, category, description)
-      VALUES ('loc_annex_3f', 'comp_central_tower', '3F', '별관', 'LOC-AN-01', '별관 3층 스마트오피스 지원실', 'OFFICE', '별관 사무공간')
-    `).run();
-  }
+  // 본관 8층 및 별관 샘플 구역 없으면 보강 (센트럴타워 존재 시에만)
+  const hasCentral = db.prepare("SELECT id FROM companies WHERE id = 'comp_central_tower'").get();
+  if (hasCentral) {
+    const has8F = db.prepare("SELECT count(*) as cnt FROM locations WHERE company_id = 'comp_central_tower' AND (floor = '8F' OR name LIKE '%8층%')").get().cnt;
+    if (has8F === 0) {
+      db.prepare(`
+        INSERT INTO locations (id, company_id, floor, building, code, name, category, description)
+        VALUES ('loc_8f_exec', 'comp_central_tower', '8F', '본관', 'LOC-8F-01', '본관 8층 임원실 및 대회의실', 'OFFICE', 'VIP 접견실 및 통신설비')
+      `).run();
+    }
+    const hasAnnex = db.prepare("SELECT count(*) as cnt FROM locations WHERE company_id = 'comp_central_tower' AND building = '별관'").get().cnt;
+    if (hasAnnex === 0) {
+      db.prepare(`
+        INSERT INTO locations (id, company_id, floor, building, code, name, category, description)
+        VALUES ('loc_annex_3f', 'comp_central_tower', '3F', '별관', 'LOC-AN-01', '별관 3층 스마트오피스 지원실', 'OFFICE', '별관 사무공간')
+      `).run();
+    }
 
-  // 순찰 샘플 데이터 초기화 (없는 경우)
-  const patrolCount = db.prepare('SELECT count(*) as cnt FROM patrol_logs').get().cnt;
-  if (patrolCount === 0) {
-    db.prepare(`
-      INSERT INTO patrol_logs (id, company_id, user_id, worker_name, building, floor, location_name, check_items, notes, created_at)
-      VALUES 
-      ('pt_01', 'comp_central_tower', 'user_worker_park_s', '박보안 대원', '본관', '8F', '본관 8층 임원실 및 대회의실', '{"fire_safety":true,"lighting":true,"leak":true,"emergency_exit":true}', '비상계단 조명 및 소화전 점검 완료. 이상 무.', datetime('now', '-2 hours')),
-      ('pt_02', 'comp_central_tower', 'user_worker_choi', '최영선 반장', '본관', 'B2', '지하 2층 주차장 B-04', '{"fire_safety":true,"lighting":true,"leak":false,"emergency_exit":true}', '배관 주변 미세 누수 건 진행중 확인. 자재 입고 시 교체 예정.', datetime('now', '-5 hours'))
-    `).run();
+    // 순찰 샘플 데이터 초기화 (없는 경우)
+    const patrolCount = db.prepare('SELECT count(*) as cnt FROM patrol_logs').get().cnt;
+    if (patrolCount === 0) {
+      db.prepare(`
+        INSERT INTO patrol_logs (id, company_id, user_id, worker_name, building, floor, location_name, check_items, notes, created_at)
+        VALUES 
+        ('pt_01', 'comp_central_tower', 'user_worker_park_s', '박보안 대원', '본관', '8F', '본관 8층 임원실 및 대회의실', '{"fire_safety":true,"lighting":true,"leak":true,"emergency_exit":true}', '비상계단 조명 및 소화전 점검 완료. 이상 무.', datetime('now', '-2 hours')),
+        ('pt_02', 'comp_central_tower', 'user_worker_choi', '최영선 반장', '본관', 'B2', '지하 2층 주차장 B-04', '{"fire_safety":true,"lighting":true,"leak":false,"emergency_exit":true}', '배관 주변 미세 누수 건 진행중 확인. 자재 입고 시 교체 예정.', datetime('now', '-5 hours'))
+      `).run();
+    }
   }
 
   // ⭐️ 9 & 10. 현장 점검표 템플릿 & 점검 수행 기록 테이블
@@ -469,9 +478,8 @@ function initDatabase() {
     );
   `);
 
-  initInspectionSeeds();
-
   seedData();
+  initInspectionSeeds();
   console.log('✅ 데이터베이스 스키마 및 층수/위치/순찰 포함 시드 구성 완료!');
 }
 
