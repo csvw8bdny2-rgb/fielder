@@ -1987,6 +1987,10 @@
           <input type="date" id="edit-wo-due-date" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 text-xs font-semibold text-[#1E1F21] bg-white outline-none focus:border-[#0084B4]">
         </div>
         <div>
+          <label class="block font-bold text-[#1E1F21] mb-1">담당 직무 그룹</label>
+          <select id="edit-wo-group" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 text-xs font-semibold text-[#1E1F21] bg-white outline-none focus:border-[#0084B4]"></select>
+        </div>
+        <div>
           <label class="block font-bold text-[#1E1F21] mb-1">지시 사항 코멘트</label>
           <textarea id="edit-wo-notes" rows="3" class="w-full border border-[#D5D3CF] rounded-lg p-3 text-xs text-[#1E1F21] outline-none focus:border-[#0084B4]"></textarea>
         </div>
@@ -1994,6 +1998,47 @@
       <div class="flex justify-end space-x-2 pt-2 border-t border-[#EDECEB]">
         <button type="button" onclick="closeEditWorkOrderModal()" class="px-4 py-2 border border-[#D5D3CF] text-[#6D6E6F] rounded-lg text-xs font-semibold hover:bg-[#FAF9F8]">취소</button>
         <button type="button" id="btn-save-edit-wo" onclick="submitEditWorkOrder()" class="px-4 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white rounded-lg text-xs font-bold shadow-xs">수정 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⭐️ 임시 비밀번호 1회 발급 안내 모달 (alert 대체) -->
+  <div id="modal-temp-password" class="hidden fixed inset-0 bg-[#002B41]/60 z-[70] flex items-center justify-center p-4 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#EDECEB] space-y-4">
+      <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <h3 class="text-sm font-bold text-[#1E1F21]">임시 비밀번호 발급 완료</h3>
+        </div>
+        <button type="button" onclick="closeTempPasswordModal()" class="text-[#A0A1A2] hover:text-[#1E1F21] text-lg font-bold">×</button>
+      </div>
+
+      <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium">
+        ⚠️ 이 임시 비밀번호는 보안상 <b>한 번만 표시</b>됩니다. 반드시 복사하여 사용자에게 전달해 주세요. (첫 로그인 시 변경 필수)
+      </div>
+
+      <div class="p-3.5 bg-[#FAF9F8] rounded-xl border border-[#EDECEB] space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-[#6D6E6F]">사용자</span>
+          <b id="temp-pw-user-name" class="text-[#1E1F21]">-</b>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-[#6D6E6F]">로그인 ID (이메일)</span>
+          <b id="temp-pw-user-email" class="text-[#0084B4] font-mono">-</b>
+        </div>
+        <div class="pt-2 border-t border-[#EDECEB] flex items-center justify-between gap-2">
+          <div>
+            <span class="text-[11px] text-[#6D6E6F] block">임시 비밀번호</span>
+            <code id="temp-pw-value" class="text-base font-mono font-extrabold text-[#1E1F21] tracking-wider">-</code>
+          </div>
+          <button type="button" onclick="copyTempPassword()" class="px-3 py-1.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg text-xs shadow-xs shrink-0">
+            📋 복사
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <button type="button" onclick="closeTempPasswordModal()" class="px-5 py-2 bg-[#1E1F21] text-white rounded-lg text-xs font-bold hover:bg-black">확인</button>
       </div>
     </div>
   </div>
@@ -2619,7 +2664,7 @@
       const val = (inp?.value || '').trim();
       if (!val) return;
       if (currentBuildingsConfig[val]) {
-        alert('이미 등록된 건물명입니다.');
+        showToastNotification('이미 등록된 건물명입니다.', 'ERROR');
         return;
       }
       currentBuildingsConfig[val] = {
@@ -2638,7 +2683,7 @@
     // 현재 건물 삭제
     function removeCurrentBuilding() {
       if (Object.keys(currentBuildingsConfig).length <= 1) {
-        alert('최소 1개 이상의 건물동은 유지되어야 합니다.');
+        showToastNotification('최소 1개 이상의 건물동은 유지되어야 합니다.', 'ERROR');
         return;
       }
       if (!confirm(`[${activeConfigBuilding}] 건물을 삭제하시겠습니까?`)) return;
@@ -2657,7 +2702,7 @@
       const logo = logoInput ? logoInput.value.trim() : '';
 
       if (!name) {
-        alert('⚠️ 회사명 또는 기관명을 입력해주세요.');
+        showToastNotification('회사명 또는 기관명을 입력해주세요.', 'ERROR');
         nameInput?.focus();
         return;
       }
@@ -2681,7 +2726,7 @@
         });
 
         if (!res.ok) {
-          alert('❌ 기본 설정 저장 중 서버 오류가 발생했습니다.');
+          showToastNotification('기본 설정 저장 중 오류가 발생했습니다.', 'ERROR');
           return;
         }
 
@@ -2846,6 +2891,7 @@
       renderMonitoringCounts();
       renderMonitoringView();
       renderProcessLists();
+      updateOnboardingChecklist();
       renderComplaintsList();
       renderWorkOrderList();
     }
@@ -3692,6 +3738,19 @@
       document.getElementById('edit-wo-title').value = t.title || '';
       document.getElementById('edit-wo-due-date').value = t.due_date || '';
       document.getElementById('edit-wo-notes').value = t.instruction_notes || '';
+
+      const grpSel = document.getElementById('edit-wo-group');
+      if (grpSel) {
+        grpSel.innerHTML = '<option value="">미지정 / 기존 유지</option>';
+        (currentRoles || []).forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.id;
+          opt.innerText = r.name;
+          if (t.target_group_role_id === r.id) opt.selected = true;
+          grpSel.appendChild(opt);
+        });
+      }
+
       document.getElementById('modal-edit-workorder').classList.remove('hidden');
     }
 
@@ -3704,7 +3763,14 @@
       const title = document.getElementById('edit-wo-title').value.trim();
       const dueDate = document.getElementById('edit-wo-due-date').value.trim();
       const notes = document.getElementById('edit-wo-notes').value.trim();
+      const groupId = document.getElementById('edit-wo-group')?.value || '';
       if (!title) { showToastNotification('작업 지시 제목을 입력해주세요.', 'ERROR'); return; }
+
+      const payload = { title, due_date: dueDate || null, instruction_notes: notes };
+      if (groupId) {
+        payload.target_type = 'GROUP';
+        payload.target_group_role_id = groupId;
+      }
 
       const btn = document.getElementById('btn-save-edit-wo');
       if (btn) { btn.disabled = true; btn.innerText = '저장 중...'; }
@@ -3712,7 +3778,7 @@
         const res = await fetch(`/api/tickets/${ticketId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, due_date: dueDate || null, instruction_notes: notes })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (!res.ok) {
@@ -4137,6 +4203,7 @@
       const res = await fetch('/api/locations');
       currentLocations = await res.json();
       populateWoLocationSelect();
+      updateOnboardingChecklist();
 
       // ⭐️ 건물동 오름차순, 층수 지하 최하층(B3->B2->B1)부터 지상(1F->2F..), 옥상(RF) 순서 정렬
       currentLocations.sort((a, b) => {
@@ -4643,11 +4710,33 @@
       document.getElementById('modal-reset-user-password').classList.add('hidden');
     }
 
+    function openTempPasswordModal(userName, userEmail, tempPw) {
+      document.getElementById('temp-pw-user-name').innerText = userName || '-';
+      document.getElementById('temp-pw-user-email').innerText = userEmail || '-';
+      document.getElementById('temp-pw-value').innerText = tempPw || '-';
+      document.getElementById('modal-temp-password').classList.remove('hidden');
+    }
+
+    function closeTempPasswordModal() {
+      document.getElementById('modal-temp-password').classList.add('hidden');
+      document.getElementById('temp-pw-value').innerText = '-';
+    }
+
+    function copyTempPassword() {
+      const pw = document.getElementById('temp-pw-value')?.innerText || '';
+      if (!pw || pw === '-') return;
+      navigator.clipboard.writeText(pw).then(() => {
+        showToastNotification('임시 비밀번호가 클립보드에 복사되었습니다.');
+      }).catch(() => showToastNotification('복사하지 못했습니다. 직접 드래그해 복사해주세요.', 'ERROR'));
+    }
+
     async function submitPasswordReset() {
       const userId = document.getElementById('reset-pw-user-id').value;
+      const uName = document.getElementById('reset-pw-user-name').innerText;
+      const uEmail = document.getElementById('reset-pw-user-email').innerText;
       const newPassword = document.getElementById('reset-pw-new-val').value.trim();
       if (newPassword && newPassword.length < 8) {
-        alert('비밀번호는 최소 8자 이상이어야 합니다. (자동 생성하려면 비워두세요)');
+        showToastNotification('비밀번호는 최소 8자 이상이어야 합니다. (자동 생성하려면 비워두세요)', 'ERROR');
         return;
       }
       const res = await fetch(`/api/users/${userId}/reset-password`, {
@@ -4660,8 +4749,12 @@
         showToastNotification(data.error || '비밀번호 재설정 실패', 'ERROR');
         return;
       }
-      alert(data.message || '임시 비밀번호로 재설정되었습니다.');
       closePasswordResetModal();
+      if (data.temp_password) {
+        openTempPasswordModal(uName, uEmail, data.temp_password);
+      } else {
+        showToastNotification(data.message || '비밀번호가 재설정되었습니다.');
+      }
       await loadUsers();
     }
 
@@ -4849,7 +4942,8 @@
         document.getElementById('new-user-phone').value = '';
 
         if (data.temp_password) {
-          alert(data.message);
+          openTempPasswordModal(name, email, data.temp_password);
+          showToastNotification(`사용자 [${name}] 계정이 등록되었습니다.`);
         } else {
           showToastNotification(data.message || `사용자 [${name}] 계정이 등록되었습니다.`);
         }
@@ -5006,6 +5100,7 @@
     async function loadRoles() {
       const res = await fetch('/api/roles');
       currentRoles = await res.json();
+      updateOnboardingChecklist();
       
       const woSelect = document.getElementById('wo-select-group');
       const newUserGroupSelect = document.getElementById('new-user-group');

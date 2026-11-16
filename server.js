@@ -603,12 +603,16 @@ const server = http.createServer(async (req, res) => {
       const locRow = db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
       if (!locRow) return sendJSON(res, 404, { error: '구역을 찾을 수 없습니다.' });
 
-      const ticketRef = db.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE location_id = ? AND company_id = ? AND status != 'CANCELLED'").get(locId, companyId).cnt;
+      const ticketRef = db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE location_id = ? AND company_id = ?').get(locId, companyId).cnt;
       if (ticketRef > 0) {
-        return sendJSON(res, 409, { error: '작업지시나 신고 이력에서 사용 중인 구역은 삭제할 수 없습니다.' });
+        return sendJSON(res, 409, { error: '작업지시 또는 이력에서 사용 중인 구역은 삭제할 수 없습니다.' });
       }
 
-      db.prepare('DELETE FROM locations WHERE id = ? AND company_id = ?').run(locId, companyId);
+      try {
+        db.prepare('DELETE FROM locations WHERE id = ? AND company_id = ?').run(locId, companyId);
+      } catch (delErr) {
+        return sendJSON(res, 409, { error: '다른 데이터에서 참조 중인 구역은 삭제할 수 없습니다.' });
+      }
       broadcastSSE('LOCATION_UPDATED', { action: 'DELETE', id: locId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '위치가 삭제되었습니다.' });
     }
@@ -759,6 +763,14 @@ const server = http.createServer(async (req, res) => {
       const { title, instruction_notes, location_id, due_date, category, target_type, target_group_role_id, assignee_id } = body;
       const newTitle = (title && title.trim()) ? title.trim() : existing.title;
 
+      const effTargetType = target_type || existing.target_type || 'GROUP';
+      const effGroupId = effTargetType === 'GROUP'
+        ? (target_group_role_id !== undefined ? (target_group_role_id || null) : existing.target_group_role_id)
+        : null;
+      const effAssigneeId = effTargetType === 'INDIVIDUAL'
+        ? (assignee_id !== undefined ? (assignee_id || null) : existing.assignee_id)
+        : null;
+
       db.prepare(`
         UPDATE tickets
         SET title = ?,
@@ -767,7 +779,7 @@ const server = http.createServer(async (req, res) => {
             location_id = COALESCE(?, location_id),
             due_date = ?,
             category = COALESCE(?, category),
-            target_type = COALESCE(?, target_type),
+            target_type = ?,
             target_group_role_id = ?,
             assignee_id = ?
         WHERE id = ? AND company_id = ?
@@ -778,9 +790,9 @@ const server = http.createServer(async (req, res) => {
         location_id || null,
         due_date !== undefined ? (due_date || null) : existing.due_date,
         category || null,
-        target_type || null,
-        target_type === 'GROUP' ? (target_group_role_id || existing.target_group_role_id) : null,
-        target_type === 'INDIVIDUAL' ? (assignee_id || existing.assignee_id) : null,
+        effTargetType,
+        effGroupId,
+        effAssigneeId,
         ticketId,
         companyId
       );
