@@ -60,9 +60,9 @@ function getSession(req, forceClientType = null) {
       user = {
         id: 'super_admin',
         role: 'SUPER_ADMIN',
-        name: '최고 총괄 관리자',
+        name: '슈퍼관리자',
         email: process.env.SUPER_ADMIN_EMAIL || 'admin@fielder.kr',
-        role_title: '통합 슈퍼 관리자'
+        role_title: '슈퍼관리자'
       };
     } else {
       user = db.prepare(`
@@ -275,9 +275,10 @@ function sendMessage(companyId, opts = {}) {
 
 function getClientIp(req) {
   const xff = req.headers['x-forwarded-for'];
-  if (xff && process.env.TRUST_PROXY !== 'false') {
+  const trustProxy = Boolean(process.env.RENDER) || process.env.TRUST_PROXY === 'true';
+  if (xff && trustProxy) {
     const parts = String(xff).split(',').map(s => s.trim()).filter(Boolean);
-    if (parts.length > 0) return parts[parts.length - 1]; // rightmost proxy-appended IP
+    if (parts.length > 0) return parts[parts.length - 1];
   }
   return req.socket?.remoteAddress || 'unknown';
 }
@@ -610,6 +611,14 @@ const server = http.createServer(async (req, res) => {
         (pathname.startsWith('/api/inspections/templates') && method !== 'GET');
       if (isAdminOnlyEndpoint && !isManagerOrSuper) {
         return sendJSON(res, 403, { error: '회사 관리자 권한이 필요합니다.' });
+      }
+      // 슈퍼관리자 대리 접속(Impersonation) 쓰기 작업 감사 로그 기록
+      if (reqSession.role === 'SUPER_ADMIN' && method !== 'GET' && !pathname.startsWith('/api/super-admin')) {
+        try {
+          const targetCid = resolveCompanyId(parsedUrl, null, req);
+          db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(targetCid || null, reqSession.user.id, 'SUPER_ADMIN', 'IMPERSONATION_WRITE', 'API', pathname, `${method} ${pathname}`, new Date().toISOString());
+        } catch (e) {}
       }
     }
 
@@ -2923,9 +2932,9 @@ const server = http.createServer(async (req, res) => {
           success: true,
           role: 'SUPER_ADMIN',
           user: {
-            name: '최고 총괄 관리자',
+            name: '슈퍼관리자',
             email: superAdminEmail,
-            role_title: '통합 슈퍼 관리자'
+            role_title: '슈퍼관리자'
           },
           redirect_url: '/super-admin'
         }, cookieHeader);
@@ -3044,8 +3053,23 @@ const server = http.createServer(async (req, res) => {
         companyInfo = db.prepare('SELECT id, name, subdomain, plan, status FROM companies WHERE id = ?').get(session.companyId);
       }
 
+      let impersonating = false;
+      let targetCompany = null;
+      if (session.role === 'SUPER_ADMIN') {
+        const targetCid = resolveCompanyId(parsedUrl, null, req);
+        if (targetCid) {
+          const tc = db.prepare("SELECT id, name, subdomain FROM companies WHERE id = ? AND status != 'DELETED'").get(targetCid);
+          if (tc) {
+            impersonating = true;
+            targetCompany = tc;
+          }
+        }
+      }
+
       return sendJSON(res, 200, {
         logged_in: true,
+        impersonating,
+        target_company: targetCompany,
         user: {
           id: session.user.id,
           name: session.user.name,
@@ -3056,8 +3080,9 @@ const server = http.createServer(async (req, res) => {
           custom_role_id: session.user.custom_role_id || null,
           role_name: session.user.role_name || '',
           company_id: session.companyId,
-          company_name: companyInfo ? companyInfo.name : '플랫폼 본부',
-          subdomain: companyInfo ? (companyInfo.subdomain || 'central') : 'central'
+          company_name: targetCompany ? targetCompany.name : (companyInfo ? companyInfo.name : '플랫폼 본부'),
+          subdomain: targetCompany ? targetCompany.subdomain : (companyInfo ? (companyInfo.subdomain || 'central') : 'central'),
+          role_title: session.role === 'SUPER_ADMIN' ? '슈퍼관리자' : (session.user.role_title || '')
         }
       });
     }

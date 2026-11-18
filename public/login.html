@@ -310,9 +310,11 @@
         }
 
         const redirectParam = new URLSearchParams(window.location.search).get('redirect');
-        const nextUrl = (redirectParam && (data.role === 'SUPER_ADMIN' || redirectParam.startsWith('/?tenant=') || redirectParam.startsWith('/mobile') || redirectParam.startsWith('/t/')))
-          ? redirectParam
-          : data.redirect_url;
+        const nextUrl = data.role === 'SUPER_ADMIN'
+          ? '/super-admin'
+          : ((redirectParam && (redirectParam.startsWith('/?tenant=') || redirectParam.startsWith('/mobile') || redirectParam.startsWith('/t/')))
+              ? redirectParam
+              : data.redirect_url);
 
         if (data.must_change_password) {
           pendingRedirectUrl = nextUrl;
