@@ -3607,12 +3607,13 @@
             openProcessDetail(t.id);
           }
         };
+        const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
         let resolutionHtml = '';
         if (isUnresolved) {
           resolutionHtml = `
             <div class="flex items-center space-x-1.5 flex-wrap gap-1">
               <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-red-100 text-red-700 border border-red-200 shadow-2xs">미해결</span>
-              <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '미해결 사유 및 현장 조치 내용', '${(t.unresolved_reason || '사유 미입력').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.unresolved_photo_url || ''}', 'UNRESOLVED', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.claimed_by_name || t.assignee_name || '실무자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-red-200 text-red-800 hover:bg-red-50 shadow-2xs transition">
+              <button type="button" onclick="event.stopPropagation(); openProcessComment('${esc(t.id)}', 'UNRESOLVED')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-red-200 text-red-800 hover:bg-red-50 shadow-2xs transition">
                 <span>💬 코멘트 확인</span>
               </button>
             </div>
@@ -3621,7 +3622,7 @@
           resolutionHtml = `
             <div class="flex items-center space-x-1.5 flex-wrap gap-1">
               <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-purple-100 text-purple-700 border border-purple-200 shadow-2xs">보고</span>
-              <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '현장 실무자 조치 보고 코멘트', '${(t.completion_notes || '조치 완료').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.completion_photo_url || ''}', 'WAITING_APPROVAL', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.completed_by_name || t.claimed_by_name || '실무자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-purple-200 text-purple-800 hover:bg-purple-50 shadow-2xs transition">
+              <button type="button" onclick="event.stopPropagation(); openProcessComment('${esc(t.id)}', 'WAITING_APPROVAL')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-purple-200 text-purple-800 hover:bg-purple-50 shadow-2xs transition">
                 <span>💬 코멘트 확인</span>
               </button>
             </div>
@@ -3633,21 +3634,24 @@
             <div class="flex items-center space-x-1.5 flex-wrap gap-1">
               <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">진행중</span>
               ${hasNotes ? `
-              <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '작업 지시 및 진행 메모', '${commentContent.replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.instruction_photo_url || t.photo_url || ''}', 'IN_PROGRESS', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.claimed_by_name || t.assignee_name || '실무자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-amber-200 text-amber-800 hover:bg-amber-50 shadow-2xs transition">
+              <button type="button" onclick="event.stopPropagation(); openProcessComment('${esc(t.id)}', 'IN_PROGRESS')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-amber-200 text-amber-800 hover:bg-amber-50 shadow-2xs transition">
                 <span>💬 코멘트 확인</span>
               </button>` : ''}
             </div>
           `;
         }
 
+        const displayTitle = esc(t.instruction_title || t.title);
+        const displayLoc = `${esc(t.location_building || '본관')} ${esc(t.location_floor || '-')} · ${esc(t.location_name || '-')}`;
+        const displayWorker = esc(t.claimed_by_name || t.completed_by_name || t.assignee_name || (t.target_group_name ? t.target_group_name : '미배정'));
         tr.innerHTML = `
           <td class="px-3.5 py-3 whitespace-nowrap">${statusBadge}</td>
           <td class="px-3.5 py-3 text-sm font-bold text-[#111827] group-hover:text-[#0084B4] leading-snug break-words">
-            ${t.instruction_title || t.title}
+            ${displayTitle}
           </td>
-          <td class="px-3.5 py-3 whitespace-nowrap text-[#007EA8] font-bold truncate">${t.location_building || '본관'} ${t.location_floor || '-'} · ${t.location_name || '-'}</td>
+          <td class="px-3.5 py-3 whitespace-nowrap text-[#007EA8] font-bold truncate">${displayLoc}</td>
           <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#1E1F21] font-bold">
-            ${t.claimed_by_name || t.completed_by_name || t.assignee_name || (t.target_group_name ? t.target_group_name : '미배정')}
+            ${displayWorker}
           </td>
           <td class="px-3.5 py-3">
             ${resolutionHtml}
@@ -3661,6 +3665,7 @@
       if (completedTickets.length === 0) {
         completedTbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-xs text-[#A0A1A2]">검색 조건에 맞는 마감 완료 내역이 없습니다.</td></tr>';
       } else {
+        const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
         const visibleCompleted = isCompletedExpanded ? completedTickets : completedTickets.slice(0, 5);
         visibleCompleted.forEach(t => {
           const tr = document.createElement('tr');
@@ -3672,20 +3677,20 @@
           };
           tr.innerHTML = `
             <td class="px-3.5 py-3 text-sm font-bold text-[#111827] group-hover:text-[#0084B4] leading-snug break-words">
-              ${t.title}
+              ${esc(t.title)}
             </td>
-            <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#6D6E6F] font-semibold">${t.location_building || '본관'} ${t.location_floor || '-'} · ${t.location_name || '-'}</td>
-            <td class="px-3.5 py-3 whitespace-nowrap font-bold text-[#34A853] truncate">${t.completed_by_name || '관리자'}</td>
+            <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#6D6E6F] font-semibold">${esc(t.location_building || '본관')} ${esc(t.location_floor || '-')} · ${esc(t.location_name || '-')}</td>
+            <td class="px-3.5 py-3 whitespace-nowrap font-bold text-[#34A853] truncate">${esc(t.completed_by_name || '관리자')}</td>
             <td class="px-3.5 py-3 text-xs">
               <div class="flex items-center space-x-1.5 flex-wrap gap-1">
                 <span class="inline-flex items-center px-2 py-0.5 rounded font-extrabold text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-200">완료</span>
                 ${(t.admin_notes || t.completion_notes) ? `
-                <button type="button" onclick="event.stopPropagation(); openCommentModal('${t.id}', '완료 및 마감 승인 코멘트', '${((t.admin_notes ? `[관리자 승인] ${t.admin_notes}\n` : '') + (t.completion_notes ? `[현장 조치] ${t.completion_notes}` : '')).replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${t.completion_photo_url || ''}', 'COMPLETED', '${(t.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;')}', '${(t.completed_by_name || '관리자').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50 shadow-2xs transition">
+                <button type="button" onclick="event.stopPropagation(); openProcessComment('${esc(t.id)}', 'COMPLETED')" class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50 shadow-2xs transition">
                   <span>💬 코멘트 확인</span>
                 </button>` : ''}
               </div>
             </td>
-            <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#A0A1A2]">${t.completed_at ? t.completed_at.substring(5, 16) : '-'}</td>
+            <td class="px-3.5 py-3 whitespace-nowrap truncate text-[#A0A1A2]">${t.completed_at ? esc(t.completed_at.substring(5, 16)) : '-'}</td>
           `;
           completedTbody.appendChild(tr);
         });
@@ -5182,16 +5187,35 @@
       }
     }
 
+    function openProcessComment(ticketId, mode) {
+      const t = (currentTickets || []).find(x => x.id === ticketId);
+      if (!t) return;
+      if (mode === 'UNRESOLVED') {
+        openCommentModal(t.id, '미해결 사유 및 현장 조치 내용', t.unresolved_reason || '사유 미입력', t.unresolved_photo_url || '', 'UNRESOLVED', t.instruction_title || t.title || '', t.claimed_by_name || t.assignee_name || '실무자');
+      } else if (mode === 'WAITING_APPROVAL') {
+        openCommentModal(t.id, '현장 실무자 조치 보고 코멘트', t.completion_notes || '조치 완료', t.completion_photo_url || '', 'WAITING_APPROVAL', t.instruction_title || t.title || '', t.completed_by_name || t.claimed_by_name || '실무자');
+      } else if (mode === 'COMPLETED') {
+        const bodyTxt = (t.admin_notes ? `[관리자 승인] ${t.admin_notes}\n` : '') + (t.completion_notes ? `[현장 조치] ${t.completion_notes}` : '');
+        openCommentModal(t.id, '완료 및 마감 승인 코멘트', bodyTxt, t.completion_photo_url || '', 'COMPLETED', t.title || '', t.completed_by_name || '관리자');
+      } else {
+        const commentContent = (t.instruction_notes && t.instruction_notes.trim()) || (t.description && t.description.trim()) || '';
+        openCommentModal(t.id, '작업 지시 및 진행 메모', commentContent, t.instruction_photo_url || t.photo_url || '', 'IN_PROGRESS', t.instruction_title || t.title || '', t.claimed_by_name || t.assignee_name || '실무자');
+      }
+    }
+
     function showToastNotification(msg, type = 'SUCCESS') {
       const toast = document.createElement('div');
       const isError = type === 'ERROR';
       toast.className = isError
         ? 'fixed top-20 right-6 z-50 bg-red-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold flex items-center space-x-3 transition-all duration-300 border-2 border-red-400 shadow-red-600/30 transform translate-y-0'
         : 'fixed top-20 right-6 z-50 bg-[#0084B4] text-white px-5 py-3.5 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold flex items-center space-x-3 transition-all duration-300 border-2 border-[#13B5EA] shadow-[#0084B4]/30 transform translate-y-0';
-      toast.innerHTML = `
-        <span class="w-6 h-6 rounded-full bg-white ${isError ? 'text-red-600' : 'text-[#0084B4]'} flex items-center justify-center font-black text-xs shadow-xs">${isError ? '✕' : '✓'}</span>
-        <span>${msg}</span>
-      `;
+      const iconSpan = document.createElement('span');
+      iconSpan.className = `w-6 h-6 rounded-full bg-white ${isError ? 'text-red-600' : 'text-[#0084B4]'} flex items-center justify-center font-black text-xs shadow-xs`;
+      iconSpan.textContent = isError ? '✕' : '✓';
+      const msgSpan = document.createElement('span');
+      msgSpan.textContent = msg;
+      toast.appendChild(iconSpan);
+      toast.appendChild(msgSpan);
       document.body.appendChild(toast);
       setTimeout(() => {
         toast.style.opacity = '0';
@@ -5232,14 +5256,15 @@
         const isSelected = editingRoleId === r.id;
         const row = document.createElement('div');
         row.className = `flex justify-between items-center p-3 rounded-xl border border-[#D5D3CF] text-xs transition ${isSelected ? 'bg-amber-50/60 border-amber-300' : 'bg-white'}`;
+        const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
         row.innerHTML = `
           <div class="flex items-center space-x-2">
-            <b class="text-[#1E1F21] text-xs cursor-pointer hover:text-[#4573D2] underline decoration-dotted" onclick="editRole('${r.id}')" title="클릭하여 이름 수정">${r.name}</b>
+            <b class="text-[#1E1F21] text-xs cursor-pointer hover:text-[#4573D2] underline decoration-dotted" onclick="editRole('${esc(r.id)}')" title="클릭하여 이름 수정">${esc(r.name)}</b>
             <span class="text-[#6D6E6F] ml-1.5 text-[11px]">소속 인원: <b class="text-[#1E1F21]">${r.worker_count || 0}명</b></span>
           </div>
           <div class="space-x-1.5">
-            <button onclick="editRole('${r.id}')" class="px-2.5 py-1 bg-[#FAF9F8] border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold rounded text-[11px] shadow-2xs">이름 수정</button>
-            ${r.is_system ? '<span class="text-[10px] text-[#A0A1A2] px-1.5 py-0.5 bg-[#FAF9F8] rounded border border-[#EDECEB]">기본</span>' : `<button onclick="deleteRole('${r.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-[11px] font-medium">삭제</button>`}
+            <button onclick="editRole('${esc(r.id)}')" class="px-2.5 py-1 bg-[#FAF9F8] border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold rounded text-[11px] shadow-2xs">이름 수정</button>
+            ${r.is_system ? '<span class="text-[10px] text-[#A0A1A2] px-1.5 py-0.5 bg-[#FAF9F8] rounded border border-[#EDECEB]">기본</span>' : `<button onclick="deleteRole('${esc(r.id)}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-[11px] font-medium">삭제</button>`}
           </div>
         `;
         settingsList.appendChild(row);

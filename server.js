@@ -553,10 +553,11 @@ function provisionTenant({ name, company_name, subdomain, adminName, admin_name,
 
   const userId = 'user_admin_' + slug;
   const pwdHash = password_hash || hashPassword(password || '1234');
+  const mustChangePw = password_hash ? 0 : 1;
   db.prepare(`
-    INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active)
-    VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1)
-  `).run(userId, id, adminN, adminP || '010-0000-0000', adminE || `admin@${slug}.fielder.kr`, pwdHash);
+    INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active, must_change_password)
+    VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1, ?)
+  `).run(userId, id, adminN, adminP || '010-0000-0000', adminE || `admin@${slug}.fielder.kr`, pwdHash, mustChangePw);
 
   seedDefaultTenantData(id);
 
@@ -643,17 +644,26 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/public/company' && method === 'GET') {
       const tenant = (parsedUrl.query?.tenant || '').trim();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare("SELECT id, name, subdomain, logo_url, status FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+      const comp = db.prepare("SELECT name, subdomain, logo_url FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       return sendJSON(res, 200, comp);
     }
 
-    // ⭐️ 공개 구역 목록 (QR 현장 신고 화면용)
+    // ⭐️ 공개 구역 단건/목록 조회 (비로그인 시 locId 지정 단건만 허용해 전체 구역 열거 차단)
     if (pathname === '/api/public/locations' && method === 'GET') {
       const tenant = (parsedUrl.query?.tenant || '').trim();
+      const locId = (parsedUrl.query?.locId || parsedUrl.query?.location || '').trim();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
       const comp = db.prepare("SELECT id FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
+      if (locId) {
+        const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? AND id = ?').all(comp.id, locId);
+        return sendJSON(res, 200, locs);
+      }
+      const reqSession = getSession(req);
+      if (!reqSession) {
+        return sendJSON(res, 200, []);
+      }
       const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? ORDER BY building ASC, floor ASC, name ASC').all(comp.id);
       return sendJSON(res, 200, locs);
     }
