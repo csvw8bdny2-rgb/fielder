@@ -732,24 +732,25 @@
           `;
         }
 
+        const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
         card.innerHTML = `
           <div class="flex items-center justify-between">
             ${statusTag}
-            <span class="text-[10px] text-[#4573D2] font-semibold">${t.location_name || ''}</span>
+            <span class="text-[10px] text-[#4573D2] font-semibold">${esc(t.location_name || '')}</span>
           </div>
 
-          <div class="text-xs font-bold text-[#1E1F21]">${t.instruction_title || t.title}</div>
-          <div class="text-[11px] text-[#6D6E6F] bg-[#FAF9F8] p-2 rounded-lg border border-[#EDECEB]">지시: "${t.instruction_notes || '현장 점검 및 조치 요망'}"</div>
+          <div class="text-xs font-bold text-[#1E1F21]">${esc(t.instruction_title || t.title)}</div>
+          <div class="text-[11px] text-[#6D6E6F] bg-[#FAF9F8] p-2 rounded-lg border border-[#EDECEB]">지시: "${esc(t.instruction_notes || '현장 점검 및 조치 요망')}"</div>
 
           ${isUnresolved ? `
             <div class="p-2 bg-red-100/60 rounded text-[10px] text-red-700 font-medium">
-              등록된 미해결 사유: ${t.unresolved_reason || ''}
+              등록된 미해결 사유: ${esc(t.unresolved_reason || '')}
             </div>
           ` : ''}
 
           ${isWaitingApproval ? `
             <div class="p-2 bg-purple-100/50 rounded text-[10px] text-[#8250DF] font-medium">
-              조치 보고 내용: "${t.completion_notes || ''}"
+              조치 보고 내용: "${esc(t.completion_notes || '')}"
             </div>
           ` : ''}
 
@@ -1479,21 +1480,22 @@
         merged.slice(0, 10).forEach(log => {
           const card = document.createElement('div');
           card.className = 'bg-white p-3 rounded-xl border border-[#EDECEB] space-y-1.5 shadow-2xs';
+          const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
           card.innerHTML = `
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-1 min-w-0">
-                ${log.building ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21] whitespace-nowrap">${log.building}</span>` : ''}
-                ${log.floor ? `<span class="font-bold text-[#4573D2] text-xs whitespace-nowrap">${log.floor}</span>` : ''}
-                <span class="font-bold text-[#1E1F21] text-xs ml-1 truncate">${log.title}</span>
+                ${log.building ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21] whitespace-nowrap">${esc(log.building)}</span>` : ''}
+                ${log.floor ? `<span class="font-bold text-[#4573D2] text-xs whitespace-nowrap">${esc(log.floor)}</span>` : ''}
+                <span class="font-bold text-[#1E1F21] text-xs ml-1 truncate">${esc(log.title)}</span>
               </div>
               <span class="px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${log.isGood ? 'bg-emerald-50 text-[#34A853]' : 'bg-red-50 text-[#F06A6A]'}">
-                ${log.statusText}
+                ${esc(log.statusText)}
               </span>
             </div>
-            ${log.notes ? `<p class="text-[11px] text-[#6D6E6F] leading-tight">${log.notes}</p>` : ''}
+            ${log.notes ? `<p class="text-[11px] text-[#6D6E6F] leading-tight">${esc(log.notes)}</p>` : ''}
             <div class="pt-1 flex items-center justify-between text-[10px] text-[#A0A1A2] border-t border-[#F4F3F2]">
-              <span>점검자: <b class="text-[#1E1F21] font-semibold">${log.worker_name}</b></span>
-              <span>${log.ts ? log.ts.substring(5, 16) : ''}</span>
+              <span>점검자: <b class="text-[#1E1F21] font-semibold">${esc(log.worker_name)}</b></span>
+              <span>${log.ts ? esc(log.ts.substring(5, 16)) : ''}</span>
             </div>
           `;
           list.appendChild(card);

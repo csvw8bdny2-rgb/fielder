@@ -1334,11 +1334,11 @@
 
           tr.innerHTML = `
             <td class="py-3 px-4 font-mono text-slate-500 text-[11px] whitespace-nowrap">${dateStr}</td>
-            <td class="py-3 px-4 font-bold text-slate-800">${app.company_name}</td>
-            <td class="py-3 px-4 font-mono font-semibold text-[#0084B4]">${app.requested_slug}</td>
-            <td class="py-3 px-4 font-medium text-slate-700">${app.admin_name}</td>
-            <td class="py-3 px-4 font-mono text-slate-600 text-[11px]">${app.admin_phone || '-'}</td>
-            <td class="py-3 px-4 font-mono text-slate-600 text-[11px]">${app.admin_email}</td>
+            <td class="py-3 px-4 font-bold text-slate-800">${escapeHtml(app.company_name)}</td>
+            <td class="py-3 px-4 font-mono font-semibold text-[#0084B4]">${escapeHtml(app.requested_slug)}</td>
+            <td class="py-3 px-4 font-medium text-slate-700">${escapeHtml(app.admin_name)}</td>
+            <td class="py-3 px-4 font-mono text-slate-600 text-[11px]">${escapeHtml(app.admin_phone || '-')}</td>
+            <td class="py-3 px-4 font-mono text-slate-600 text-[11px]">${escapeHtml(app.admin_email)}</td>
             <td class="py-3 px-4 text-center">${statusBadge}</td>
             <td class="py-3 px-4 text-right space-x-1">${actionBtns}</td>
           `;

@@ -1,4 +1,11 @@
 (function() {
+  window.escapeHtml = function(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
   // 1. KFIRST 커스텀 콤보박스 스타일 주입 (OS 기본 회색 팝업 대체)
   const style = document.createElement('style');
   style.textContent = `

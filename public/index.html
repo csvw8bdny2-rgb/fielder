@@ -2410,6 +2410,12 @@
           location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
           return;
         }
+        // 작업자(WORKER) 계정은 관리자 콘솔 접근 차단 -> 모바일 현장 콘솔로 즉시 이동
+        if (meData.user.role === 'WORKER') {
+          const targetTenant = tParam || meData.user.subdomain || '';
+          location.href = '/mobile' + (targetTenant ? `?tenant=${encodeURIComponent(targetTenant)}` : '');
+          return;
+        }
         // 슈퍼관리자가 테넌트 없이 / 에 진입한 경우 즉시 슈퍼관리자 센터로 이동 (회사명 undefined 방지)
         if (meData.user.role === 'SUPER_ADMIN' && !meData.impersonating) {
           location.href = '/super-admin';
@@ -2420,17 +2426,26 @@
           location.href = '/login';
           return;
         }
-        // 슈퍼관리자 대리 접속 중 상단 배너 표시
+        // 슈퍼관리자 대리 접속 중 상단 배너 표시 (XSS 안전 이스케이프)
         if (meData.impersonating && meData.target_company) {
           let banner = document.getElementById('sa-impersonation-banner');
           if (!banner) {
             banner = document.createElement('div');
             banner.id = 'sa-impersonation-banner';
             banner.className = 'w-full bg-amber-100 border-b border-amber-300 text-amber-900 px-4 py-2 text-xs font-bold flex items-center justify-between z-50';
-            banner.innerHTML = `
-              <span>⚠️ 슈퍼관리자 대리 접속 중 — <strong class="underline">${meData.target_company.name}</strong> 회사 콘솔 (쓰기 작업은 감사 로그에 기록됩니다)</span>
-              <a href="/super-admin" class="px-3 py-1 rounded bg-amber-900 text-white hover:bg-black text-[11px] font-bold whitespace-nowrap">슈퍼관리자 센터로 돌아가기</a>
-            `;
+            const leftSpan = document.createElement('span');
+            leftSpan.appendChild(document.createTextNode('⚠️ 슈퍼관리자 대리 접속 중 — '));
+            const strongEl = document.createElement('strong');
+            strongEl.className = 'underline';
+            strongEl.textContent = meData.target_company.name || '';
+            leftSpan.appendChild(strongEl);
+            leftSpan.appendChild(document.createTextNode(' 회사 콘솔 (쓰기 작업은 감사 로그에 기록됩니다)'));
+            const backLink = document.createElement('a');
+            backLink.href = '/super-admin';
+            backLink.className = 'px-3 py-1 rounded bg-amber-900 text-white hover:bg-black text-[11px] font-bold whitespace-nowrap';
+            backLink.textContent = '슈퍼관리자 센터로 돌아가기';
+            banner.appendChild(leftSpan);
+            banner.appendChild(backLink);
             document.body.prepend(banner);
           }
         }
@@ -3134,15 +3149,16 @@
             }
             if (!roleName) roleName = getCategoryName(t.category);
 
+            const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
             // 담당자가 배정되었거나 접수했을 때 위치 왼쪽에 표시할 압축 뱃지
             let workerBadgeHTML = '';
             if (workerName) {
               workerBadgeHTML = `
                 <div class="flex-shrink-0">
                   <span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-bold bg-[#EBF7FD] border border-[#13B5EA]/40 text-[#005B82] whitespace-nowrap">
-                    <span class="font-medium">${roleName}</span>
+                    <span class="font-medium">${esc(roleName)}</span>
                     <span>·</span>
-                    <span class="text-[#002B41] font-extrabold">${workerName}</span>
+                    <span class="text-[#002B41] font-extrabold">${esc(workerName)}</span>
                   </span>
                 </div>
               `;
@@ -3151,13 +3167,13 @@
             // 레이아웃 순서: [제목(크고 선명)] ➔ [담당] ➔ [위치(동·층·구역)] ➔ [상태]
             row.innerHTML = `
               <div class="flex items-center space-x-3 flex-1 min-w-0 pr-2">
-                <div class="font-bold text-[#111827] text-[15px] leading-snug truncate flex-1 group-hover:text-[#0084B4] transition" title="${t.title}">
-                  ${t.title}
+                <div class="font-bold text-[#111827] text-[15px] leading-snug truncate flex-1 group-hover:text-[#0084B4] transition" title="${esc(t.title)}">
+                  ${esc(t.title)}
                 </div>
                 ${workerBadgeHTML}
                 <div class="flex-shrink-0">
                   <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-[#F4F8FB] border border-[#DCE8F0] text-[#007EA8] whitespace-nowrap">
-                    ${t.location_building ? `${t.location_building} ` : ''}${t.location_floor || '-'} · ${t.location_name || '구역미정'}
+                    ${t.location_building ? `${esc(t.location_building)} ` : ''}${esc(t.location_floor || '-')} · ${esc(t.location_name || '구역미정')}
                   </span>
                 </div>
               </div>

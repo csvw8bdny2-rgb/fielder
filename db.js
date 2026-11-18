@@ -330,9 +330,6 @@ function initDatabase() {
   try { db.exec("ALTER TABLE companies ADD COLUMN deleted_at TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN buildings_config TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}
-  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_at DATETIME;"); } catch (e) {}
-  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_by TEXT;"); } catch (e) {}
 
   // ⭐️ comp_central_tower 서브도메인 'central' 보장 (/?tenant=null 버그 원천 방지)
   try {
@@ -528,10 +525,17 @@ function initDatabase() {
       status TEXT DEFAULT '양호',
       notes TEXT,
       photo_url TEXT,
+      is_confirmed INTEGER DEFAULT 0,
+      confirmed_at DATETIME,
+      confirmed_by TEXT,
       completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     );
   `);
+
+  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_at DATETIME;"); } catch (e) {}
+  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_by TEXT;"); } catch (e) {}
 
   if (process.env.SEED_DEMO !== 'false') {
     seedData();
