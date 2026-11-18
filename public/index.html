@@ -62,9 +62,9 @@
         </nav>
       </div>
 
-      <!-- 우측: 프로필 아바타 -->
-      <div class="flex items-center flex-shrink-0 ml-4">
-        <div class="flex items-center space-x-2.5 py-1 pl-2 pr-0 rounded-lg hover:bg-white/10 transition cursor-pointer" onclick="location.href='/login'" title="클릭 시 로그인 화면으로 이동">
+      <!-- 우측: 프로필 아바타 + 로그아웃 -->
+      <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
+        <div class="flex items-center space-x-2.5 py-1 px-2 rounded-lg">
           <div class="w-8 h-8 rounded-full bg-[#005B82] border border-[#13B5EA]/60 flex items-center justify-center font-bold text-xs text-white flex-shrink-0 shadow-xs" id="header-user-avatar">
             관
           </div>
@@ -73,6 +73,9 @@
             <span class="text-[10px] text-slate-300 block leading-tight truncate" id="header-user-role">총괄 관리자</span>
           </div>
         </div>
+        <button type="button" onclick="handleConsoleLogout()" class="px-2.5 py-1.5 rounded-lg border border-white/20 text-[11px] font-semibold text-slate-200 hover:bg-white/10 hover:text-white transition whitespace-nowrap">
+          로그아웃
+        </button>
       </div>
 
     </div>
@@ -2396,6 +2399,18 @@
       return withDate ? parts : parts.slice(11);
     }
 
+    async function handleConsoleLogout() {
+      try {
+        await fetch('/api/logout', { method: 'POST' });
+      } catch (e) {}
+      try {
+        localStorage.removeItem('fielder_user');
+        sessionStorage.removeItem('fielder_user');
+      } catch (e) {}
+      const tParam = typeof getTenantParam === 'function' ? getTenantParam() : '';
+      location.href = '/login' + (tParam ? `?tenant=${encodeURIComponent(tParam)}` : '');
+    }
+
     async function init() {
       // ⭐️ 1. 인증 세션 필수 확인 (비로그인 접근 시 로그인 화면으로 이동)
       try {
@@ -4228,22 +4243,24 @@
         tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-[#64748B]">발송된 작업지시 내역이 없습니다.</td></tr>';
         return;
       }
+      const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
       currentTickets.forEach(t => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-[#F8FAFC] transition text-xs border-b border-[#EDECEB] last:border-none';
         
         const catKorean = getCategoryName(t.category, t.target_group_name);
         const statusBadge = getStatusBadge(t.status);
+        const rawWoTitle = t.instruction_title || t.title || '';
         
         tr.innerHTML = `
           <td class="px-4 py-3 whitespace-nowrap">
-            <span class="px-2.5 py-1 rounded-md bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/30 font-bold text-xs inline-block">${catKorean}</span>
+            <span class="px-2.5 py-1 rounded-md bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/30 font-bold text-xs inline-block">${esc(catKorean)}</span>
           </td>
-          <td class="px-4 py-3 text-[15px] font-bold text-[#111827] max-w-xs truncate" title="${t.instruction_title || t.title}">
-            ${t.instruction_title || t.title}
+          <td class="px-4 py-3 text-[15px] font-bold text-[#111827] max-w-xs truncate" title="${esc(rawWoTitle)}">
+            ${esc(rawWoTitle)}
           </td>
           <td class="px-4 py-3 text-[#007EA8] font-bold whitespace-nowrap">
-            ${t.location_building ? `${t.location_building} ` : ''}${t.location_floor || '-'} · ${t.location_name || '-'}
+            ${t.location_building ? `${esc(t.location_building)} ` : ''}${esc(t.location_floor || '-')} · ${esc(t.location_name || '-')}
           </td>
           <td class="px-4 py-3 whitespace-nowrap">
             ${(() => {
@@ -4254,33 +4271,33 @@
                 if (t.claimed_by_name || (t.started_at && claimedPerson)) {
                   return `
                     <span class="px-2.5 py-1 rounded-md bg-[#E8F8F0] border border-[#A3E6CD] text-[#00875A] font-extrabold text-xs whitespace-nowrap">
-                      ${t.claimed_by_name || claimedPerson} <span class="font-semibold text-[#006644]">(${roleName})</span>
+                      ${esc(t.claimed_by_name || claimedPerson)} <span class="font-semibold text-[#006644]">(${esc(roleName)})</span>
                     </span>
                   `;
                 } else {
                   return `
                     <span class="px-2.5 py-1 rounded-md bg-[#F0F8FC] border border-[#13B5EA]/40 text-[#007EA8] font-bold text-xs whitespace-nowrap">
-                      ${roleName} (선착순)
+                      ${esc(roleName)} (선착순)
                     </span>
                   `;
                 }
               } else {
                 return claimedPerson ? `
                   <span class="px-2.5 py-1 rounded-md bg-white border border-[#CBD5E1] text-[#111827] font-bold text-xs whitespace-nowrap">
-                    ${claimedPerson} ${roleName ? `<span class="text-[#64748B] font-normal">(${roleName})</span>` : ''}
+                    ${esc(claimedPerson)} ${roleName ? `<span class="text-[#64748B] font-normal">(${esc(roleName)})</span>` : ''}
                   </span>
                 ` : `<span class="text-[#94A3B8] font-medium text-xs">미배정</span>`;
               }
             })()}
           </td>
           <td class="px-4 py-3 text-[#64748B] font-mono text-xs whitespace-nowrap">
-            ${t.due_date ? `<span class="text-[#0084B4] font-bold block">예정: ${t.due_date}</span>` : ''}
-            <span>${formatKST(t.assigned_at || t.created_at)}</span>
+            ${t.due_date ? `<span class="text-[#0084B4] font-bold block">예정: ${esc(t.due_date)}</span>` : ''}
+            <span>${esc(formatKST(t.assigned_at || t.created_at))}</span>
           </td>
           <td class="px-4 py-3 whitespace-nowrap">${statusBadge}</td>
           <td class="px-4 py-3 text-right whitespace-nowrap space-x-1">
-            <button onclick="openEditWorkOrderModal('${t.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] rounded text-[11px] font-semibold">수정</button>
-            <button onclick="cancelWorkOrder('${t.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-[11px] font-medium">취소</button>
+            <button onclick="openEditWorkOrderModal('${esc(t.id)}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] rounded text-[11px] font-semibold">수정</button>
+            <button onclick="cancelWorkOrder('${esc(t.id)}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-[11px] font-medium">취소</button>
           </td>
         `;
         tbody.appendChild(tr);

@@ -662,7 +662,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 200, locs);
       }
       const reqSession = getSession(req);
-      if (!reqSession) {
+      if (!reqSession || (reqSession.role !== 'SUPER_ADMIN' && reqSession.companyId !== comp.id)) {
         return sendJSON(res, 200, []);
       }
       const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? ORDER BY building ASC, floor ASC, name ASC').all(comp.id);
