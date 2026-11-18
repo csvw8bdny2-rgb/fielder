@@ -420,7 +420,8 @@ function resolveCompanyId(parsedUrl, body, req) {
     if (tMatch) tenant = tMatch[1];
   }
   if (tenant && tenant !== 'null' && tenant !== 'undefined') {
-    const row = db.prepare('SELECT id FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
+    const cleanTenant = String(tenant).trim().toLowerCase();
+    const row = db.prepare("SELECT id FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(cleanTenant, String(tenant).trim());
     if (row && row.id) return row.id;
   }
   return null;
@@ -642,19 +643,19 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 공개 회사 기본 정보 (로그인/QR 신고 화면용 최소 정보)
     if (pathname === '/api/public/company' && method === 'GET') {
-      const tenant = (parsedUrl.query?.tenant || '').trim();
+      const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare("SELECT name, subdomain, logo_url FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+      const comp = db.prepare("SELECT name, subdomain, logo_url FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       return sendJSON(res, 200, comp);
     }
 
     // ⭐️ 공개 구역 단건/목록 조회 (비로그인 시 locId 지정 단건만 허용해 전체 구역 열거 차단)
     if (pathname === '/api/public/locations' && method === 'GET') {
-      const tenant = (parsedUrl.query?.tenant || '').trim();
+      const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       const locId = (parsedUrl.query?.locId || parsedUrl.query?.location || '').trim();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare("SELECT id FROM companies WHERE (subdomain = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+      const comp = db.prepare("SELECT id FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       if (locId) {
         const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? AND id = ?').all(comp.id, locId);
