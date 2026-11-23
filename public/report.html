@@ -28,57 +28,47 @@
 </head>
 <body class="bg-[#F8FAFC] min-h-screen flex flex-col justify-between antialiased text-[#0F172A]">
 
-  <!-- 1. 상단 바 (KFIRST / DIACOM 로고 배지) -->
+  <!-- 1. 상단 바 -->
   <header class="w-full bg-[#002B41] border-b border-[#001F30] py-3.5 px-4 text-white sticky top-0 z-30 shadow-md">
-    <div class="max-w-md mx-auto flex items-center justify-between">
-      <div class="flex items-center space-x-2.5">
-        <span id="report-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-7 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
+    <div class="max-w-md mx-auto flex items-center justify-between gap-2">
+      <div class="flex items-center space-x-2.5 min-w-0">
+        <span id="report-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
           Fielder
         </span>
-        <div class="leading-tight">
-          <span class="font-bold text-sm text-white block" id="report-company-name">시설관리운영본부</span>
-          <span class="text-[10px] text-slate-300 font-medium">QR 현장 간편 접수</span>
+        <div class="leading-tight min-w-0">
+          <span class="font-bold text-[15px] text-white block truncate" id="report-company-name">시설관리운영본부</span>
+          <span class="text-xs text-slate-300 font-medium block truncate">현장 불편 접수</span>
         </div>
       </div>
-      <span class="text-[11px] font-semibold text-[#13B5EA] bg-[#001F30] px-2 py-0.5 rounded-full border border-[#004D73]">
-        실시간 접수중
+      <span class="text-xs font-semibold text-[#13B5EA] bg-[#001F30] px-2.5 py-1 rounded-full border border-[#004D73] whitespace-nowrap shrink-0">
+        접수중
       </span>
     </div>
   </header>
 
   <!-- 2. 초간결 원페이지 신고 폼 -->
-  <main class="flex-1 max-w-md w-full mx-auto px-4 py-4 space-y-4">
+  <main class="flex-1 max-w-md w-full mx-auto px-4 py-5 space-y-4">
 
-    <!-- 📍 1. 신고 위치 (QR 자동 인식 영역) -->
+    <!-- 📍 1. 접수 위치 -->
     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1.5">
-      <div class="flex items-center justify-between">
-        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">접수 위치 (QR 자동 인식)</span>
-        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          현장 QR 확인됨
-        </span>
-      </div>
-      
-      <!-- 자동으로 나타나는 구역명 -->
+      <span class="text-[13px] font-bold text-slate-600 block">접수 위치</span>
       <div class="flex items-center space-x-2 pt-0.5">
         <span class="text-xl">📍</span>
-        <span id="display-location-name" class="text-base sm:text-lg font-black text-[#002B41] tracking-tight">
+        <span id="display-location-name" class="text-lg font-extrabold text-[#002B41] tracking-tight">
           위치 확인 중...
         </span>
       </div>
-
-      <!-- 보이지 않지만 전송용 구역 ID -->
       <input type="hidden" id="report-location-id" value="">
     </div>
 
-    <!-- 📸 2. 현장 사진 촬영/첨부 (선택) -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-      <span class="text-xs font-bold text-slate-700 block">현장 사진 (선택)</span>
+    <!-- 📸 2. 현장 사진 (선택) -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+      <span class="text-sm font-bold text-[#1E1F21] block">현장 사진 <span class="text-xs font-medium text-slate-500">(선택)</span></span>
       
-      <label class="cursor-pointer block border-2 border-dashed border-slate-200 hover:border-[#13B5EA] rounded-xl p-3.5 text-center bg-slate-50 transition">
-        <div class="flex flex-col items-center justify-center space-y-1">
+      <label class="cursor-pointer block border-2 border-dashed border-slate-200 hover:border-[#13B5EA] rounded-xl p-4 text-center bg-slate-50 transition">
+        <div class="flex flex-col items-center justify-center space-y-1.5">
           <span class="text-2xl">📷</span>
-          <span class="text-xs font-bold text-slate-700">사진 촬영 또는 앨범에서 선택</span>
-          <span class="text-[10px] text-slate-400">파손이나 고장 부위가 잘 보이게 찍어주세요</span>
+          <span class="text-sm font-bold text-slate-700">사진 촬영 또는 앨범에서 선택</span>
         </div>
         <input type="file" id="photo-input" accept="image/*" capture="environment" onchange="handlePhoto(this)" class="hidden">
       </label>
@@ -86,51 +76,47 @@
       <!-- 사진 미리보기 -->
       <div id="photo-preview-wrap" class="hidden relative pt-1">
         <img id="photo-preview-img" src="" alt="첨부 사진" class="w-full h-44 object-cover rounded-xl border border-slate-200">
-        <button type="button" onclick="clearPhoto()" class="absolute top-3 right-3 bg-black/70 hover:bg-black text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold">
+        <button type="button" onclick="clearPhoto()" class="absolute top-3 right-3 bg-black/70 hover:bg-black text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
           ✕
         </button>
       </div>
     </div>
 
-    <!-- ✏️ 3. 불편 내용 (코멘트) -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-      <span class="text-xs font-bold text-slate-700 block">불편 및 요청 사항 (코멘트)</span>
-      <textarea id="report-comment" rows="3" placeholder="불편하시거나 정비가 필요한 내용을 편하게 적어주세요.&#10;(예: 세면대 물이 새요, 조명이 깜빡거려요, 문이 잘 안 닫혀요)" class="w-full border border-slate-300 rounded-xl p-3 text-xs font-medium outline-none focus:border-[#13B5EA] bg-white resize-none leading-relaxed"></textarea>
+    <!-- ✏️ 3. 불편 및 요청 사항 -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+      <span class="text-sm font-bold text-[#1E1F21] block">불편 및 요청 사항</span>
+      <textarea id="report-comment" rows="3" placeholder="불편하거나 정비가 필요한 내용을 적어주세요." class="w-full border border-slate-300 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#13B5EA] bg-white resize-none leading-relaxed"></textarea>
     </div>
 
-    <!-- 📱 4. 결과 받을 휴대폰 번호 & 인증번호 -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+    <!-- 📱 4. 휴대폰 번호 (010 + 8자리 숫자) & 인증번호 -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
       <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-slate-700">결과 안내받을 휴대폰 번호</span>
-        <span id="badge-verified" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span class="text-sm font-bold text-[#1E1F21]">휴대폰 번호</span>
+        <span id="badge-verified" class="hidden px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
           인증 완료
         </span>
       </div>
 
       <!-- 전화번호 입력 및 인증 요청 -->
-      <div class="flex items-center space-x-2 text-xs">
-        <input type="tel" id="input-phone" placeholder="휴대폰 번호 (010-0000-0000)" class="flex-1 h-11 border border-slate-300 rounded-xl px-3 text-xs font-semibold outline-none focus:border-[#13B5EA] bg-white">
-        <button type="button" id="btn-send-code" onclick="sendCode()" class="h-11 px-3.5 bg-[#002B41] hover:bg-[#001F30] text-white font-semibold text-xs rounded-xl whitespace-nowrap transition">
+      <div class="flex items-center space-x-2">
+        <input type="tel" id="input-phone" oninput="formatMobilePhoneInput(this)" inputmode="numeric" maxlength="13" placeholder="010-0000-0000" class="flex-1 h-12 border border-slate-300 rounded-xl px-3.5 text-sm font-semibold outline-none focus:border-[#13B5EA] bg-white">
+        <button type="button" id="btn-send-code" onclick="sendCode()" class="h-12 px-4 bg-[#002B41] hover:bg-[#001F30] text-white font-bold text-sm rounded-xl whitespace-nowrap transition">
           인증번호 받기
         </button>
       </div>
 
       <!-- 인증번호 입력창 -->
-      <div id="code-verify-box" class="hidden flex items-center space-x-2 text-xs pt-1">
-        <input type="text" id="input-code" placeholder="인증번호 6자리 입력" maxlength="6" class="flex-1 h-11 border border-slate-300 rounded-xl px-3 text-xs font-mono font-bold outline-none focus:border-[#13B5EA] bg-white">
-        <button type="button" onclick="verifyCode()" class="h-11 px-4 bg-[#13B5EA] hover:bg-[#0EA5E9] text-[#002B41] font-bold text-xs rounded-xl whitespace-nowrap transition">
+      <div id="code-verify-box" class="hidden flex items-center space-x-2 pt-1">
+        <input type="text" id="input-code" inputmode="numeric" placeholder="인증번호 6자리" maxlength="6" class="flex-1 h-12 border border-slate-300 rounded-xl px-3.5 text-sm font-mono font-bold outline-none focus:border-[#13B5EA] bg-white">
+        <button type="button" onclick="verifyCode()" class="h-12 px-5 bg-[#13B5EA] hover:bg-[#0EA5E9] text-[#002B41] font-bold text-sm rounded-xl whitespace-nowrap transition">
           확인
         </button>
       </div>
-
-      <p class="text-[11px] text-slate-400">
-        조치가 완료되면 입력하신 번호로 처리 결과를 문자로 안내해 드립니다.
-      </p>
     </div>
 
     <!-- 🚀 5. 접수하기 버튼 -->
     <div class="pt-1 pb-4">
-      <button type="button" id="btn-submit" onclick="submitReport()" class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center shadow-md">
+      <button type="button" id="btn-submit" onclick="submitReport()" class="btn-sky w-full h-12 rounded-xl text-[15px] flex items-center justify-center shadow-md">
         접수 완료하기
       </button>
     </div>
@@ -138,9 +124,9 @@
   </main>
 
   <!-- 3. 푸터 -->
-  <footer class="w-full bg-white border-t border-slate-200 py-3 px-4 text-center text-xs text-slate-400">
+  <footer class="w-full bg-white border-t border-slate-200 py-3 px-4 text-center text-xs text-slate-500">
     <div class="max-w-md mx-auto">
-      <div>© Fielder 시설관리시스템 · 간편 QR 현장 접수 창구</div>
+      <div>© Fielder 시설관리시스템</div>
     </div>
   </footer>
 
@@ -153,10 +139,9 @@
 
       <div class="space-y-1">
         <h3 class="text-lg font-bold text-slate-900">접수가 완료되었습니다</h3>
-        <p class="text-xs text-slate-500">담당 실무자에게 즉시 전달되어 신속히 조치하겠습니다.</p>
       </div>
 
-      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-left text-xs space-y-1">
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-left text-sm space-y-1.5">
         <div class="flex justify-between">
           <span class="text-slate-500">접수 번호</span>
           <span class="font-mono font-bold text-slate-800" id="res-ticket-no">T-2026-0000</span>
@@ -166,12 +151,12 @@
           <span class="font-bold text-slate-800" id="res-location-name">-</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-slate-500">결과 수신 번호</span>
+          <span class="text-slate-500">연락처</span>
           <span class="font-mono text-[#0084B4]" id="res-phone">-</span>
         </div>
       </div>
 
-      <button onclick="location.reload()" class="btn-sky w-full h-11 rounded-xl text-xs">
+      <button onclick="location.reload()" class="btn-sky w-full h-12 rounded-xl text-sm">
         확인
       </button>
     </div>
@@ -297,8 +282,8 @@
     // 3. 인증번호 발송
     async function sendCode() {
       const phone = document.getElementById('input-phone').value.trim();
-      if (!phone || phone.length < 10) {
-        showReportToast('올바른 휴대폰 번호를 입력해주세요.', true);
+      if (!/^010-\d{4}-\d{4}$/.test(phone)) {
+        showReportToast('휴대폰 번호는 010-0000-0000 형식으로 입력해주세요.', true);
         return;
       }
 
