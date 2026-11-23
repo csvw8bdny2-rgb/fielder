@@ -3367,11 +3367,26 @@ const server = http.createServer(async (req, res) => {
     // ==========================================
     // 6. 정적 웹 페이지 서빙
     // ==========================================
-    if (pathname === '/' || pathname === '/admin') {
-      return serveStaticFile(res, path.join(PUBLIC_DIR, 'index.html'));
-    }
-    // ⭐️ [TENANT PATH ROUTING] 개별 프로젝트 전용 URL 지원 (/t/:slug/)
-    if (pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/?$/)) {
+    const tenantPathMatch = pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/?$/);
+    if (pathname === '/' || pathname === '/admin' || pathname === '/index.html' || tenantPathMatch) {
+      const session = getSession(req);
+      const queryTenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
+      const targetTenant = (tenantPathMatch && tenantPathMatch[1] ? tenantPathMatch[1].toLowerCase() : '') || queryTenant;
+      if (!session) {
+        const loginLoc = targetTenant
+          ? `/login?tenant=${encodeURIComponent(targetTenant)}&redirect=${encodeURIComponent(tenantPathMatch ? pathname : '/?tenant=' + targetTenant)}`
+          : '/login';
+        res.writeHead(302, { Location: loginLoc, 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      if (session.role === 'SUPER_ADMIN' && !targetTenant) {
+        res.writeHead(302, { Location: '/super-admin', 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      if (session.role === 'WORKER') {
+        res.writeHead(302, { Location: targetTenant ? `/mobile?tenant=${encodeURIComponent(targetTenant)}` : '/mobile', 'Cache-Control': 'no-store' });
+        return res.end();
+      }
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'index.html'));
     }
     if (pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/mobile\/?$/)) {
