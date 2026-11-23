@@ -854,8 +854,8 @@ const server = http.createServer(async (req, res) => {
       const { building, floor, name, code, description } = body;
       if (!name || !name.trim() || !floor) return sendJSON(res, 400, { error: '층수와 구역명을 입력하세요.' });
       const cleanName = name.trim();
-      const id = 'loc_' + Date.now();
-      const locCode = code || `LOC-${floor}-${Math.floor(10 + Math.random() * 90)}`;
+      const id = 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+      const locCode = code || `LOC-${floor}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       db.prepare(`
         INSERT INTO locations (id, company_id, building, floor, code, name, category, description, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'MAIN_TOWER', ?, ?)

@@ -1507,7 +1507,7 @@
           </div>
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
             <div class="flex items-center bg-[#001F30] border border-[#005B82] rounded-lg px-3 py-1.5 space-x-2">
-              <span class="text-[10px] text-[#13B5EA] font-bold shrink-0">📱 모바일:</span>
+              <span class="text-xs text-[#13B5EA] font-bold shrink-0">모바일:</span>
               <code id="company-mobile-url-display" class="text-[11px] font-mono text-white truncate max-w-[260px]">-</code>
               <button type="button" onclick="copyCompanyUrl('mobile')" class="px-2 py-0.5 bg-[#13B5EA] text-[#002B41] font-bold rounded text-[10px] hover:bg-[#38BDF8] shrink-0">복사</button>
               <a id="company-mobile-url-link" href="/mobile" target="_blank" class="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded text-[10px] shrink-0">열기</a>
@@ -4455,29 +4455,29 @@
           groupCard.innerHTML = `
             <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex justify-between items-center">
               <div class="font-bold text-[#1E1F21] text-xs flex items-center space-x-2">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40">🏢 ${bldg}</span>
+                <span class="px-2 py-0.5 rounded text-xs font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40">${bldg}</span>
                 <span class="text-[#1E1F21] text-sm font-bold">${bldg} 구역 리스트</span>
               </div>
               <span class="text-xs text-[#6D6E6F] font-semibold">총 ${bldgLocs.length}개 구역</span>
             </div>
             <div class="overflow-x-auto">
-              <table class="w-full table-fixed divide-y divide-[#EAE8E5] text-left">
+              <table class="w-full min-w-[860px] divide-y divide-[#EAE8E5] text-left">
                 <colgroup>
                   <col class="w-20">
-                  <col class="w-20">
-                  <col class="w-[32%]">
-                  <col class="w-[28%]">
-                  <col class="w-32">
-                  <col class="w-24">
+                  <col class="w-16">
+                  <col class="w-[22%]">
+                  <col class="w-[20%]">
+                  <col class="w-[265px]">
+                  <col class="w-[120px]">
                 </colgroup>
-                <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-[11px] border-b border-[#D8D6D2]">
+                <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-xs border-b border-[#D8D6D2]">
                   <tr>
-                    <th class="px-3 py-2.5">건물동</th>
-                    <th class="px-3 py-2.5">층수</th>
-                    <th class="px-3 py-2.5">구역명 (클릭하여 즉시 수정)</th>
-                    <th class="px-3 py-2.5">상세 설명</th>
-                    <th class="px-3 py-2.5 text-center">현장 QR 코드</th>
-                    <th class="px-3 py-2.5 text-right">관리</th>
+                    <th class="px-3 py-2.5 whitespace-nowrap">건물동</th>
+                    <th class="px-3 py-2.5 whitespace-nowrap">층수</th>
+                    <th class="px-3 py-2.5 whitespace-nowrap">구역명 (클릭하여 즉시 수정)</th>
+                    <th class="px-3 py-2.5 whitespace-nowrap">상세 설명</th>
+                    <th class="px-3 py-2.5 text-center whitespace-nowrap">현장 QR 코드</th>
+                    <th class="px-3 py-2.5 text-right whitespace-nowrap pr-4">관리</th>
                   </tr>
                 </thead>
                 <tbody id="location-table-body-bldg-${bIndex}" class="divide-y divide-[#EAE8E5] bg-white"></tbody>
@@ -4492,15 +4492,12 @@
             const tr = document.createElement('tr');
             tr.className = `hover:bg-[#FAF9F8] text-xs transition ${isSelected ? 'bg-amber-50/50' : ''}`;
             tr.innerHTML = `
-              <td class="px-3 py-2.5">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21]">${l.building || '본관'}</span>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <span class="px-2 py-0.5 rounded text-xs font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21]">${l.building || '본관'}</span>
               </td>
-              <td class="px-3 py-2.5 font-bold text-[#4573D2]">${l.floor}</td>
-              <td class="px-3 py-2.5 font-bold text-[#1E1F21] truncate" id="loc-cell-${l.id}">
-                <div class="flex items-center space-x-1 group">
-                  <span class="cursor-pointer hover:text-[#4573D2] underline decoration-dotted" onclick="inlineEditLocationName('${l.id}')" title="클릭하여 즉시 수정">${l.name}</span>
-                  <button onclick="inlineEditLocationName('${l.id}')" class="text-[10px] text-[#A0A1A2] opacity-0 group-hover:opacity-100 transition hover:text-[#1E1F21]">✏️</button>
-                </div>
+              <td class="px-3 py-2.5 font-bold text-[#4573D2] whitespace-nowrap">${l.floor}</td>
+              <td class="px-3 py-2.5 font-bold text-[#1E1F21]" id="loc-cell-${l.id}">
+                <span class="cursor-pointer hover:text-[#4573D2] underline decoration-dotted" onclick="inlineEditLocationName('${l.id}')" title="클릭하여 즉시 수정">${l.name}</span>
               </td>
               <td class="px-3 py-2.5 text-[#6D6E6F] truncate">${l.description || '-'}</td>
               <td class="px-3 py-2.5 text-center whitespace-nowrap">
@@ -4535,10 +4532,7 @@
         const loc = currentLocations.find(l => l.id === cid);
         if (loc) {
           cell.innerHTML = `
-            <div class="flex items-center space-x-1 group">
-              <span class="cursor-pointer hover:text-[#4573D2] underline decoration-dotted font-semibold text-[#1E1F21]" onclick="inlineEditLocationName('${loc.id}')" title="클릭하여 즉시 수정">${loc.name}</span>
-              <button onclick="inlineEditLocationName('${loc.id}')" class="text-[10px] text-[#A0A1A2] opacity-0 group-hover:opacity-100 transition hover:text-[#1E1F21]">✏️</button>
-            </div>
+            <span class="cursor-pointer hover:text-[#4573D2] underline decoration-dotted font-semibold text-[#1E1F21]" onclick="inlineEditLocationName('${loc.id}')" title="클릭하여 즉시 수정">${loc.name}</span>
           `;
         }
       });
