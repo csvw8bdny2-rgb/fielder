@@ -874,33 +874,33 @@
 
         <div class="grid grid-cols-3 gap-3">
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">전체 점검표</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">전체 상황일지</div>
             <div class="text-2xl font-extrabold text-[#111827] mt-1" id="sched-kpi-total">0 개</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">점검 완료</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">작성 완료</div>
             <div class="text-2xl font-extrabold text-[#34A853] mt-1" id="sched-kpi-done">0 개</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">미완료 (누락)</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">미작성 (누락)</div>
             <div class="text-2xl font-extrabold text-[#F06A6A] mt-1" id="sched-kpi-pending">0 개</div>
           </div>
         </div>
 
         <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-xs overflow-hidden">
           <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex justify-between items-center">
-            <div class="font-extrabold text-[#111827] text-sm">주기별 점검 일정 현황</div>
+            <div class="font-extrabold text-[#111827] text-sm">주기별 상황일지 작성 현황</div>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full divide-y divide-[#EAE8E5] text-left">
               <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-xs border-b border-[#D8D6D2]">
                 <tr>
                   <th class="px-4 py-2.5">상태</th>
-                  <th class="px-4 py-2.5">점검표명</th>
+                  <th class="px-4 py-2.5">상황일지 명칭</th>
                   <th class="px-4 py-2.5">주기</th>
                   <th class="px-4 py-2.5">직무</th>
                   <th class="px-4 py-2.5">달성</th>
-                  <th class="px-4 py-2.5">최근 점검</th>
+                  <th class="px-4 py-2.5">최근 작성</th>
                   <th class="px-4 py-2.5 text-right">통계</th>
                 </tr>
               </thead>
@@ -910,18 +910,18 @@
         </div>
       </div>
 
-      <!-- ⭐️ 3. 점검표 통계 뷰 -->
+      <!-- ⭐️ 3. 상황일지 통계 뷰 -->
       <div id="chk-view-stats" class="hidden space-y-4">
         <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <select id="stats-template-select" onchange="loadInspectionStatistics()" class="h-9 border border-[#D5D3CF] rounded-lg px-3 text-xs font-bold text-[#111827] bg-white outline-none focus:border-[#0084B4] min-w-[200px]">
-              <option value="ALL">전체 점검표</option>
+              <option value="ALL">전체 상황일지</option>
             </select>
             <input type="date" id="stats-start-date" onchange="loadInspectionStatistics()" class="h-9 border border-[#D5D3CF] rounded-lg px-2.5 text-xs font-bold text-[#111827] bg-white outline-none">
             <span class="text-[#6D6E6F] font-bold">~</span>
             <input type="date" id="stats-end-date" onchange="loadInspectionStatistics()" class="h-9 border border-[#D5D3CF] rounded-lg px-2.5 text-xs font-bold text-[#111827] bg-white outline-none">
           </div>
-          <button onclick="downloadInspectionStatsCsv()" class="h-9 px-4 bg-[#002B41] hover:bg-[#004D73] text-white font-bold rounded-lg text-xs transition">
+          <button onclick="downloadInspectionStatsCsv()" class="h-9 px-4 bg-[#002B41] hover:bg-[#004D73] text-white font-bold rounded-lg text-xs transition whitespace-nowrap">
             엑셀(CSV) 다운로드
           </button>
         </div>
@@ -932,11 +932,11 @@
             <div class="text-2xl font-extrabold text-[#0084B4] mt-1" id="stats-kpi-rate">0%</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">점검 횟수</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">일지 작성 건수</div>
             <div class="text-2xl font-extrabold text-[#111827] mt-1" id="stats-kpi-total">0 건</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">양호</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">정상 · 양호</div>
             <div class="text-2xl font-extrabold text-[#34A853] mt-1" id="stats-kpi-good">0 건</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
@@ -947,22 +947,22 @@
 
         <div class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-3">
           <div class="flex items-center justify-between">
-            <div class="font-extrabold text-[#111827] text-sm">날짜별 점검 추이</div>
+            <div class="font-extrabold text-[#111827] text-sm">날짜별 상황일지 추이</div>
             <span id="stats-chart-subtitle" class="text-xs font-semibold text-[#6D6E6F]"></span>
           </div>
           <div id="stats-bar-chart" class="flex items-end gap-2 h-40 pt-4 pb-2 border-b border-[#EDECEB] overflow-x-auto"></div>
         </div>
 
         <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-xs overflow-hidden">
-          <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] font-extrabold text-[#111827] text-sm">기간 내 점검 상세</div>
+          <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] font-extrabold text-[#111827] text-sm">기간 내 상황일지 상세</div>
           <div class="overflow-x-auto">
             <table class="w-full divide-y divide-[#EAE8E5] text-left">
               <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-xs border-b border-[#D8D6D2]">
                 <tr>
                   <th class="px-4 py-2.5">일시</th>
-                  <th class="px-4 py-2.5">점검표</th>
+                  <th class="px-4 py-2.5">상황일지</th>
                   <th class="px-4 py-2.5">위치</th>
-                  <th class="px-4 py-2.5">점검자</th>
+                  <th class="px-4 py-2.5">작성자</th>
                   <th class="px-4 py-2.5">판정</th>
                 </tr>
               </thead>
@@ -972,33 +972,33 @@
         </div>
       </div>
 
-      <!-- ⭐️ 4. 점검표 작성 뷰 -->
+      <!-- ⭐️ 4. 일일 상황일지 서식 관리 뷰 -->
       <div id="chk-view-builder" class="hidden space-y-5">
-        <!-- 템플릿 목록 관리 카드 -->
+        <!-- 서식 목록 관리 카드 -->
         <div class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-3">
-          <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
-            <div class="font-extrabold text-[#111827] text-sm">점검표 양식 목록</div>
-            <div class="flex items-center space-x-2">
-              <button onclick="loadSampleChecklistTemplate()" class="h-9 px-3.5 bg-white border border-[#4573D2] text-[#4573D2] hover:bg-blue-50 font-bold rounded-lg text-xs transition">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EDECEB] pb-3">
+            <div class="font-extrabold text-[#111827] text-sm">일일 상황일지 서식 목록</div>
+            <div class="flex items-center space-x-2 shrink-0">
+              <button onclick="loadSampleChecklistTemplate()" class="h-9 px-3.5 bg-white border border-[#4573D2] text-[#4573D2] hover:bg-blue-50 font-bold rounded-lg text-xs transition whitespace-nowrap">
                 샘플 불러오기
               </button>
-              <button onclick="startNewChecklistTemplate()" class="h-9 px-4 bg-[#0084B4] text-white font-bold rounded-lg hover:bg-[#006C9C] text-xs shadow-xs transition">
-                + 새 양식 만들기
+              <button onclick="startNewChecklistTemplate()" class="h-9 px-4 bg-[#0084B4] text-white font-bold rounded-lg hover:bg-[#006C9C] text-xs shadow-xs transition whitespace-nowrap">
+                + 새 서식 만들기
               </button>
             </div>
           </div>
           <div id="checklist-template-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1"></div>
         </div>
 
-        <!-- 점검표 에디터 (빌더 영역) -->
+        <!-- 상황일지 서식 에디터 (빌더 영역) -->
         <div id="checklist-builder-editor" class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-5">
-          <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EDECEB] pb-3">
             <div class="flex items-center space-x-2">
               <span class="font-bold text-[#1E1F21] text-base" id="builder-form-title">신규 일일 상황일지 서식 작성</span>
-              <span id="builder-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">양식 수정 중</span>
+              <span id="builder-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30 whitespace-nowrap">서식 수정 중</span>
             </div>
             <input type="hidden" id="builder-template-id">
-            <span class="text-[11px] text-[#6D6E6F]">담당 직무를 선택하고 상황일지 항목 유형을 조합하여 맞춤 서식을 설계하세요.</span>
+            <span class="text-xs text-[#6D6E6F]">담당 직무를 선택하고 상황일지 항목 유형을 조합하여 맞춤 서식을 설계하세요.</span>
           </div>
 
           <!-- 기본 메타 정보 (상황일지명, 직무그룹, 대상건물, 주기) -->
@@ -1014,12 +1014,12 @@
               </select>
             </div>
             <div>
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">점검 주기</label>
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">작성 주기</label>
               <select id="builder-freq-select" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white outline-none font-medium text-[#1E1F21] focus:border-[#0084B4]">
-                <option value="DAILY" selected>일일 점검 (매일)</option>
-                <option value="WEEKLY">주간 점검 (주 1회)</option>
-                <option value="MONTHLY">월간 점검 (월 1회)</option>
-                <option value="OCCASIONAL">수시 점검 (필요시)</option>
+                <option value="DAILY" selected>일일 보고 (매일)</option>
+                <option value="WEEKLY">주간 보고 (주 1회)</option>
+                <option value="MONTHLY">월간 보고 (월 1회)</option>
+                <option value="OCCASIONAL">수시 보고 (필요시)</option>
               </select>
             </div>
           </div>
@@ -1028,12 +1028,12 @@
             <div>
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5 flex items-center justify-between">
                 <span class="truncate whitespace-nowrap">대상 건물동 및 층수 <span class="text-[#F06A6A]">*</span></span>
-                <span class="text-[10px] text-[#4573D2] font-semibold cursor-pointer hover:underline whitespace-nowrap" onclick="openTargetBuildingModal()">설정 팝업</span>
+                <span class="text-xs text-[#4573D2] font-semibold cursor-pointer hover:underline whitespace-nowrap" onclick="openTargetBuildingModal()">설정 팝업</span>
               </label>
               <!-- ⭐️ 클릭 시 팝업으로 설정에 등록된 건물동과 층수를 체크하는 콤보박스 -->
               <button type="button" onclick="openTargetBuildingModal()" id="builder-target-bldg-display" class="w-full h-11 border border-[#D5D3CF] hover:border-[#13B5EA] rounded-lg px-3 bg-white text-left flex items-center justify-between transition group shadow-xs">
                 <div class="flex items-center space-x-1.5 truncate whitespace-nowrap overflow-hidden flex-1 mr-1 min-w-0">
-                  <span id="builder-bldg-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40 whitespace-nowrap flex-shrink-0">전체 적용</span>
+                  <span id="builder-bldg-badge" class="px-2 py-0.5 rounded text-xs font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40 whitespace-nowrap flex-shrink-0">전체 적용</span>
                   <span id="builder-bldg-text" class="text-xs font-bold text-[#1E1F21] truncate whitespace-nowrap overflow-hidden">모든 건물동 전 층수 적용</span>
                 </div>
                 <span class="text-xs text-[#6D6E6F] group-hover:text-[#1E1F21] flex-shrink-0">🏢 ▾</span>
@@ -1041,17 +1041,17 @@
               <input type="hidden" id="builder-bldg-scope-json" value="">
             </div>
             <div class="sm:col-span-3">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">점검 목적 및 안내 설명</label>
-              <input type="text" id="builder-desc" placeholder="실무자가 점검 시 숙지해야 할 핵심 지침이나 목적을 입력하세요." class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white text-[#6D6E6F] truncate whitespace-nowrap">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">상황일지 작성 안내 및 지침</label>
+              <input type="text" id="builder-desc" placeholder="실무자가 상황일지 작성 시 숙지해야 할 핵심 지침이나 목적을 입력하세요." class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white text-[#6D6E6F] truncate whitespace-nowrap">
             </div>
           </div>
 
-          <!-- ⭐️ 6대 질문 유형 툴바 (사용자 첨부 이미지 디자인 100% 완벽 일치) -->
+          <!-- ⭐️ 6대 질문 유형 툴바 -->
           <div class="p-6 bg-white rounded-3xl border border-[#E9ECEF] shadow-xs space-y-5">
             <div class="flex items-center justify-between pb-1">
               <div>
                 <h3 class="font-extrabold text-[#002B41] text-lg sm:text-xl tracking-tight">
-                  점검 항목은 <span class="text-[#00B37E] font-black">6가지 유형</span>으로 구성할 수 있습니다
+                  상황일지 항목은 <span class="text-[#00B37E] font-black">6가지 유형</span>으로 구성할 수 있습니다
                 </h3>
               </div>
             </div>
@@ -1169,9 +1169,9 @@
           <div class="space-y-3">
             <div class="flex items-center justify-between">
               <span class="font-bold text-[#1E1F21] text-xs">
-                설계된 점검 항목 (<span id="builder-items-count" class="text-[#4573D2] font-bold">0</span>개)
+                설계된 상황일지 항목 (<span id="builder-items-count" class="text-[#4573D2] font-bold">0</span>개)
               </span>
-              <span class="text-[11px] text-[#A0A1A2]">항목 우측 화살표로 순서를 이동하거나 삭제할 수 있습니다.</span>
+              <span class="text-xs text-[#8A8B8D]">항목 우측 화살표로 순서를 이동하거나 삭제할 수 있습니다.</span>
             </div>
 
             <div id="builder-items-list" class="space-y-2.5 min-h-[120px]">
@@ -1180,16 +1180,16 @@
           </div>
 
           <!-- 저장 버튼 바 -->
-          <div class="flex items-center justify-between pt-3 border-t border-[#EDECEB]">
-            <button type="button" onclick="previewChecklistModal()" class="h-10 px-4 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded-lg text-xs transition">
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#EDECEB]">
+            <button type="button" onclick="previewChecklistModal()" class="h-10 px-4 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded-lg text-xs transition whitespace-nowrap">
               📱 실무자 모바일 뷰 미리보기
             </button>
             <div class="flex items-center space-x-2">
-              <button type="button" onclick="cancelChecklistBuilder()" class="h-10 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition">
+              <button type="button" onclick="cancelChecklistBuilder()" class="h-10 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition whitespace-nowrap">
                 작성 취소
               </button>
-              <button type="button" onclick="saveChecklistTemplate()" class="h-10 px-6 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg hover:bg-[#001D2C] text-xs shadow-xs transition">
-                점검표 양식 저장하기
+              <button type="button" onclick="saveChecklistTemplate()" class="h-10 px-6 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg text-xs shadow-xs transition whitespace-nowrap">
+                상황일지 서식 저장하기
               </button>
             </div>
           </div>
