@@ -1294,12 +1294,13 @@
 
     async function loadMobileInspectionTemplates() {
       try {
-        const res = await fetch('/api/inspections/templates');
-        mobileInspectionTemplates = await res.json();
+        const res = await fetch('/api/inspections/templates?activeOnly=true&_=' + Date.now(), { cache: 'no-store' });
+        const rows = await res.json();
+        mobileInspectionTemplates = Array.isArray(rows) ? rows.filter(t => t.is_active !== 0) : [];
         const sel = document.getElementById('mobile-patrol-template-select');
         if (!sel) return;
         const cur = sel.value;
-        sel.innerHTML = '<option value="DEFAULT">기본 순찰 체크리스트 (종합)</option>';
+        sel.innerHTML = '<option value="DEFAULT">기본 일일 상황일지 (종합)</option>';
         mobileInspectionTemplates.forEach(t => {
           const opt = document.createElement('option');
           opt.value = t.id;

@@ -1903,12 +1903,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/inspections/templates' && method === 'GET') {
       const companyId = resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const activeOnly = parsedUrl.query?.activeOnly === 'true' || parsedUrl.query?.activeOnly === '1';
       const templates = db.prepare(`
         SELECT t.*, r.name as role_display_name
         FROM inspection_templates t
         LEFT JOIN custom_roles r ON t.target_role_id = r.id
-        WHERE t.company_id = ?
-        ORDER BY t.created_at DESC
+        WHERE t.company_id = ? ${activeOnly ? 'AND COALESCE(t.is_active, 1) = 1' : ''}
+        ORDER BY COALESCE(t.is_active, 1) DESC, t.created_at DESC
       `).all(companyId);
       return sendJSON(res, 200, templates);
     }
@@ -1936,6 +1937,18 @@ const server = http.createServer(async (req, res) => {
       );
       broadcastSSE('INSPECTION_TEMPLATE_UPDATED', { action: 'CREATE', id, title, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, message: '점검표 양식이 등록되었습니다.' });
+    }
+    const toggleTmplMatch = pathname.match(/^\/api\/inspections\/templates\/([^/]+)\/toggle$/);
+    if (toggleTmplMatch && method === 'POST') {
+      const tmplId = toggleTmplMatch[1];
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const row = db.prepare('SELECT id, title, COALESCE(is_active, 1) AS is_active FROM inspection_templates WHERE id = ? AND company_id = ?').get(tmplId, companyId);
+      if (!row) return sendJSON(res, 404, { error: '상황일지 서식을 찾을 수 없습니다.' });
+      const nextActive = row.is_active ? 0 : 1;
+      db.prepare('UPDATE inspection_templates SET is_active = ? WHERE id = ? AND company_id = ?').run(nextActive, tmplId, companyId);
+      broadcastSSE('INSPECTION_TEMPLATE_UPDATED', { action: 'TOGGLE', id: tmplId, is_active: nextActive, company_id: companyId }, companyId);
+      return sendJSON(res, 200, { success: true, id: tmplId, is_active: nextActive, message: nextActive ? '상황일지 서식이 활성화되었습니다.' : '상황일지 서식이 비활성화되었습니다.' });
     }
     if (pathname.match(/^\/api\/inspections\/templates\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const tmplId = pathname.split('/')[4];

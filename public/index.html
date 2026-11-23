@@ -19,44 +19,50 @@
 
   <!-- ⭐️ Xero 스타일 시그니처 딥 네이비(#002B41) & 시안(#13B5EA) 상단 헤더 -->
   <header class="bg-[#002B41] text-white sticky top-0 z-40 shadow-lg border-b border-[#001E2E]">
-    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
       
-      <!-- 좌측: Xero 스타일 조직 전환기 (Org Switcher) + 6대 네비게이션 탭 -->
-      <div class="flex items-center space-x-4 lg:space-x-5 min-w-0">
+      <!-- 좌측: 회사명 + 반응형 메뉴 아이콘(좁을 때 표시) + 6대 네비게이션 탭 -->
+      <div class="flex items-center space-x-3 lg:space-x-5 min-w-0 flex-1">
         <!-- 일반 프로젝트 로고 & 회사명 (클릭 시 실시간 모니터링 메뉴로 전환) -->
-        <div class="flex items-center space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition flex-shrink-0" onclick="navTo('monitoring')" title="실시간 모니터링 메뉴로 이동">
+        <div class="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition min-w-0 flex-shrink" onclick="navTo('monitoring')" title="실시간 모니터링 메뉴로 이동">
           <span id="header-company-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-md whitespace-nowrap flex-shrink-0">Fielder</span>
           <div class="min-w-0 leading-tight">
             <div class="flex items-center space-x-1">
-              <span class="font-bold text-sm sm:text-base text-white group-hover:text-[#13B5EA] transition truncate whitespace-nowrap" id="header-company-name">Fielder 통합시설운영본부</span>
+              <span class="font-bold text-sm sm:text-base text-white group-hover:text-[#13B5EA] transition truncate whitespace-nowrap max-w-[160px] sm:max-w-[220px]" id="header-company-name">Fielder 통합시설운영본부</span>
             </div>
-            <span class="text-[11px] text-slate-300 font-medium leading-tight block mt-0.5">실시간 관제 대시보드</span>
+            <span class="text-xs text-slate-300 font-medium leading-tight block mt-0.5 truncate">실시간 관제 대시보드</span>
           </div>
         </div>
 
-        <div class="h-6 w-[1px] bg-white/15 flex-shrink-0"></div>
+        <!-- ⭐️ 가로 화면 축소/오버플로우 시 회사명 오른쪽에 나타나는 메뉴 버튼 -->
+        <button type="button" id="btn-header-mobile-menu" onclick="toggleHeaderMobileMenu()" class="lg:hidden inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold whitespace-nowrap shrink-0 transition" aria-label="전체 메뉴 열기">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          <span>메뉴</span>
+        </button>
+
+        <div id="header-nav-divider" class="hidden lg:block h-6 w-[1px] bg-white/15 flex-shrink-0"></div>
 
         <!-- 6대 메인 네비게이션 탭 (Xero 탭 스타일) -->
-        <nav class="flex items-center space-x-1 h-16 overflow-x-auto no-scrollbar">
-          <button onclick="navTo('monitoring')" id="nav-monitoring" class="h-16 px-3.5 text-xs sm:text-sm font-bold text-white flex items-center space-x-1.5 border-b-[3px] border-[#13B5EA] bg-white/5 transition whitespace-nowrap">
+        <nav id="desktop-header-nav" class="hidden lg:flex items-center space-x-1 h-16 overflow-hidden flex-1 min-w-0">
+          <button onclick="navTo('monitoring')" id="nav-monitoring" class="h-16 px-3.5 text-xs sm:text-sm font-bold text-white flex items-center space-x-1.5 border-b-[3px] border-[#13B5EA] bg-white/5 transition whitespace-nowrap shrink-0">
             <span>실시간 모니터링</span>
             <span id="badge-monitoring-total" class="bg-[#13B5EA] text-[#002B41] font-extrabold px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
-          <button onclick="navTo('workorders')" id="nav-workorders" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
+          <button onclick="navTo('workorders')" id="nav-workorders" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap shrink-0">
             <span>작업지시</span>
           </button>
-          <button onclick="navTo('process')" id="nav-process" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
+          <button onclick="navTo('process')" id="nav-process" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap shrink-0">
             <span>진행중</span>
             <span id="badge-unresolved-count" class="hidden bg-[#FF5252] text-white font-bold px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
-          <button onclick="navTo('inspections')" id="nav-inspections" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
+          <button onclick="navTo('inspections')" id="nav-inspections" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap shrink-0">
             <span>업무보고</span>
             <span id="badge-inspection-count" class="hidden bg-[#13B5EA] text-[#002B41] font-bold px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
-          <button onclick="navTo('analytics')" id="nav-analytics" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
+          <button onclick="navTo('analytics')" id="nav-analytics" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap shrink-0">
             <span>통계 & 보고서</span>
           </button>
-          <button onclick="navTo('settings')" id="nav-settings" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
+          <button onclick="navTo('settings')" id="nav-settings" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap shrink-0">
             <span>설정</span>
           </button>
         </nav>
@@ -80,6 +86,25 @@
 
     </div>
   </header>
+
+  <!-- ⭐️ 반응형 축소 화면용 드롭다운 메뉴 패널 -->
+  <div id="header-mobile-menu-dropdown" class="hidden fixed top-16 left-0 right-0 bg-[#002B41] border-b border-[#004D73] shadow-2xl z-40 px-4 py-3 space-y-1">
+    <button type="button" onclick="navTo('monitoring'); closeHeaderMobileMenu();" id="mob-nav-monitoring" class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-bold text-white hover:bg-white/10 flex items-center justify-between">
+      <span>실시간 모니터링</span>
+      <span id="mob-badge-monitoring-total" class="bg-[#13B5EA] text-[#002B41] font-extrabold px-2 py-0.5 rounded-full text-xs">0</span>
+    </button>
+    <button type="button" onclick="navTo('workorders'); closeHeaderMobileMenu();" id="mob-nav-workorders" class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 hover:bg-white/10">작업지시</button>
+    <button type="button" onclick="navTo('process'); closeHeaderMobileMenu();" id="mob-nav-process" class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-between">
+      <span>진행중</span>
+      <span id="mob-badge-unresolved-count" class="hidden bg-[#FF5252] text-white font-bold px-2 py-0.5 rounded-full text-xs">0</span>
+    </button>
+    <button type="button" onclick="navTo('inspections'); closeHeaderMobileMenu();" id="mob-nav-inspections" class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-between">
+      <span>업무보고</span>
+      <span id="mob-badge-inspection-count" class="hidden bg-[#13B5EA] text-[#002B41] font-bold px-2 py-0.5 rounded-full text-xs">0</span>
+    </button>
+    <button type="button" onclick="navTo('analytics'); closeHeaderMobileMenu();" id="mob-nav-analytics" class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 hover:bg-white/10">통계 & 보고서</button>
+    <button type="button" onclick="navTo('settings'); closeHeaderMobileMenu();" id="mob-nav-settings" class="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 hover:bg-white/10">설정</button>
+  </div>
 
   <!-- 메인 바디 컨테이너 -->
   <main class="max-w-7xl mx-auto px-6 py-6 pb-20 flex-1 w-full overflow-x-hidden">
@@ -1046,18 +1071,33 @@
             </div>
           </div>
 
-          <!-- ⭐️ 6대 질문 유형 툴바 -->
-          <div class="p-6 bg-white rounded-3xl border border-[#E9ECEF] shadow-xs space-y-5">
-            <div class="flex items-center justify-between pb-1">
-              <div>
-                <h3 class="font-extrabold text-[#002B41] text-lg sm:text-xl tracking-tight">
-                  상황일지 항목은 <span class="text-[#00B37E] font-black">6가지 유형</span>으로 구성할 수 있습니다
-                </h3>
+          <!-- ⭐️ 항목 추가 툴바 + 토글 가능한 6가지 항목 유형 가이드 -->
+          <div class="p-4 bg-[#FAF9F8] rounded-2xl border border-[#E2E0DD] space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-xs font-extrabold text-[#002B41] mr-1">항목 추가:</span>
+                <button type="button" onclick="addChecklistItem('CHECK')" class="h-8 px-3 rounded-lg bg-white border border-[#D5D3CF] hover:border-[#00B37E] hover:text-[#00B37E] text-xs font-bold text-[#1E1F21] transition whitespace-nowrap">+ 체크리스트</button>
+                <button type="button" onclick="addChecklistItem('YES_NO')" class="h-8 px-3 rounded-lg bg-white border border-[#D5D3CF] hover:border-[#00B37E] hover:text-[#00B37E] text-xs font-bold text-[#1E1F21] transition whitespace-nowrap">+ 네/아니오</button>
+                <button type="button" onclick="addChecklistItem('TEXT')" class="h-8 px-3 rounded-lg bg-white border border-[#D5D3CF] hover:border-[#00B37E] hover:text-[#00B37E] text-xs font-bold text-[#1E1F21] transition whitespace-nowrap">+ 텍스트</button>
+                <button type="button" onclick="addChecklistItem('RADIO')" class="h-8 px-3 rounded-lg bg-white border border-[#D5D3CF] hover:border-[#00B37E] hover:text-[#00B37E] text-xs font-bold text-[#1E1F21] transition whitespace-nowrap">+ 객관식</button>
+                <button type="button" onclick="addChecklistItem('CHECKBOX')" class="h-8 px-3 rounded-lg bg-white border border-[#D5D3CF] hover:border-[#00B37E] hover:text-[#00B37E] text-xs font-bold text-[#1E1F21] transition whitespace-nowrap">+ 체크박스</button>
+                <button type="button" onclick="addChecklistItem('SECTION')" class="h-8 px-3 rounded-lg bg-white border border-[#D5D3CF] hover:border-[#00B37E] hover:text-[#00B37E] text-xs font-bold text-[#1E1F21] transition whitespace-nowrap">+ 섹션</button>
               </div>
+              <button type="button" id="btn-toggle-type-guide" onclick="toggleBuilderTypeGuide()" class="h-8 px-3.5 rounded-lg bg-white border border-[#0084B4] text-[#007EA8] hover:bg-[#EBF7FD] text-xs font-bold transition whitespace-nowrap shrink-0">
+                📖 항목 유형 가이드 보기
+              </button>
             </div>
 
-            <!-- 6가지 유형 카드 그리드 (사용자 첨부 이미지 원본과 100% 싱크) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div id="builder-type-guide-panel" class="hidden pt-3 border-t border-[#E2E0DD] space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="font-extrabold text-[#002B41] text-base sm:text-lg tracking-tight">
+                  상황일지 항목은 <span class="text-[#00B37E] font-black">6가지 유형</span>으로 구성할 수 있습니다
+                </h3>
+                <button type="button" onclick="toggleBuilderTypeGuide()" class="text-xs font-bold text-[#6D6E6F] hover:text-[#1E1F21]">가이드 닫기 ✕</button>
+              </div>
+
+            <!-- 6가지 유형 카드 그리드 (가이드 버튼 클릭 시 표시) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               
               <!-- 1. 체크리스트 -->
               <div onclick="addChecklistItem('CHECK')" class="group p-6 bg-white hover:bg-[#F9FBFC] rounded-3xl border border-[#E2E8F0] hover:border-[#00B37E] hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col justify-between">
@@ -1162,6 +1202,7 @@
                 </div>
               </div>
 
+            </div>
             </div>
           </div>
 
@@ -5927,44 +5968,84 @@
 
     async function loadInspectionTemplates() {
       try {
-        const res = await fetch('/api/inspections/templates');
-        currentInspectionTemplates = await res.json();
+        const res = await fetch('/api/inspections/templates?_=' + Date.now(), { cache: 'no-store' });
+        const rows = await res.json();
+        currentInspectionTemplates = Array.isArray(rows) ? rows : [];
         const container = document.getElementById('checklist-template-cards');
+        const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
         if (container) {
           container.innerHTML = '';
+          if (currentInspectionTemplates.length === 0) {
+            container.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-[#8A8B8D]">등록된 일일 상황일지 서식이 없습니다. 상단 [+ 새 서식 만들기]로 서식을 추가하세요.</div>';
+          }
           currentInspectionTemplates.forEach(t => {
             let items = [];
             try { items = typeof t.items === 'string' ? JSON.parse(t.items) : (t.items || []); } catch(e) {}
+            const isActive = t.is_active !== 0;
+            const freqLabel = t.frequency === 'DAILY' ? '일일' : t.frequency === 'WEEKLY' ? '주간' : t.frequency === 'MONTHLY' ? '월간' : '수시';
             const card = document.createElement('div');
-            card.className = 'p-3.5 bg-[#FAF9F8] rounded-xl border border-[#EDECEB] hover:border-[#13B5EA] transition space-y-2';
+            card.className = `p-4 rounded-2xl border transition flex flex-col justify-between space-y-3 ${isActive ? 'bg-white border-[#D5D3CF] hover:border-[#0084B4] shadow-2xs' : 'bg-[#F8FAFC] border-[#E2E8F0] opacity-75'}`;
             card.innerHTML = `
-              <div class="flex items-start justify-between">
-                <div>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40">${t.target_role_name || '전체 직무'}</span>
-                  <div class="font-bold text-sm text-[#1E1F21] mt-1 truncate whitespace-nowrap">${t.title}</div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40 truncate">${esc(t.target_role_name || '전체 직무')}</span>
+                    <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-[#334155] border border-slate-200 whitespace-nowrap">${freqLabel}</span>
+                  </div>
+                  <button type="button" onclick="toggleChecklistTemplateActive('${t.id}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition whitespace-nowrap shrink-0 ${isActive ? 'bg-emerald-50 text-[#0F9D58] border-emerald-300 hover:bg-emerald-100' : 'bg-slate-200 text-slate-600 border-slate-300 hover:bg-slate-300'}" title="클릭하여 일일 상황일지 포함 여부(활성/비활성) 전환">
+                    <span class="w-2 h-2 rounded-full ${isActive ? 'bg-[#34A853]' : 'bg-slate-500'}"></span>
+                    <span>${isActive ? '활성 ON' : '비활성 OFF'}</span>
+                  </button>
                 </div>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-[#4573D2] border border-blue-200">${t.frequency === 'DAILY' ? '일일' : t.frequency === 'WEEKLY' ? '주간' : t.frequency === 'MONTHLY' ? '월간' : '수시'}</span>
+                <div class="font-extrabold text-[15px] text-[#111827] leading-snug truncate" title="${esc(t.title)}">${esc(t.title)}</div>
+                <p class="text-xs text-[#4B5563] line-clamp-1">${esc(t.description || '일일 상황일지 서식')}</p>
+                <div class="text-xs text-[#007EA8] font-semibold truncate bg-[#F0F7FA] px-2.5 py-1 rounded-lg border border-[#C5E4F0]/60">
+                  대상: ${esc(formatTemplateScopeSummary(t.building))}
+                </div>
               </div>
-              <p class="text-[11px] text-[#6D6E6F] truncate whitespace-nowrap">${t.description || '현장 점검용 템플릿'}</p>
-              <div class="text-xs text-[#007EA8] font-semibold truncate whitespace-nowrap bg-blue-50/50 px-2 py-0.5 rounded">
-                대상: ${formatTemplateScopeSummary(t.building)}
-              </div>
-              <div class="flex items-center justify-between pt-1 border-t border-[#EDECEB] text-[11px]">
-                <span class="text-[#6D6E6F]">점검 항목: <b class="text-[#1E1F21]">${items.length}개</b></span>
-                <div class="space-x-1.5">
-                  <button onclick="editChecklistTemplate('${t.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] text-[#1E1F21] font-semibold rounded hover:bg-slate-100">양식 수정</button>
-                  <button onclick="deleteChecklistTemplate('${t.id}')" class="px-1.5 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-medium">삭제</button>
+              <div class="flex items-center justify-between pt-2.5 border-t border-[#EAE8E5] text-xs">
+                <span class="text-[#4B5563]">항목 <b class="text-[#111827]">${items.length}개</b></span>
+                <div class="flex items-center space-x-1.5 shrink-0">
+                  <button type="button" onclick="editChecklistTemplate('${t.id}')" class="px-2.5 py-1 bg-white border border-[#D5D3CF] text-[#1E1F21] font-bold rounded-lg hover:bg-slate-100 whitespace-nowrap">수정</button>
+                  <button type="button" onclick="deleteChecklistTemplate('${t.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded-lg font-bold whitespace-nowrap">삭제</button>
                 </div>
               </div>
             `;
             container.appendChild(card);
           });
         }
+        const activeCount = currentInspectionTemplates.filter(t => t.is_active !== 0).length;
         const kpiTemplates = document.getElementById('chk-kpi-templates');
-        if (kpiTemplates) kpiTemplates.innerText = currentInspectionTemplates.length + ' 개';
+        if (kpiTemplates) kpiTemplates.innerText = `${activeCount} / ${currentInspectionTemplates.length} 개`;
+        if (document.getElementById('daily-category-accordions')) {
+          renderDailyCategoryAccordions(lastFilteredInspectionLogs, document.getElementById('chk-log-total-count'), currentInspectionLogs.length);
+        }
       } catch (err) {
         console.error('loadInspectionTemplates error:', err);
       }
+    }
+
+    async function toggleChecklistTemplateActive(tmplId) {
+      try {
+        const res = await fetch(`/api/inspections/templates/${tmplId}/toggle`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || '서식 활성화 상태 변경에 실패했습니다.');
+          return;
+        }
+        showToastNotification(data.is_active ? '✅ 상황일지 서식이 활성화되어 일일 상황일지에 포함됩니다.' : '⏸️ 상황일지 서식이 비활성화되어 일일 상황일지에서 제외됩니다.');
+        await loadInspectionTemplates();
+      } catch (err) {
+        console.error('toggleChecklistTemplateActive error:', err);
+      }
+    }
+
+    function toggleBuilderTypeGuide() {
+      const panel = document.getElementById('builder-type-guide-panel');
+      const btn = document.getElementById('btn-toggle-type-guide');
+      if (!panel) return;
+      const isHidden = panel.classList.toggle('hidden');
+      if (btn) btn.innerText = isHidden ? '📖 항목 유형 가이드 보기' : '📖 항목 유형 가이드 닫기';
     }
 
     async function loadInspectionLogs() {
@@ -6159,21 +6240,50 @@
       const container = document.getElementById('daily-category-accordions');
       if (!container) return;
 
-      const categories = ['시설일지', '미화일지', '보안일지', '안전일지', '기타일지'];
-      const grouped = {};
-      categories.forEach(c => { grouped[c] = []; });
+      const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+      const activeTemplates = (currentInspectionTemplates || []).filter(t => t.is_active !== 0);
+
+      // 활성화된 서식 중심으로 그룹핑 (비활성 서식은 일지 목록에서 제외)
+      const groups = activeTemplates.map(t => ({
+        key: `tmpl_${t.id}`,
+        templateId: t.id,
+        title: t.title,
+        roleName: t.target_role_name || '전체 직무',
+        items: []
+      }));
+      const matchedLogIds = new Set();
+
       dayLogs.forEach(log => {
-        const cat = classifyDailyLogCategory(log);
-        grouped[cat].push(log);
+        const g = groups.find(grp => (log.template_id && grp.templateId === log.template_id) || (!log.template_id && grp.title === log.template_title));
+        if (g) {
+          g.items.push(log);
+          matchedLogIds.add(log.id);
+        }
       });
 
-      const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+      const uncategorized = dayLogs.filter(l => !matchedLogIds.has(l.id));
+      if (uncategorized.length > 0) {
+        groups.push({ key: 'tmpl_etc', templateId: '', title: '기타 상황일지', roleName: '기타', items: uncategorized });
+      }
 
-      container.innerHTML = categories.map(cat => {
-        const items = grouped[cat];
-        const isOpen = expandedDailyCategories.has(cat) && items.length > 0;
+      if (groups.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-xl border border-[#D5D3CF] p-6 text-center text-xs text-[#6D6E6F] space-y-2">
+            <div>활성화된 일일 상황일지 서식이 없습니다.</div>
+            <button type="button" onclick="setInspectionSubTab('builder')" class="px-3 py-1.5 bg-[#0084B4] text-white font-bold rounded-lg text-xs">일지 서식 관리에서 활성화하기</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = groups.map(grp => {
+        const items = grp.items;
+        const isOpen = expandedDailyCategories.has(grp.key) || (items.length > 0 && !expandedDailyCategories.has('closed_' + grp.key));
         const rowsHtml = items.length === 0
-          ? `<div class="px-4 py-3 text-xs text-[#A0A1A2] bg-[#FAF9F8]">등록된 ${cat} 내역이 없습니다.</div>`
+          ? `<div class="px-4 py-3 text-xs text-[#A0A1A2] bg-[#FAF9F8] flex items-center justify-between">
+               <span>선택한 날짜에 작성된 내역이 없습니다.</span>
+               ${grp.templateId ? `<button type="button" onclick="openNewInspectionLogModal('${grp.templateId}')" class="px-2.5 py-1 rounded bg-white border border-[#D5D3CF] hover:border-[#0084B4] text-[#007EA8] font-bold text-xs">+ 작성</button>` : ''}
+             </div>`
           : items.map(log => {
               let badgeCls = 'bg-[#34A853]/15 text-[#34A853]';
               if (log.status === '주의') badgeCls = 'bg-[#E5983B]/15 text-[#E5983B]';
@@ -6194,10 +6304,10 @@
                     ${log.notes ? `<div class="text-xs text-[#6D6E6F] truncate">${esc(log.notes)}</div>` : ''}
                   </div>
                   <div class="flex items-center space-x-1.5 shrink-0">
-                    <button type="button" onclick="openInspectionDetailModal('${log.id}')" class="px-2.5 py-1.5 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#111827] font-bold rounded text-xs transition">상세</button>
+                    <button type="button" onclick="openInspectionDetailModal('${log.id}')" class="px-2.5 py-1.5 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#111827] font-bold rounded text-xs transition whitespace-nowrap">상세</button>
                     ${log.is_confirmed
-                      ? `<button type="button" onclick="toggleInspectionConfirm('${log.id}')" class="px-2.5 py-1.5 bg-emerald-50 border border-emerald-300 text-[#0F9D58] font-bold rounded text-xs hover:bg-emerald-100 transition">확인됨</button>`
-                      : `<button type="button" onclick="toggleInspectionConfirm('${log.id}')" class="px-3 py-1.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded text-xs transition">확인</button>`
+                      ? `<button type="button" onclick="toggleInspectionConfirm('${log.id}')" class="px-2.5 py-1.5 bg-emerald-50 border border-emerald-300 text-[#0F9D58] font-bold rounded text-xs hover:bg-emerald-100 transition whitespace-nowrap">확인됨</button>`
+                      : `<button type="button" onclick="toggleInspectionConfirm('${log.id}')" class="px-3 py-1.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded text-xs transition whitespace-nowrap">확인</button>`
                     }
                   </div>
                 </div>
@@ -6206,14 +6316,29 @@
 
         return `
           <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-2xs overflow-hidden">
-            <button type="button" onclick="toggleDailyCategoryAccordion('${cat}')" class="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#FAF9F8] transition">
-              <span class="text-sm font-bold text-[#1E1F21]">${cat} <span class="${items.length > 0 ? 'text-[#0084B4]' : 'text-[#8A8B8D]'}">(${items.length})</span></span>
-              <span class="text-xs text-[#6D6E6F] font-bold">${isOpen ? '▲' : '▼'}</span>
+            <button type="button" onclick="toggleDailyTemplateAccordion('${grp.key}')" class="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-[#FAF9F8] transition">
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="text-sm font-bold text-[#1E1F21] truncate">${esc(grp.title)}</span>
+                <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#EBF7FD] text-[#007EA8] shrink-0">${esc(grp.roleName)}</span>
+                <span class="text-sm font-extrabold ${items.length > 0 ? 'text-[#0084B4]' : 'text-[#8A8B8D]'} shrink-0">(${items.length})</span>
+              </div>
+              <span class="text-xs text-[#6D6E6F] font-bold shrink-0">${isOpen ? '▲' : '▼'}</span>
             </button>
             <div class="${isOpen ? '' : 'hidden'}">${rowsHtml}</div>
           </div>
         `;
       }).join('');
+    }
+
+    function toggleDailyTemplateAccordion(key) {
+      if (expandedDailyCategories.has(key)) {
+        expandedDailyCategories.delete(key);
+        expandedDailyCategories.add('closed_' + key);
+      } else {
+        expandedDailyCategories.add(key);
+        expandedDailyCategories.delete('closed_' + key);
+      }
+      renderDailyCategoryAccordions(lastFilteredInspectionLogs, document.getElementById('chk-log-total-count'), currentInspectionLogs.length);
     }
 
     // ⭐️ 공지사항 게시판 관리 (업무보고 > 공지사항 게시판)
@@ -7200,20 +7325,63 @@
       });
     }
 
-    function openNewInspectionLogModal() {
+    function openNewInspectionLogModal(preselectTemplateId) {
       const select = document.getElementById('new-log-template-select');
+      const activeTemplates = (currentInspectionTemplates || []).filter(t => t.is_active !== 0);
       if (select) {
         select.innerHTML = '';
-        currentInspectionTemplates.forEach(t => {
+        activeTemplates.forEach(t => {
           const opt = document.createElement('option');
           opt.value = t.id;
           opt.innerText = `[${t.target_role_name || '전체'}] ${t.title}`;
           select.appendChild(opt);
         });
+        if (preselectTemplateId && activeTemplates.some(t => t.id === preselectTemplateId)) {
+          select.value = preselectTemplateId;
+        }
       }
       onNewLogTemplateChange();
       document.getElementById('modal-inspection-new-log').classList.remove('hidden');
     }
+
+    function toggleHeaderMobileMenu() {
+      const dd = document.getElementById('header-mobile-menu-dropdown');
+      if (!dd) return;
+      const b1 = document.getElementById('badge-monitoring-total');
+      const mb1 = document.getElementById('mob-badge-monitoring-total');
+      if (b1 && mb1) mb1.innerText = b1.innerText;
+      const b2 = document.getElementById('badge-unresolved-count');
+      const mb2 = document.getElementById('mob-badge-unresolved-count');
+      if (b2 && mb2) { mb2.innerText = b2.innerText; mb2.classList.toggle('hidden', b2.classList.contains('hidden')); }
+      const b3 = document.getElementById('badge-inspection-count');
+      const mb3 = document.getElementById('mob-badge-inspection-count');
+      if (b3 && mb3) { mb3.innerText = b3.innerText; mb3.classList.toggle('hidden', b3.classList.contains('hidden')); }
+      dd.classList.toggle('hidden');
+    }
+    function closeHeaderMobileMenu() {
+      document.getElementById('header-mobile-menu-dropdown')?.classList.add('hidden');
+    }
+    function checkHeaderNavOverflow() {
+      const nav = document.getElementById('desktop-header-nav');
+      const btn = document.getElementById('btn-header-mobile-menu');
+      const div = document.getElementById('header-nav-divider');
+      if (!nav || !btn) return;
+      if (window.innerWidth < 1024) {
+        btn.classList.remove('hidden');
+        nav.classList.add('hidden');
+        if (div) div.classList.add('hidden');
+        return;
+      }
+      nav.classList.remove('hidden');
+      if (div) div.classList.remove('hidden');
+      const isOverflowing = nav.scrollWidth > nav.clientWidth + 4;
+      btn.classList.toggle('lg:hidden', !isOverflowing);
+      if (isOverflowing) {
+        btn.classList.remove('hidden');
+      }
+    }
+    window.addEventListener('resize', checkHeaderNavOverflow);
+    window.addEventListener('DOMContentLoaded', () => setTimeout(checkHeaderNavOverflow, 150));
 
     function closeNewInspectionLogModal() {
       document.getElementById('modal-inspection-new-log').classList.add('hidden');
