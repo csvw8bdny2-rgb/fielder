@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>로그인 - Fielder 종합 관제 센터</title>
+  <link id="pwa-manifest-link" rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#002B41">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fielder 현장앱">
+  <link rel="apple-touch-icon" href="/icon-192.svg">
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap">
   <style>
@@ -243,30 +249,44 @@
           <span id="login-tenant-name" class="font-bold text-[#005B82]">-</span>
         </div>
 
+        <div id="pwa-install-banner" class="hidden p-3.5 rounded-2xl bg-[#F0F7FA] border border-[#C5E4F0] space-y-2 text-xs">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-bold text-[#002B41]">휴대폰 홈 화면에 바로가기 추가</span>
+            <button type="button" onclick="document.getElementById('pwa-install-banner').classList.add('hidden')" class="text-[#4B5563] font-bold px-1">✕</button>
+          </div>
+          <p id="pwa-install-desc" class="text-[#4B5563] leading-relaxed">아래 버튼을 누르면 휴대폰 바탕화면에 아이콘이 저장되어 다음부터 바로 열 수 있습니다.</p>
+          <button type="button" id="btn-pwa-install" onclick="triggerPwaInstall()" class="hidden btn-sky w-full h-11 rounded-xl text-sm">홈 화면에 바로가기 설치</button>
+          <div id="pwa-ios-guide" class="hidden p-2.5 rounded-xl bg-white border border-[#C5E4F0] text-[#005B82] font-semibold leading-relaxed">
+            아이폰(Safari): 화면 아래 <b>공유(□↑)</b> 버튼을 누른 뒤 <b>「홈 화면에 추가」</b>를 눌러주세요.
+          </div>
+        </div>
+
         <div id="login-error-box" class="hidden px-3.5 py-2.5 rounded-xl bg-[#FEF2F2] border border-[#FCA5A5] text-[#991B1B] text-xs font-medium"></div>
 
         <form onsubmit="handleLogin(event)" class="space-y-4">
           
           <div class="space-y-1 text-left">
-            <label for="login-email" class="block text-[13px] font-semibold text-[#4B5563]">이메일 (로그인 ID)</label>
+            <label for="login-email" id="login-id-label" class="block text-[13px] font-semibold text-[#4B5563]">아이디 (이름 또는 이메일)</label>
             <input 
-              type="email" 
+              type="text" 
               id="login-email" 
+              autocomplete="username"
               required 
-              placeholder="name@company.kr" 
+              placeholder="이름 또는 이메일 입력" 
               class="w-full h-11 border border-[#D1D5DB] rounded-xl px-4 text-sm font-medium outline-none bg-white text-[#1E1F21] placeholder:text-[#6B7280] transition-colors"
             >
           </div>
 
           <div class="space-y-1 text-left">
             <div class="flex justify-between items-center">
-              <label for="login-password" class="block text-[13px] font-semibold text-[#4B5563]">비밀번호</label>
+              <label for="login-password" id="login-pw-label" class="block text-[13px] font-semibold text-[#4B5563]">비밀번호</label>
             </div>
             <input 
               type="password" 
               id="login-password" 
+              autocomplete="current-password"
               required 
-              placeholder="비밀번호 입력" 
+              placeholder="비밀번호 또는 휴대폰 뒷 4자리" 
               class="w-full h-11 border border-[#D1D5DB] rounded-xl px-4 text-sm font-medium outline-none bg-white text-[#1E1F21] placeholder:text-[#6B7280] transition-colors"
             >
           </div>
@@ -394,23 +414,58 @@
     }
 
     let pendingRedirectUrl = '/';
+    let deferredInstallPrompt = null;
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const banner = document.getElementById('pwa-install-banner');
+      const btn = document.getElementById('btn-pwa-install');
+      if (banner && btn) {
+        banner.classList.remove('hidden');
+        btn.classList.remove('hidden');
+      }
+    });
+
+    async function triggerPwaInstall() {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      try { await deferredInstallPrompt.userChoice; } catch(e) {}
+      deferredInstallPrompt = null;
+      document.getElementById('pwa-install-banner')?.classList.add('hidden');
+    }
 
     (async function() {
       const sp = new URLSearchParams(window.location.search);
-      const idParam = sp.get('email');
+      const idParam = sp.get('name') || sp.get('email');
       if (idParam) {
         const el = document.getElementById('login-email');
         if (el) el.value = idParam;
       }
       const isMobileClient = sp.get('client') === 'mobile' || (sp.get('redirect') || '').startsWith('/mobile');
+      const wantInstall = sp.get('install') === '1' || isMobileClient;
       if (isMobileClient) {
         const subEl = document.getElementById('login-header-subtitle');
         if (subEl) subEl.textContent = '모바일 현장 콘솔';
         const signupEl = document.getElementById('login-signup-link');
         if (signupEl) signupEl.classList.add('hidden');
+        const idLbl = document.getElementById('login-id-label');
+        if (idLbl) idLbl.textContent = '이름 (아이디)';
+        const idInp = document.getElementById('login-email');
+        if (idInp) idInp.placeholder = '본인 이름 입력 (예: 홍길동)';
+        const pwLbl = document.getElementById('login-pw-label');
+        if (pwLbl) pwLbl.textContent = '비밀번호 (휴대폰 뒷번호 4자리)';
+        const pwInp = document.getElementById('login-password');
+        if (pwInp) pwInp.placeholder = '휴대폰 뒷 4자리 입력';
       }
       const tenant = getLoginTenant();
       if (tenant) {
+        const mfLink = document.getElementById('pwa-manifest-link');
+        if (mfLink) mfLink.href = `/manifest.json?tenant=${encodeURIComponent(tenant)}`;
         try {
           const r = await fetch(`/api/public/company?tenant=${encodeURIComponent(tenant)}`);
           if (r.ok) {
@@ -423,6 +478,12 @@
             }
           }
         } catch(e){}
+      }
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (wantInstall && !isStandalone && isIos) {
+        document.getElementById('pwa-install-banner')?.classList.remove('hidden');
+        document.getElementById('pwa-ios-guide')?.classList.remove('hidden');
       }
     })();
 

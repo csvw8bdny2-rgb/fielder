@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <title>Fielder 모바일 현장 콘솔</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link id="mobile-pwa-manifest" rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#002B41">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fielder 현장앱">
+  <link rel="apple-touch-icon" href="/icon-192.svg">
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <script src="/ui-enhance.js"></script>
@@ -190,6 +196,13 @@
             <button onclick="setWorkStatus('REST')" id="btn-status-rest" class="py-2.5 rounded-xl font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition">⚪ 휴게/점심</button>
             <button onclick="setWorkStatus('OFF')" id="btn-status-off" class="py-2.5 rounded-xl font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition">🔴 퇴근/대기</button>
           </div>
+        </div>
+
+        <!-- 홈 화면 바로가기 추가 -->
+        <div class="bg-[#F0F7FA] p-4 rounded-2xl border border-[#C5E4F0] space-y-2">
+          <span class="font-bold text-[#002B41] text-sm block">홈 화면 바로가기</span>
+          <p class="text-xs text-[#4B5563]">휴대폰 바탕화면에 아이콘을 추가하면 앱처럼 바로 열 수 있습니다.</p>
+          <button type="button" onclick="installMobileShortcut()" class="w-full py-2.5 bg-[#002B41] text-white font-bold text-xs rounded-xl">홈 화면에 바로가기 추가</button>
         </div>
       </div>
 
@@ -1136,6 +1149,28 @@
     }
 
     let mobileNotices = [];
+    let mobileDeferredPrompt = null;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      mobileDeferredPrompt = e;
+    });
+    async function installMobileShortcut() {
+      if (mobileDeferredPrompt) {
+        mobileDeferredPrompt.prompt();
+        try { await mobileDeferredPrompt.userChoice; } catch (e) {}
+        mobileDeferredPrompt = null;
+        return;
+      }
+      if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        alert('아이폰(Safari): 화면 아래 공유 버튼(□↑)을 누른 뒤 [홈 화면에 추가]를 선택해주세요.');
+      } else {
+        alert('브라우저 우측 상단 메뉴(⋮)에서 [홈 화면에 추가] 또는 [앱 설치]를 선택해주세요.');
+      }
+    }
+
     async function loadMobileNotices() {
       try {
         const res = await fetch('/api/notices?_=' + Date.now(), { cache: 'no-store' });

@@ -1550,26 +1550,26 @@
               <span class="font-bold text-[#1E1F21] text-sm" id="user-form-title">신규 사용자 및 계정 등록</span>
               <span id="user-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">수정 모드 활성</span>
             </div>
-            <span class="text-[11px] text-[#6D6E6F]">이메일(로그인 ID)과 비밀번호(최소 8자)로 인증합니다. 비밀번호 미입력 시 임시 비밀번호가 자동 발급됩니다.</span>
+            <span class="text-xs text-[#6D6E6F]">실무자(WORKER): <b>이름 + 휴대폰 뒷번호 4자리</b>로 로그인 (이메일 선택) / 관리자: 이메일 + 8자 이상</span>
           </div>
 
           <input type="hidden" id="edit-user-id">
 
           <div class="grid grid-cols-1 sm:grid-cols-6 gap-3.5">
             <div class="sm:col-span-1">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이름 <span class="text-[#F06A6A]">*</span></label>
-              <input type="text" id="new-user-name" placeholder="예: 김철수" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-bold text-[#1E1F21]">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이름 (실무자 ID) <span class="text-[#F06A6A]">*</span></label>
+              <input type="text" id="new-user-name" placeholder="예: 홍길동" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-bold text-[#1E1F21]">
             </div>
             <div class="sm:col-span-2">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이메일 (로그인 ID) <span class="text-[#F06A6A]">*</span></label>
-              <input type="email" id="new-user-email" placeholder="예: user@company.kr" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-semibold text-[#1E1F21]">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">이메일 <span id="user-email-req-hint" class="text-[11px] text-[#6D6E6F] font-normal">(실무자 선택 · 관리자 필수)</span></label>
+              <input type="email" id="new-user-email" placeholder="선택 (미입력 시 이름으로 로그인)" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-semibold text-[#1E1F21]">
             </div>
             <div class="sm:col-span-1">
               <div class="flex items-center justify-between mb-1.5">
                 <label class="block text-[#1E1F21] font-bold text-xs" id="user-pw-label">비밀번호 <span class="text-[10px] text-[#6D6E6F] font-normal">(선택)</span></label>
               </div>
-              <input type="password" id="new-user-password" minlength="8" placeholder="미입력 시 임시비번 발급" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white text-[#1E1F21]">
-              <span id="user-pw-help" class="text-[10px] text-[#6D6E6F] block mt-0.5 truncate">직접 입력 시 최소 8자 이상</span>
+              <input type="password" id="new-user-password" minlength="4" placeholder="미입력 시 뒷 4자리" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white text-[#1E1F21]">
+              <span id="user-pw-help" class="text-[10px] text-[#6D6E6F] block mt-0.5 truncate">실무자 미입력 시 폰 뒷 4자리</span>
             </div>
             <div class="sm:col-span-1">
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">휴대폰 번호</label>
@@ -4971,8 +4971,10 @@
       const uName = document.getElementById('reset-pw-user-name').innerText;
       const uEmail = document.getElementById('reset-pw-user-email').innerText;
       const newPassword = document.getElementById('reset-pw-new-val').value.trim();
-      if (newPassword && newPassword.length < 8) {
-        showToastNotification('비밀번호는 최소 8자 이상이어야 합니다. (자동 생성하려면 비워두세요)', 'ERROR');
+      const targetU = (currentUsers || []).find(u => u.id === userId);
+      const minLen = (targetU && targetU.role === 'WORKER') ? 4 : 8;
+      if (newPassword && newPassword.length < minLen) {
+        showToastNotification(`비밀번호는 최소 ${minLen}자 이상이어야 합니다. (자동 설정하려면 비워두세요)`, 'ERROR');
         return;
       }
       const res = await fetch(`/api/users/${userId}/reset-password`, {
@@ -5013,12 +5015,18 @@
       const phoneDigits = (u.phone || '').replace(/\D/g, '');
       const pwHint = u.must_change_password ? '발급된 임시 비밀번호 (첫 로그인 시 변경 필수)' : '설정된 개인 비밀번호';
 
-      const emailQs = u.email ? `&email=${encodeURIComponent(u.email)}` : '';
+      const isWorker = (u.role || 'WORKER') === 'WORKER';
+      const nameOrEmailQs = isWorker
+        ? `&name=${encodeURIComponent(u.name || '')}`
+        : (u.email ? `&email=${encodeURIComponent(u.email)}` : '');
       const targetUrl = u.role === 'ADMIN'
-        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${emailQs}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
-        : `${window.location.origin}/mobile?tenant=${encodeURIComponent(tenant)}${emailQs}`;
+        ? `${window.location.origin}/login?tenant=${encodeURIComponent(tenant)}${nameOrEmailQs}&redirect=${encodeURIComponent('/?tenant=' + tenant)}`
+        : `${window.location.origin}/login?client=mobile&tenant=${encodeURIComponent(tenant)}${nameOrEmailQs}&install=1&redirect=${encodeURIComponent('/mobile?tenant=' + tenant)}`;
 
-      const msg = `[${compName}] 현장 접속 안내\n${u.name}님, 아래 전용 주소로 접속하여 본인 계정으로 로그인해주세요.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 로그인 ID: ${loginIdText}\n▶ 비밀번호: ${pwHint}`;
+      const workerPwHint = phoneDigits.length >= 4 ? `휴대폰 뒷번호 4자리 (${phoneDigits.slice(-4)})` : '휴대폰 뒷번호 4자리';
+      const msg = isWorker
+        ? `[${compName}] 현장 모바일 앱 접속 안내\n${u.name}님, 아래 주소를 누르면 휴대폰 홈 화면 바로가기 추가 안내와 함께 바로 접속됩니다.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 아이디: ${u.name}\n▶ 비밀번호: ${workerPwHint}`
+        : `[${compName}] 현장 접속 안내\n${u.name}님, 아래 전용 주소로 접속하여 본인 계정으로 로그인해주세요.\n\n▶ 접속 주소:\n${targetUrl}\n\n▶ 로그인 ID: ${loginIdText}\n▶ 비밀번호: ${pwHint}`;
 
       document.getElementById('send-access-user-name').innerText = `${u.name} (${u.role === 'ADMIN' ? '관리자' : '실무자'})`;
       document.getElementById('send-access-user-phone').innerText = u.phone || '미등록';
@@ -5155,9 +5163,12 @@
       const groupId = document.getElementById('new-user-group').value;
 
       if (!name) { showToastNotification('이름을 입력하세요.', 'ERROR'); return; }
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToastNotification('유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
-      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { showToastNotification('올바른 휴대폰 번호 형식을 입력하세요.', 'ERROR'); return; }
-      if (password && password.length < 8) { showToastNotification('비밀번호는 최소 8자 이상이어야 합니다.', 'ERROR'); return; }
+      if (role !== 'WORKER' && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) { showToastNotification('관리자는 유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToastNotification('유효한 이메일 형식을 입력하세요.', 'ERROR'); return; }
+      if (phone && !/^010-\d{4}-\d{4}$/.test(phone)) { showToastNotification('휴대폰 번호는 010-0000-0000 형식으로 입력하세요.', 'ERROR'); return; }
+      if (role === 'WORKER' && !password && (!phone || phone.replace(/\D/g, '').length < 4)) { showToastNotification('실무자는 휴대폰 번호를 입력해야 뒷번호 4자리 비밀번호가 자동 설정됩니다.', 'ERROR'); return; }
+      const minPwLen = role === 'WORKER' ? 4 : 8;
+      if (password && password.length < minPwLen) { showToastNotification(`비밀번호는 최소 ${minPwLen}자 이상이어야 합니다.`, 'ERROR'); return; }
       if (role === 'WORKER' && !groupId) { showToastNotification('현장 실무자는 소속 직무 그룹을 선택해야 합니다.', 'ERROR'); return; }
 
       const btn = document.getElementById('btn-user-submit');
@@ -5201,9 +5212,12 @@
       const groupId = document.getElementById('new-user-group').value;
 
       if (!name) { showToastNotification('이름을 입력하세요.', 'ERROR'); return; }
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToastNotification('유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
-      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) { showToastNotification('올바른 휴대폰 번호 형식을 입력하세요.', 'ERROR'); return; }
-      if (password && password.length < 8) { showToastNotification('비밀번호는 최소 8자 이상이어야 합니다.', 'ERROR'); return; }
+      if (role !== 'WORKER' && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) { showToastNotification('관리자는 유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToastNotification('유효한 이메일 형식을 입력하세요.', 'ERROR'); return; }
+      if (phone && !/^010-\d{4}-\d{4}$/.test(phone)) { showToastNotification('휴대폰 번호는 010-0000-0000 형식으로 입력하세요.', 'ERROR'); return; }
+      if (role === 'WORKER' && !password && (!phone || phone.replace(/\D/g, '').length < 4)) { showToastNotification('실무자는 휴대폰 번호를 입력해야 뒷번호 4자리 비밀번호가 자동 설정됩니다.', 'ERROR'); return; }
+      const minPwLen = role === 'WORKER' ? 4 : 8;
+      if (password && password.length < minPwLen) { showToastNotification(`비밀번호는 최소 ${minPwLen}자 이상이어야 합니다.`, 'ERROR'); return; }
       if (role === 'WORKER' && !groupId) { showToastNotification('현장 실무자는 소속 직무 그룹을 선택해야 합니다.', 'ERROR'); return; }
 
       const btn = document.getElementById('btn-user-update');

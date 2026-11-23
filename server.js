@@ -1579,16 +1579,27 @@ const server = http.createServer(async (req, res) => {
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { name, email, password, phone, role, custom_role_id } = body;
+      const targetRole = (role || 'WORKER').toUpperCase();
       if (!name || !name.trim()) return sendJSON(res, 400, { error: '이름을 입력하세요.' });
-      if (!email || !isValidEmail(email)) return sendJSON(res, 400, { error: '유효한 이메일 주소(로그인 ID)를 입력하세요.' });
+      if (targetRole !== 'WORKER' && (!email || !isValidEmail(email))) {
+        return sendJSON(res, 400, { error: '관리자는 유효한 이메일 주소(로그인 ID)를 입력하세요.' });
+      }
+      if (email && email.trim() && !isValidEmail(email)) {
+        return sendJSON(res, 400, { error: '유효한 이메일 형식을 입력하세요.' });
+      }
       if (phone && !isValidPhone(phone)) return sendJSON(res, 400, { error: '올바른 휴대폰 번호 형식을 입력하세요. (예: 010-1234-5678)' });
-      if ((role || 'WORKER') === 'WORKER' && !custom_role_id) {
+      if (targetRole === 'WORKER' && !custom_role_id) {
         return sendJSON(res, 400, { error: '현장 실무자는 소속 직무 그룹을 반드시 선택해야 합니다.' });
+      }
+      if (targetRole === 'WORKER' && (!password || !password.trim()) && (!phone || phone.replace(/\D/g, '').length < 4)) {
+        return sendJSON(res, 400, { error: '실무자는 휴대폰 번호(010-0000-0000)를 입력해야 뒷번호 4자리 비밀번호가 자동 설정됩니다.' });
       }
       
       const cleanName = name.trim();
       const cleanPhone = (phone || '').trim();
-      const cleanEmail = email.trim().toLowerCase();
+      const cleanEmail = (email && email.trim())
+        ? email.trim().toLowerCase()
+        : `worker_${Date.now()}_${Math.random().toString(36).slice(2, 6)}@local.fielder`;
 
       // 중복 이메일 및 중복 이름 명시적 오류 반환 (덮어쓰기 방지)
       const dupEmail = db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
@@ -1602,13 +1613,22 @@ const server = http.createServer(async (req, res) => {
 
       let rawPw = (password && password.trim()) ? password.trim() : '';
       let isTemp = 0;
-      if (rawPw) {
-        if (rawPw.length < 8) {
-          return sendJSON(res, 400, { error: '비밀번호는 최소 8자 이상이어야 합니다.' });
+      if (targetRole === 'WORKER') {
+        if (rawPw) {
+          if (rawPw.length < 4) return sendJSON(res, 400, { error: '실무자 비밀번호는 최소 4자리 이상이어야 합니다.' });
+        } else {
+          rawPw = cleanPhone.replace(/\D/g, '').slice(-4);
         }
+        isTemp = 0; // 50~80대 실무자 로그인 시 강제 비번 변경 모달 생략
       } else {
-        rawPw = generateTempPassword(10);
-        isTemp = 1;
+        if (rawPw) {
+          if (rawPw.length < 8) {
+            return sendJSON(res, 400, { error: '관리자 비밀번호는 최소 8자 이상이어야 합니다.' });
+          }
+        } else {
+          rawPw = generateTempPassword(10);
+          isTemp = 1;
+        }
       }
 
       const pwdVal = hashPassword(rawPw);
@@ -1705,10 +1725,11 @@ const server = http.createServer(async (req, res) => {
       const newName = (name && name.trim()) ? name.trim() : targetUser.name;
       const newEmail = (email && email.trim()) ? email.trim().toLowerCase() : targetUser.email;
       const newPhone = phone !== undefined ? phone.trim() : (targetUser.phone || '');
-      const newRole = role || targetUser.role || 'WORKER';
+      const newRole = (role || targetUser.role || 'WORKER').toUpperCase();
       const newRoleId = custom_role_id !== undefined ? (custom_role_id || null) : targetUser.custom_role_id;
 
-      if (!isValidEmail(newEmail)) return sendJSON(res, 400, { error: '유효한 이메일 형식을 입력하세요.' });
+      if (newRole !== 'WORKER' && !isValidEmail(newEmail)) return sendJSON(res, 400, { error: '유효한 이메일 형식을 입력하세요.' });
+      if (newEmail && !isValidEmail(newEmail)) return sendJSON(res, 400, { error: '유효한 이메일 형식을 입력하세요.' });
       if (newPhone && !isValidPhone(newPhone)) return sendJSON(res, 400, { error: '올바른 휴대폰 번호 형식을 입력하세요.' });
       if (newRole === 'WORKER' && !newRoleId) {
         return sendJSON(res, 400, { error: '현장 실무자는 소속 직무 그룹을 반드시 선택해야 합니다.' });
@@ -1719,15 +1740,16 @@ const server = http.createServer(async (req, res) => {
 
       let pwdVal = '';
       if (password && password.trim()) {
-        if (password.trim().length < 8) return sendJSON(res, 400, { error: '비밀번호는 최소 8자 이상이어야 합니다.' });
+        const minLen = newRole === 'WORKER' ? 4 : 8;
+        if (password.trim().length < minLen) return sendJSON(res, 400, { error: `비밀번호는 최소 ${minLen}자 이상이어야 합니다.` });
         pwdVal = hashPassword(password.trim());
       }
 
       db.prepare(`
         UPDATE users
-        SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?
+        SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?, must_change_password = CASE WHEN ? != '' AND ? = 'WORKER' THEN 0 ELSE must_change_password END
         WHERE id = ? AND company_id = ?
-      `).run(newName, newEmail, pwdVal, pwdVal, newPhone, newRole, newRoleId, userId, companyId);
+      `).run(newName, newEmail, pwdVal, pwdVal, newPhone, newRole, newRoleId, pwdVal, newRole, userId, companyId);
 
       // ⭐️ 관리자(ADMIN)이거나 user_admin인 경우 companies 테이블의 admin_name 및 admin_email 도 즉시 동기화!
       if (targetUser.role === 'ADMIN' || userId === 'user_admin' || newRole === 'ADMIN') {
@@ -1748,15 +1770,22 @@ const server = http.createServer(async (req, res) => {
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const targetUser = db.prepare('SELECT id FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
+      const targetUser = db.prepare('SELECT id, role, phone FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
       if (!targetUser) return sendJSON(res, 404, { error: '사용자를 찾을 수 없습니다.' });
 
-      const rawPw = (body.newPassword && body.newPassword.trim()) ? body.newPassword.trim() : generateTempPassword(10);
-      if (rawPw.length < 8) {
-        return sendJSON(res, 400, { error: '새 비밀번호는 최소 8자 이상이어야 합니다.' });
+      const isWorker = (targetUser.role || '').toUpperCase() === 'WORKER';
+      const phoneLast4 = (targetUser.phone || '').replace(/\D/g, '').slice(-4);
+      const rawPw = (body.newPassword && body.newPassword.trim())
+        ? body.newPassword.trim()
+        : (isWorker && phoneLast4.length === 4 ? phoneLast4 : generateTempPassword(isWorker ? 4 : 10));
+
+      const minLen = isWorker ? 4 : 8;
+      if (rawPw.length < minLen) {
+        return sendJSON(res, 400, { error: `새 비밀번호는 최소 ${minLen}자 이상이어야 합니다.` });
       }
 
-      db.prepare('UPDATE users SET password = ?, must_change_password = 1 WHERE id = ? AND company_id = ?').run(hashPassword(rawPw), userId, companyId);
+      const forceChange = isWorker ? 0 : 1;
+      db.prepare('UPDATE users SET password = ?, must_change_password = ? WHERE id = ? AND company_id = ?').run(hashPassword(rawPw), forceChange, userId, companyId);
       broadcastSSE('USER_UPDATED', { action: 'PASSWORD_RESET', id: userId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, temp_password: rawPw, message: '임시 비밀번호가 재설정되었습니다. (첫 로그인 시 변경 필수)' });
     }
@@ -3119,7 +3148,11 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 429, { error: rl.message });
       }
 
-      if (!rawIdentifier || !isValidEmail(rawIdentifier)) {
+      if (!rawIdentifier) {
+        return sendJSON(res, 400, { error: '이름 또는 이메일을 입력해주세요.' });
+      }
+      const looksLikeEmail = rawIdentifier.includes('@');
+      if (looksLikeEmail && !isValidEmail(rawIdentifier)) {
         return sendJSON(res, 400, { error: '유효한 이메일 주소를 입력해주세요.' });
       }
       if (!password) {
@@ -3158,22 +3191,46 @@ const server = http.createServer(async (req, res) => {
         tenantComp = db.prepare('SELECT id, name, subdomain FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
       }
 
-      // 2) 회사 관리자 / 실무자 통합 조회 (이메일 기준 — 테넌트 지정 시 타사 폴백 금지)
+      // 2) 회사 관리자 / 실무자 통합 조회 (이메일 또는 실무자 이름 기준 — 테넌트 지정 시 타사 폴백 금지)
       let user = null;
+      const cleanNameLookup = rawIdentifier.trim().toLowerCase();
       if (tenantComp) {
-        user = db.prepare(`
-          SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
-          FROM users u
-          LEFT JOIN companies c ON u.company_id = c.id
-          WHERE u.company_id = ? AND LOWER(u.email) = ?
-        `).get(tenantComp.id, email);
+        if (looksLikeEmail) {
+          user = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE u.company_id = ? AND LOWER(u.email) = ?
+          `).get(tenantComp.id, email);
+        } else {
+          user = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE u.company_id = ? AND LOWER(TRIM(u.name)) = ?
+          `).get(tenantComp.id, cleanNameLookup);
+        }
       } else if (!tenant || tenant === 'null' || tenant === 'undefined') {
-        user = db.prepare(`
-          SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
-          FROM users u
-          LEFT JOIN companies c ON u.company_id = c.id
-          WHERE LOWER(u.email) = ?
-        `).get(email);
+        if (looksLikeEmail) {
+          user = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE LOWER(u.email) = ?
+          `).get(email);
+        } else {
+          const matches = db.prepare(`
+            SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE LOWER(TRIM(u.name)) = ?
+          `).all(cleanNameLookup);
+          if (matches.length === 1) {
+            user = matches[0];
+          } else if (matches.length > 1) {
+            return sendJSON(res, 400, { error: '동명이인이 있습니다. 회사 전용 모바일 링크로 접속해주세요.' });
+          }
+        }
       }
 
       if (!user) {
@@ -3424,6 +3481,41 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/mobile' || pathname === '/mobile/') {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'mobile.html'));
+    }
+    if (pathname === '/manifest.json') {
+      const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
+      let appName = 'Fielder 현장앱';
+      if (tenant) {
+        const comp = db.prepare("SELECT name FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+        if (comp && comp.name) appName = `${comp.name} 현장앱`;
+      }
+      const startUrl = tenant
+        ? `/login?client=mobile&tenant=${encodeURIComponent(tenant)}&redirect=${encodeURIComponent('/mobile?tenant=' + tenant)}`
+        : '/login?client=mobile&redirect=%2Fmobile';
+      return sendJSON(res, 200, {
+        name: appName,
+        short_name: appName.slice(0, 12),
+        start_url: startUrl,
+        scope: '/',
+        display: 'standalone',
+        orientation: 'portrait',
+        background_color: '#002B41',
+        theme_color: '#002B41',
+        icons: [
+          { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
+          { src: '/icon-192.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
+        ]
+      });
+    }
+    if (pathname === '/icon-192.svg') {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#13B5EA"/><stop offset="100%" stop-color="#0084B4"/></linearGradient></defs><rect width="192" height="192" rx="40" fill="#002B41"/><rect x="24" y="24" width="144" height="144" rx="28" fill="url(#g)"/><text x="96" y="114" text-anchor="middle" font-family="sans-serif" font-weight="900" font-size="38" fill="#FFFFFF">Fielder</text></svg>`;
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
+      return res.end(svg);
+    }
+    if (pathname === '/sw.js') {
+      const sw = `self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});`;
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(sw);
     }
     if (pathname === '/report' || pathname === '/report/' || pathname === '/qr' || pathname === '/qr/') {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'report.html'));
