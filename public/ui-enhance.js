@@ -6,6 +6,24 @@
     });
   };
 
+  window.formatMobilePhoneInput = function(el) {
+    if (!el) return '';
+    const digits = String(el.value || '').replace(/\D/g, '').slice(0, 11);
+    let formatted = digits;
+    if (digits.length > 7) {
+      formatted = `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+    } else if (digits.length > 3) {
+      formatted = `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    }
+    el.value = formatted;
+    return formatted;
+  };
+
+  window.isValidMobile010 = function(val) {
+    if (!val) return true;
+    return /^010-\d{4}-\d{4}$/.test(String(val).trim());
+  };
+
   // 1. KFIRST 커스텀 콤보박스 스타일 주입 (OS 기본 회색 팝업 대체)
   const style = document.createElement('style');
   style.textContent = `

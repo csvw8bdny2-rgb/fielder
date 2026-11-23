@@ -191,8 +191,8 @@
           </div>
 
           <div class="space-y-1 text-left text-xs">
-            <label class="block font-semibold text-slate-200">담당자 연락처</label>
-            <input type="tel" id="admin-phone" placeholder="010-0000-0000" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
+            <label class="block font-semibold text-slate-200">담당자 연락처 (010-0000-0000)</label>
+            <input type="tel" id="admin-phone" oninput="formatSignupPhone(this)" inputmode="numeric" maxlength="13" placeholder="010-0000-0000" class="w-full h-11 border border-[#005B82] rounded-xl px-4 text-sm font-medium outline-none focus:border-[#13B5EA] bg-[#001F30] text-white placeholder-slate-400 transition-colors">
           </div>
 
           <button type="submit" id="btn-submit-signup" class="btn-sky w-full h-12 rounded-xl text-sm flex items-center justify-center mt-3 shadow-md">
@@ -375,14 +375,22 @@
       document.getElementById('domain-preview').textContent = `${window.location.origin}/?tenant=${slug || 'company'}`;
     }
 
+    function formatSignupPhone(el) {
+      if (!el) return;
+      const d = String(el.value || '').replace(/\D/g, '').slice(0, 11);
+      if (d.length <= 3) el.value = d;
+      else if (d.length <= 7) el.value = d.slice(0, 3) + '-' + d.slice(3);
+      else el.value = d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+    }
+
     async function handleFinalSignup(e) {
       e.preventDefault();
       const companyName = document.getElementById('company-name').value.trim();
       const subdomain = document.getElementById('subdomain').value.trim().toLowerCase();
       const phone = document.getElementById('admin-phone').value.trim();
 
-      if (phone && !/^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone)) {
-        alert('올바른 휴대폰 또는 전화번호 형식을 입력해주세요. (예: 010-1234-5678)');
+      if (phone && !/^010-\d{4}-\d{4}$/.test(phone)) {
+        alert('연락처는 010-0000-0000 형식의 숫자만 입력할 수 있습니다.');
         return;
       }
 

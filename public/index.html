@@ -130,47 +130,6 @@
 
       </div>
 
-      <!-- ⭐️ 초기 설정 온보딩 체크리스트 (미완료 시 자동 노출) -->
-      <div id="onboarding-checklist-card" class="hidden bg-white p-4 sm:p-5 rounded-2xl border border-[#13B5EA]/40 shadow-xs space-y-3">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <span class="px-2 py-0.5 rounded bg-[#EBF7FD] text-[#007EA8] text-[10px] font-bold">초기 설정 가이드</span>
-            <h3 class="text-sm font-bold text-[#1E1F21]">시작하기 전에 아래 4단계를 완료해보세요</h3>
-          </div>
-          <button onclick="document.getElementById('onboarding-checklist-card').classList.add('hidden'); localStorage.setItem('fielder_onboarding_dismissed_' + (getTenantParam() || 'default'),'1');" class="text-xs text-[#6D6E6F] hover:text-[#1E1F21]">닫기</button>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
-          <button onclick="navTo('settings'); setSettingsTab('locations');" id="ob-step-1" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
-            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
-            <div>
-              <div class="font-bold text-[#1E1F21]">1) 구역 등록</div>
-              <div class="text-[10px] text-[#6D6E6F]">관리할 층/구역 추가</div>
-            </div>
-          </button>
-          <button onclick="navTo('settings'); setSettingsTab('roles');" id="ob-step-2" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
-            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
-            <div>
-              <div class="font-bold text-[#1E1F21]">2) 직무그룹</div>
-              <div class="text-[10px] text-[#6D6E6F]">시설/미화/보안 등 팀 구성</div>
-            </div>
-          </button>
-          <button onclick="navTo('settings'); setSettingsTab('users');" id="ob-step-3" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
-            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
-            <div>
-              <div class="font-bold text-[#1E1F21]">3) 직원 등록</div>
-              <div class="text-[10px] text-[#6D6E6F]">현장 실무자 계정 초대</div>
-            </div>
-          </button>
-          <button onclick="navTo('workorders');" id="ob-step-4" class="p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition">
-            <span class="ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">4</span>
-            <div>
-              <div class="font-bold text-[#1E1F21]">4) 첫 작업지시</div>
-              <div class="text-[10px] text-[#6D6E6F]">현장 작업 발송 테스트</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
       <!-- 현장 모니터링 통합 제어 바 (층수 선택 & 키워드 검색 대폭 확대) -->
       <div class="bg-white p-4 sm:p-5 rounded-2xl border border-[#EDECEB] shadow-xs space-y-3">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F4F3F2] pb-3">
@@ -1323,7 +1282,7 @@
                 </div>
                 <div>
                   <label class="block text-[#002B41] font-bold text-xs mb-1.5">대표 연락처</label>
-                  <input type="text" id="setting-company-phone" placeholder="예: 02-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-4 text-sm outline-none focus:border-[#0084B4] focus:ring-1 focus:ring-[#13B5EA] text-[#1E1F21] bg-white transition shadow-2xs">
+                  <input type="tel" id="setting-company-phone" oninput="formatMobilePhoneInput(this)" inputmode="numeric" maxlength="13" placeholder="010-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-xl px-4 text-sm outline-none focus:border-[#0084B4] focus:ring-1 focus:ring-[#13B5EA] text-[#1E1F21] bg-white transition shadow-2xs">
                 </div>
               </div>
               <div id="company-message-usage-card" class="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] flex items-center justify-between text-xs">
@@ -1531,7 +1490,7 @@
             </div>
             <div class="sm:col-span-1">
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">휴대폰 번호</label>
-              <input type="tel" id="new-user-phone" placeholder="010-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
+              <input type="tel" id="new-user-phone" oninput="formatMobilePhoneInput(this)" inputmode="numeric" maxlength="13" placeholder="010-1234-5678" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
             </div>
             <div class="sm:col-span-1">
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">권한 <span class="text-[#F06A6A]">*</span></label>
@@ -2495,36 +2454,7 @@
     }
 
     function updateOnboardingChecklist() {
-      const card = document.getElementById('onboarding-checklist-card');
-      if (!card) return;
-      const dismissKey = 'fielder_onboarding_dismissed_' + (getTenantParam() || 'default');
-      if (localStorage.getItem(dismissKey) === '1') {
-        card.classList.add('hidden');
-        return;
-      }
-      const s1 = (currentLocations || []).length > 0;
-      const s2 = (currentRoles || []).length > 0;
-      const s3 = (currentUsers || []).some(u => u.role === 'WORKER');
-      const s4 = (currentTickets || []).length > 0;
-
-      if (s1 && s2 && s3 && s4) {
-        card.classList.add('hidden');
-        return;
-      }
-      card.classList.remove('hidden');
-
-      [s1, s2, s3, s4].forEach((done, idx) => {
-        const el = document.getElementById(`ob-step-${idx + 1}`);
-        if (!el) return;
-        const icon = el.querySelector('.ob-icon');
-        if (done) {
-          el.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50/50 text-left flex items-center space-x-2.5 transition';
-          if (icon) { icon.className = 'ob-icon w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0'; icon.innerText = '✓'; }
-        } else {
-          el.className = 'p-3 rounded-xl border border-[#EDECEB] bg-[#FAF9F8] hover:border-[#13B5EA] text-left flex items-center space-x-2.5 transition';
-          if (icon) { icon.className = 'ob-icon w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0'; icon.innerText = String(idx + 1); }
-        }
-      });
+      // 초기 설정 가이드 제거됨
     }
 
     let currentBuildingsConfig = {

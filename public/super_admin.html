@@ -605,7 +605,7 @@
           </div>
           <div class="space-y-1">
             <label class="block font-semibold text-slate-700">관리자 연락처</label>
-            <input type="tel" id="new-comp-admin-phone" placeholder="010-0000-0000" class="w-full h-9 border border-slate-300 rounded-lg px-3 outline-none focus:border-[#13B5EA]">
+            <input type="tel" id="new-comp-admin-phone" oninput="formatMobilePhoneInput(this)" inputmode="numeric" maxlength="13" placeholder="010-0000-0000" class="w-full h-9 border border-slate-300 rounded-lg px-3 outline-none focus:border-[#13B5EA]">
           </div>
         </div>
 
@@ -1537,6 +1537,13 @@
       const adminPhone = document.getElementById('new-comp-admin-phone').value.trim();
       const password = document.getElementById('new-comp-password').value.trim();
       const plan = document.getElementById('new-comp-plan').value;
+
+      if (adminPhone && !/^010-\d{4}-\d{4}$/.test(adminPhone)) {
+        showSAToast('관리자 연락처는 010-숫자4자리-숫자4자리 형식으로 입력해주세요.', true);
+        btn.disabled = false;
+        btn.textContent = '즉시 개설 및 프로비저닝';
+        return;
+      }
 
       try {
         const res = await fetch('/api/super-admin/companies', {

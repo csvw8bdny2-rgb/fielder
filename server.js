@@ -301,7 +301,7 @@ function isValidEmail(email) {
 
 function isValidPhone(phone) {
   if (!phone) return true;
-  return /^(01[016789]|02|0[3-9][0-9])-?\d{3,4}-?\d{4}$/.test(phone.trim());
+  return /^010-\d{4}-\d{4}$/.test(String(phone).trim());
 }
 
 function generateTempPassword(len = 10) {
@@ -779,6 +779,9 @@ const server = http.createServer(async (req, res) => {
       const companyId = resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트 정보를 확인할 수 없습니다.' });
       const { name, logo_url, buildings_config, buildings, floors, address, contact_phone } = body;
+      if (contact_phone && !isValidPhone(contact_phone)) {
+        return sendJSON(res, 400, { error: '대표 연락처는 010-숫자4자리-숫자4자리 형식으로 입력해주세요.' });
+      }
       let bcStr = undefined;
       let bStr = undefined;
       let fStr = undefined;
@@ -2621,6 +2624,9 @@ const server = http.createServer(async (req, res) => {
       const slug = (subdomain || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
       if (!name || !slug) {
         return sendJSON(res, 400, { error: '회사명과 서브도메인(영문 슬러그)은 필수입니다.' });
+      }
+      if (admin_phone && !isValidPhone(admin_phone)) {
+        return sendJSON(res, 400, { error: '관리자 연락처는 010-숫자4자리-숫자4자리 형식으로 입력해주세요.' });
       }
 
       const existing = db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
