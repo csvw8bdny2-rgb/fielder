@@ -531,6 +531,32 @@ function initDatabase() {
       completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS notices (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      target_scope TEXT DEFAULT 'ALL',
+      target_role_id TEXT,
+      target_role_name TEXT DEFAULT '전체',
+      is_pinned INTEGER DEFAULT 0,
+      author_id TEXT,
+      author_name TEXT,
+      attachment_name TEXT,
+      attachment_url TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS notice_reads (
+      notice_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (notice_id, user_id),
+      FOREIGN KEY (notice_id) REFERENCES notices(id) ON DELETE CASCADE
+    );
   `);
 
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}

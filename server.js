@@ -627,7 +627,8 @@ const server = http.createServer(async (req, res) => {
         pathname === '/api/inspections/statistics' ||
         (pathname.startsWith('/api/settings/') && method !== 'GET') ||
         (pathname.startsWith('/api/locations') && method !== 'GET') ||
-        (pathname.startsWith('/api/inspections/templates') && method !== 'GET');
+        (pathname.startsWith('/api/inspections/templates') && method !== 'GET') ||
+        (pathname.startsWith('/api/notices') && method !== 'GET' && !pathname.endsWith('/read'));
       if (isAdminOnlyEndpoint && !isManagerOrSuper) {
         return sendJSON(res, 403, { error: '회사 관리자 권한이 필요합니다.' });
       }
@@ -2106,6 +2107,136 @@ const server = http.createServer(async (req, res) => {
         daily_series: Object.values(dailyMap),
         logs: filteredLogs
       });
+    }
+
+    // ⭐️ 공지사항 게시판 API (업무보고 > 공지사항 / 모바일 실무자 공지 열람)
+    if (pathname === '/api/notices' && method === 'GET') {
+      const reqSession = getSession(req);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+
+      const userId = reqSession?.user?.id || '';
+      const isManager = reqSession && (reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN');
+      const scopeFilter = (parsedUrl.query?.scope || '').trim().toUpperCase();
+      const roleFilter = (parsedUrl.query?.role_id || '').trim();
+
+      let rows = db.prepare(`
+        SELECT n.*,
+          EXISTS(SELECT 1 FROM notice_reads nr WHERE nr.notice_id = n.id AND nr.user_id = ?) AS is_read,
+          (SELECT COUNT(*) FROM notice_reads nr WHERE nr.notice_id = n.id) AS read_count
+        FROM notices n
+        WHERE n.company_id = ?
+        ORDER BY n.is_pinned DESC, n.created_at DESC
+      `).all(userId, companyId);
+
+      if (!isManager && reqSession?.user) {
+        const dbUser = db.prepare('SELECT custom_role_id, role FROM users WHERE id = ?').get(userId);
+        const userRoleId = dbUser?.custom_role_id || reqSession.user.custom_role_id || '';
+        const roleRow = userRoleId ? db.prepare('SELECT name FROM custom_roles WHERE id = ? AND company_id = ?').get(userRoleId, companyId) : null;
+        const userRoleName = roleRow?.name || '';
+        rows = rows.filter(n =>
+          n.target_scope === 'ALL' ||
+          (n.target_scope === 'GROUP' && ((userRoleId && n.target_role_id === userRoleId) || (userRoleName && n.target_role_name === userRoleName)))
+        );
+      } else {
+        if (scopeFilter === 'ALL' || scopeFilter === 'GROUP') {
+          rows = rows.filter(n => n.target_scope === scopeFilter);
+        }
+        if (roleFilter) {
+          rows = rows.filter(n => n.target_role_id === roleFilter);
+        }
+      }
+
+      return sendJSON(res, 200, rows);
+    }
+
+    if (pathname === '/api/notices' && method === 'POST') {
+      const body = await parseBody(req);
+      const reqSession = getSession(req);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+
+      const title = String(body.title || '').trim();
+      const content = String(body.content || '').trim();
+      const targetScope = String(body.target_scope || 'ALL').trim().toUpperCase() === 'GROUP' ? 'GROUP' : 'ALL';
+      const targetRoleId = targetScope === 'GROUP' ? String(body.target_role_id || '').trim() : null;
+      const isPinned = body.is_pinned ? 1 : 0;
+      const attachmentName = body.attachment_name ? String(body.attachment_name).trim().slice(0, 200) : null;
+      const attachmentUrl = body.attachment_url ? String(body.attachment_url).trim().slice(0, 1000) : null;
+
+      if (!title) return sendJSON(res, 400, { error: '공지사항 제목을 입력하세요.' });
+      if (!content) return sendJSON(res, 400, { error: '공지사항 내용을 입력하세요.' });
+
+      let targetRoleName = '전체';
+      if (targetScope === 'GROUP') {
+        if (!targetRoleId) return sendJSON(res, 400, { error: '대상 직무그룹을 선택하세요.' });
+        const roleRow = db.prepare('SELECT id, name FROM custom_roles WHERE id = ? AND company_id = ?').get(targetRoleId, companyId);
+        if (!roleRow) return sendJSON(res, 404, { error: '선택한 직무그룹을 찾을 수 없습니다.' });
+        targetRoleName = roleRow.name;
+      }
+
+      const id = 'ntc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      const nowIso = new Date().toISOString();
+      const authorId = reqSession?.user?.id || 'admin';
+      const authorName = reqSession?.user?.name || '관리자';
+
+      db.prepare(`
+        INSERT INTO notices (id, company_id, title, content, target_scope, target_role_id, target_role_name, is_pinned, author_id, author_name, attachment_name, attachment_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, companyId, title, content, targetScope, targetRoleId, targetRoleName, isPinned, authorId, authorName, attachmentName, attachmentUrl, nowIso);
+
+      const created = db.prepare('SELECT * FROM notices WHERE id = ?').get(id);
+      return sendJSON(res, 201, { success: true, notice: created });
+    }
+
+    const noticeReadMatch = pathname.match(/^\/api\/notices\/([^/]+)\/read$/);
+    if (noticeReadMatch && method === 'POST') {
+      const reqSession = getSession(req);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId || !reqSession?.user?.id) return sendJSON(res, 401, { error: '인증이 필요합니다.' });
+      const noticeId = noticeReadMatch[1];
+      const existing = db.prepare('SELECT id FROM notices WHERE id = ? AND company_id = ?').get(noticeId, companyId);
+      if (!existing) return sendJSON(res, 404, { error: '공지사항을 찾을 수 없습니다.' });
+      db.prepare('INSERT OR IGNORE INTO notice_reads (notice_id, user_id, read_at) VALUES (?, ?, ?)').run(noticeId, reqSession.user.id, new Date().toISOString());
+      return sendJSON(res, 200, { success: true });
+    }
+
+    const noticeIdMatch = pathname.match(/^\/api\/notices\/([^/]+)$/);
+    if (noticeIdMatch && (method === 'PUT' || method === 'DELETE')) {
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const noticeId = noticeIdMatch[1];
+      const existing = db.prepare('SELECT * FROM notices WHERE id = ? AND company_id = ?').get(noticeId, companyId);
+      if (!existing) return sendJSON(res, 404, { error: '공지사항을 찾을 수 없습니다.' });
+
+      if (method === 'DELETE') {
+        db.prepare('DELETE FROM notices WHERE id = ? AND company_id = ?').run(noticeId, companyId);
+        return sendJSON(res, 200, { success: true });
+      }
+
+      const body = await parseBody(req);
+      const title = String(body.title ?? existing.title).trim();
+      const content = String(body.content ?? existing.content).trim();
+      const targetScope = body.target_scope !== undefined ? (String(body.target_scope).toUpperCase() === 'GROUP' ? 'GROUP' : 'ALL') : existing.target_scope;
+      const targetRoleId = targetScope === 'GROUP' ? String(body.target_role_id ?? existing.target_role_id ?? '').trim() : null;
+      const isPinned = body.is_pinned !== undefined ? (body.is_pinned ? 1 : 0) : existing.is_pinned;
+      if (!title || !content) return sendJSON(res, 400, { error: '제목과 내용을 입력하세요.' });
+
+      let targetRoleName = '전체';
+      if (targetScope === 'GROUP') {
+        const roleRow = db.prepare('SELECT id, name FROM custom_roles WHERE id = ? AND company_id = ?').get(targetRoleId, companyId);
+        if (!roleRow) return sendJSON(res, 404, { error: '선택한 직무그룹을 찾을 수 없습니다.' });
+        targetRoleName = roleRow.name;
+      }
+
+      db.prepare(`
+        UPDATE notices
+        SET title = ?, content = ?, target_scope = ?, target_role_id = ?, target_role_name = ?, is_pinned = ?, updated_at = ?
+        WHERE id = ? AND company_id = ?
+      `).run(title, content, targetScope, targetRoleId, targetRoleName, isPinned, new Date().toISOString(), noticeId, companyId);
+
+      const updated = db.prepare('SELECT * FROM notices WHERE id = ?').get(noticeId);
+      return sendJSON(res, 200, { success: true, notice: updated });
     }
 
     // ⭐️ 점검 결과 이력 API

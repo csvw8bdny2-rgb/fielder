@@ -50,7 +50,7 @@
             <span id="badge-unresolved-count" class="hidden bg-[#FF5252] text-white font-bold px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
           <button onclick="navTo('inspections')" id="nav-inspections" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
-            <span>현장 점검표</span>
+            <span>업무보고</span>
             <span id="badge-inspection-count" class="hidden bg-[#13B5EA] text-[#002B41] font-bold px-2 py-0.5 rounded-full text-xs">0</span>
           </button>
           <button onclick="navTo('analytics')" id="nav-analytics" class="h-16 px-3.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/10 flex items-center space-x-1.5 border-b-[3px] border-transparent transition whitespace-nowrap">
@@ -692,38 +692,41 @@
 
 
     <!-- ======================================================== -->
-    <!-- [4.5 현장 점검표] 점검 이력 / 점검 일정 / 점검표 통계 / 점검표 작성 -->
+    <!-- [4.5 업무보고] 일일 상황일지 / 공지사항 게시판 / 일정 / 통계 / 서식 관리 -->
     <!-- ======================================================== -->
     <section id="page-inspections" class="hidden space-y-4 text-xs">
       
       <!-- 상단 서브 탭 -->
-      <div class="flex flex-wrap items-center justify-between border-b border-[#EDECEB] pb-2 gap-2">
+      <div class="flex flex-wrap items-center justify-between border-b border-[#EDECEB] pb-2.5 gap-2">
         <div class="flex flex-wrap items-center gap-2">
           <button onclick="setInspectionSubTab('history')" id="chk-tab-history" class="px-4 py-2 bg-[#EBF7FD] text-[#007EA8] border-2 border-[#13B5EA] rounded-xl font-bold transition shadow-xs">
-            점검 이력
+            일일 상황일지
+          </button>
+          <button onclick="setInspectionSubTab('notices')" id="chk-tab-notices" class="px-4 py-2 bg-white border border-[#D5D3CF] text-[#002B41] hover:border-[#0084B4] hover:bg-[#F0F8FC] rounded-xl font-bold transition shadow-xs">
+            공지사항 게시판
           </button>
           <button onclick="setInspectionSubTab('schedule')" id="chk-tab-schedule" class="px-4 py-2 bg-white border border-[#D5D3CF] text-[#002B41] hover:border-[#0084B4] hover:bg-[#F0F8FC] rounded-xl font-bold transition shadow-xs">
-            점검 일정
+            상황일지 일정
           </button>
           <button onclick="setInspectionSubTab('stats')" id="chk-tab-stats" class="px-4 py-2 bg-white border border-[#D5D3CF] text-[#002B41] hover:border-[#0084B4] hover:bg-[#F0F8FC] rounded-xl font-bold transition shadow-xs">
-            점검표 통계
+            상황일지 통계
           </button>
           <button onclick="setInspectionSubTab('builder')" id="chk-tab-builder" class="px-4 py-2 bg-white border border-[#D5D3CF] text-[#002B41] hover:border-[#0084B4] hover:bg-[#F0F8FC] rounded-xl font-bold transition shadow-xs">
-            점검표 서식 만들기
+            일지 서식 관리
           </button>
         </div>
       </div>
 
-      <!-- ⭐️ 1. 점검 이력 뷰 -->
+      <!-- ⭐️ 1. 일일 상황일지 뷰 (왼쪽 월간 달력 숫자 카운트 + 오른쪽 일자별 직무 일지 아코디언) -->
       <div id="chk-view-history" class="space-y-4">
         <!-- 상단 KPI 4개 요약 -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">총 점검</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">총 상황일지</div>
             <div class="text-2xl font-extrabold text-[#111827] mt-1" id="chk-kpi-total">0 건</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">양호</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">정상 · 양호</div>
             <div class="text-2xl font-extrabold text-[#34A853] mt-1" id="chk-kpi-good">0 건</div>
             <div class="text-xs text-[#6D6E6F] mt-0.5" id="chk-kpi-good-rate">100%</div>
           </div>
@@ -732,13 +735,13 @@
             <div class="text-2xl font-extrabold text-[#E5983B] mt-1" id="chk-kpi-warn">0 건</div>
           </div>
           <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-2xs">
-            <div class="text-[#6D6E6F] font-semibold text-xs">점검표 양식</div>
+            <div class="text-[#6D6E6F] font-semibold text-xs">상황일지 서식</div>
             <div class="text-2xl font-extrabold text-[#0084B4] mt-1" id="chk-kpi-templates">0 개</div>
           </div>
         </div>
 
         <!-- 필터 및 검색 바 -->
-        <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-xs space-y-3">
+        <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-xs">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-2 flex-1">
               <div class="w-40">
@@ -748,7 +751,7 @@
               </div>
               <div class="w-28">
                 <select id="chk-filter-bldg" onchange="filterInspectionLogs()" class="w-full h-9 border border-[#D5D3CF] rounded-lg px-2.5 text-xs bg-white font-semibold text-[#1E1F21] outline-none">
-                  <option value="">전체 동</option>
+                  <option value="">전체 사업장/동</option>
                   <option value="본관">본관</option>
                   <option value="별관">별관</option>
                 </select>
@@ -762,12 +765,12 @@
                 </select>
               </div>
               <div class="flex-1 min-w-[180px]">
-                <input type="text" id="chk-filter-keyword" oninput="filterInspectionLogs()" placeholder="점검표명, 구역, 실무자 검색" class="w-full h-9 border border-[#D5D3CF] rounded-lg px-3 text-xs outline-none focus:border-[#0084B4] bg-white">
+                <input type="text" id="chk-filter-keyword" oninput="filterInspectionLogs()" placeholder="상황일지명, 구역, 작성자 검색" class="w-full h-9 border border-[#D5D3CF] rounded-lg px-3 text-xs outline-none focus:border-[#0084B4] bg-white">
               </div>
             </div>
             <div class="flex items-center space-x-2">
               <button onclick="openNewInspectionLogModal()" class="h-9 px-3.5 bg-[#0084B4] text-white font-bold rounded-lg hover:bg-[#006C9C] text-xs shadow-xs transition">
-                + 점검 등록
+                + 신규 일지 등록
               </button>
               <button onclick="window.print()" class="h-9 px-3 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-semibold rounded-lg text-xs transition">
                 인쇄
@@ -776,37 +779,85 @@
           </div>
         </div>
 
-        <!-- 점검 내역 테이블 -->
+        <!-- ⭐️ 달력(왼쪽) + 일자별 상황일지 아코디언(오른쪽) 분할 레이아웃 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <!-- 왼쪽: 월간 달력 (일자별 등록 건수 숫자 표시) -->
+          <div class="lg:col-span-6 bg-white rounded-xl border border-[#D5D3CF] shadow-xs overflow-hidden">
+            <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <button type="button" onclick="shiftDailyLogCalendarMonth(-1)" class="w-8 h-8 rounded-lg border border-[#D5D3CF] bg-white hover:bg-[#F0F8FC] text-[#111827] font-bold flex items-center justify-center transition" title="이전 달">&lt;</button>
+                <span id="daily-cal-month-label" class="text-sm font-extrabold text-[#111827] min-w-[100px] text-center">2026년 11월</span>
+                <button type="button" onclick="shiftDailyLogCalendarMonth(1)" class="w-8 h-8 rounded-lg border border-[#D5D3CF] bg-white hover:bg-[#F0F8FC] text-[#111827] font-bold flex items-center justify-center transition" title="다음 달">&gt;</button>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <button type="button" onclick="goDailyLogToday()" class="px-2.5 py-1.5 rounded-lg border border-[#D5D3CF] bg-white hover:bg-[#F0F8FC] text-xs font-bold text-[#007EA8] transition">오늘</button>
+                <button type="button" onclick="toggleDailyLogAllDates()" id="btn-daily-all-dates" class="px-2.5 py-1.5 rounded-lg border border-[#D5D3CF] bg-white hover:bg-[#F0F8FC] text-xs font-semibold text-[#6D6E6F] transition">전체 이력</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-7 border-b border-[#EAE8E5] bg-[#F7F6F4] text-center text-xs font-bold">
+              <div class="py-2 text-[#F06A6A]">일</div>
+              <div class="py-2 text-[#2C2D2F]">월</div>
+              <div class="py-2 text-[#2C2D2F]">화</div>
+              <div class="py-2 text-[#2C2D2F]">수</div>
+              <div class="py-2 text-[#2C2D2F]">목</div>
+              <div class="py-2 text-[#2C2D2F]">금</div>
+              <div class="py-2 text-[#0084B4]">토</div>
+            </div>
+            <div id="daily-log-calendar-grid" class="grid grid-cols-7 bg-white"></div>
+          </div>
+
+          <!-- 오른쪽: 선택된 날짜의 카테고리별 일일 상황일지 (아코디언) -->
+          <div class="lg:col-span-6 space-y-3">
+            <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-xs px-4 py-3 flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-[#0084B4]"></span>
+                <span id="daily-selected-date-label" class="text-sm font-extrabold text-[#111827]">2026-11-23</span>
+                <span id="chk-log-total-count" class="text-xs font-semibold text-[#6D6E6F]"></span>
+              </div>
+              <button type="button" onclick="openNewInspectionLogModal()" class="px-3 py-1.5 rounded-lg border border-[#D5D3CF] bg-white hover:bg-[#FAF9F8] text-xs font-bold text-[#1E1F21] transition">
+                신규
+              </button>
+            </div>
+            <div id="daily-category-accordions" class="space-y-2.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⭐️ 1-B. 공지사항 게시판 뷰 (리스트형 + 전체/직무그룹별 등록 및 관리) -->
+      <div id="chk-view-notices" class="hidden space-y-4">
+        <div class="bg-white p-4 rounded-xl border border-[#D5D3CF] shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2 flex-1">
+            <select id="notice-filter-scope" onchange="renderNoticesTable()" class="h-9 border border-[#D5D3CF] rounded-lg px-3 text-xs font-semibold bg-white text-[#1E1F21] outline-none">
+              <option value="ALL_VIEW">전체 공지 목록</option>
+              <option value="ALL">전체 대상 공지만</option>
+              <option value="GROUP">직무그룹별 공지만</option>
+            </select>
+            <input type="text" id="notice-filter-keyword" oninput="renderNoticesTable()" placeholder="공지 제목, 내용, 대상 그룹 검색" class="flex-1 min-w-[200px] h-9 border border-[#D5D3CF] rounded-lg px-3 text-xs outline-none focus:border-[#0084B4] bg-white">
+          </div>
+          <button type="button" onclick="openNoticeEditorModal()" class="h-9 px-4 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg text-xs shadow-xs transition">
+            + 공지사항 작성
+          </button>
+        </div>
+
         <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-xs overflow-hidden">
-          <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex justify-between items-center">
-            <div class="font-extrabold text-[#111827] text-sm">점검 완료 내역</div>
-            <span id="chk-log-total-count" class="text-xs font-semibold text-[#6D6E6F]"></span>
+          <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex items-center justify-between">
+            <div class="font-extrabold text-[#111827] text-sm">공지사항 게시판</div>
+            <span id="notice-total-count" class="text-xs font-semibold text-[#6D6E6F]">총 0건</span>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full table-fixed divide-y divide-[#EAE8E5] text-left min-w-[960px]">
-              <colgroup>
-                <col class="w-32">
-                <col class="w-48">
-                <col class="w-28">
-                <col class="w-44">
-                <col class="w-24">
-                <col class="w-20">
-                <col class="w-[26%]">
-                <col class="w-40">
-              </colgroup>
+            <table class="w-full divide-y divide-[#EAE8E5] text-left min-w-[780px]">
               <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-xs border-b border-[#D8D6D2]">
                 <tr>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">일시</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">점검표</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">직무</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">위치</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">점검자</th>
-                  <th class="px-3.5 py-2.5 text-center whitespace-nowrap">판정</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">비고</th>
-                  <th class="px-3.5 py-2.5 text-right whitespace-nowrap pr-4">관리</th>
+                  <th class="px-4 py-2.5 w-20 text-center">구분</th>
+                  <th class="px-4 py-2.5 w-32">공지 대상</th>
+                  <th class="px-4 py-2.5">제목</th>
+                  <th class="px-4 py-2.5 w-28">작성자</th>
+                  <th class="px-4 py-2.5 w-20 text-center">열람</th>
+                  <th class="px-4 py-2.5 w-36">등록일시</th>
+                  <th class="px-4 py-2.5 w-28 text-right pr-4">관리</th>
                 </tr>
               </thead>
-              <tbody id="inspection-log-table-body" class="divide-y divide-[#EAE8E5] bg-white"></tbody>
+              <tbody id="notices-table-body" class="divide-y divide-[#EAE8E5] bg-white"></tbody>
             </table>
           </div>
         </div>
@@ -952,18 +1003,18 @@
         <div id="checklist-builder-editor" class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-5">
           <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
             <div class="flex items-center space-x-2">
-              <span class="font-bold text-[#1E1F21] text-base" id="builder-form-title">신규 점검표 작성</span>
+              <span class="font-bold text-[#1E1F21] text-base" id="builder-form-title">신규 일일 상황일지 서식 작성</span>
               <span id="builder-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">양식 수정 중</span>
             </div>
             <input type="hidden" id="builder-template-id">
-            <span class="text-[11px] text-[#6D6E6F]">담당 직무를 선택하고 점검 항목 유형을 조합하여 맞춤 서식을 설계하세요.</span>
+            <span class="text-[11px] text-[#6D6E6F]">담당 직무를 선택하고 상황일지 항목 유형을 조합하여 맞춤 서식을 설계하세요.</span>
           </div>
 
-          <!-- 기본 메타 정보 (점검표명, 직무그룹, 대상건물, 주기) -->
+          <!-- 기본 메타 정보 (상황일지명, 직무그룹, 대상건물, 주기) -->
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
             <div class="sm:col-span-2">
-              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">점검표 명칭 <span class="text-[#F06A6A]">*</span></label>
-              <input type="text" id="builder-title" placeholder="예: 화장실 정기 위생 점검표, 기계실 일일 안전점검표" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-bold text-[#1E1F21]">
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">상황일지 명칭 <span class="text-[#F06A6A]">*</span></label>
+              <input type="text" id="builder-title" placeholder="예: 시설 일일 상황일지, 미화 일일 점검일지" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-bold text-[#1E1F21]">
             </div>
             <div>
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">담당 직무 그룹 <span class="text-[#F06A6A]">*</span></label>
@@ -2229,7 +2280,74 @@
 
       <div class="flex justify-end space-x-2 pt-3 border-t border-[#EDECEB]">
         <button type="button" onclick="closeNewInspectionLogModal()" class="px-4 py-2 border border-[#D5D3CF] text-[#6D6E6F] rounded-lg text-xs font-semibold hover:bg-[#FAF9F8]">취소</button>
-        <button type="button" onclick="submitNewInspectionLog()" class="px-5 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white rounded-lg text-xs font-bold hover:bg-[#001D2C] shadow-xs">점검 결과 저장</button>
+        <button type="button" onclick="submitNewInspectionLog()" class="px-5 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white rounded-lg text-xs font-bold shadow-xs">상황일지 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⭐️ 2-B. 공지사항 작성 / 수정 모달 -->
+  <div id="modal-notice-editor" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 my-8">
+      <div class="flex items-center justify-between border-b border-[#EDECEB] pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#0084B4]"></span>
+          <h3 class="text-base font-bold text-[#1E1F21]" id="notice-editor-title">공지사항 작성</h3>
+        </div>
+        <button type="button" onclick="closeNoticeEditorModal()" class="text-[#A0A1A2] hover:text-[#1E1F21] text-xl font-bold">×</button>
+      </div>
+      <input type="hidden" id="notice-edit-id">
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold text-[#1E1F21] mb-1.5">게시 대상 <span class="text-[#F06A6A]">*</span></label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center space-x-2 p-2.5 rounded-lg border border-[#D5D3CF] cursor-pointer bg-[#FAF9F8]">
+              <input type="radio" name="notice-scope" value="ALL" checked onchange="toggleNoticeRoleSelect()" class="accent-[#0084B4]">
+              <span class="font-bold text-[#1E1F21]">전체 공지 (모든 실무자)</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2.5 rounded-lg border border-[#D5D3CF] cursor-pointer bg-[#FAF9F8]">
+              <input type="radio" name="notice-scope" value="GROUP" onchange="toggleNoticeRoleSelect()" class="accent-[#0084B4]">
+              <span class="font-bold text-[#1E1F21]">직무그룹별 공지</span>
+            </label>
+          </div>
+        </div>
+        <div id="notice-role-select-wrap" class="hidden">
+          <label class="block font-bold text-[#1E1F21] mb-1.5">대상 직무그룹 선택 <span class="text-[#F06A6A]">*</span></label>
+          <select id="notice-role-select" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 bg-white font-bold text-[#1E1F21] outline-none"></select>
+        </div>
+        <div>
+          <label class="block font-bold text-[#1E1F21] mb-1.5">공지 제목 <span class="text-[#F06A6A]">*</span></label>
+          <input type="text" id="notice-title-input" placeholder="예: 11월 동절기 동파 예방 집중 순찰 안내" class="w-full h-10 border border-[#D5D3CF] rounded-lg px-3 bg-white font-bold text-[#1E1F21] outline-none focus:border-[#0084B4]">
+        </div>
+        <div>
+          <label class="block font-bold text-[#1E1F21] mb-1.5">공지 내용 <span class="text-[#F06A6A]">*</span></label>
+          <textarea id="notice-content-input" rows="5" placeholder="현장 실무자들에게 전달할 공지 내용을 입력하세요." class="w-full border border-[#D5D3CF] rounded-lg p-3 bg-white text-xs text-[#1E1F21] outline-none focus:border-[#0084B4]"></textarea>
+        </div>
+        <label class="flex items-center space-x-2 cursor-pointer">
+          <input type="checkbox" id="notice-pinned-input" class="w-4 h-4 accent-[#0084B4]">
+          <span class="font-bold text-[#1E1F21]">상단 중요 공지로 고정</span>
+        </label>
+      </div>
+      <div class="flex justify-end space-x-2 pt-3 border-t border-[#EDECEB]">
+        <button type="button" onclick="closeNoticeEditorModal()" class="px-4 py-2 border border-[#D5D3CF] text-[#6D6E6F] rounded-lg text-xs font-semibold hover:bg-[#FAF9F8]">취소</button>
+        <button type="button" onclick="submitNotice()" class="px-5 py-2 bg-[#0084B4] hover:bg-[#006C9C] text-white rounded-lg text-xs font-bold shadow-xs">공지사항 등록</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⭐️ 2-C. 공지사항 상세 보기 모달 -->
+  <div id="modal-notice-detail" class="hidden fixed inset-0 bg-[#002B41]/60 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 my-8">
+      <div class="flex items-start justify-between border-b border-[#EDECEB] pb-3 gap-3">
+        <div>
+          <span id="notice-detail-badge" class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-[#EBF7FD] text-[#007EA8] mb-1.5">전체</span>
+          <h3 class="text-base font-extrabold text-[#1E1F21]" id="notice-detail-title">공지 제목</h3>
+          <div class="text-xs text-[#6D6E6F] mt-1" id="notice-detail-meta">작성자 · 일시</div>
+        </div>
+        <button type="button" onclick="closeNoticeDetailModal()" class="text-[#A0A1A2] hover:text-[#1E1F21] text-xl font-bold">×</button>
+      </div>
+      <div id="notice-detail-content" class="text-sm text-[#1E1F21] whitespace-pre-wrap leading-relaxed bg-[#FAF9F8] p-4 rounded-xl border border-[#EDECEB] min-h-[120px]"></div>
+      <div class="flex justify-end pt-2">
+        <button type="button" onclick="closeNoticeDetailModal()" class="px-5 py-2 bg-[#1E1F21] text-white rounded-lg text-xs font-bold">닫기</button>
       </div>
     </div>
   </div>
@@ -5116,7 +5234,7 @@
         sseSource.addEventListener('INSPECTION_LOG_SUBMITTED', async () => {
           await loadInspectionLogs();
           await loadTickets();
-          showToastNotification('📋 [현장 점검표] 실무자의 새로운 점검 결과가 등록되었습니다.');
+          showToastNotification('📋 [업무보고] 실무자의 새로운 일일 상황일지가 등록되었습니다.');
         });
         sseSource.addEventListener('LOCATION_UPDATED', () => loadLocations());
         sseSource.addEventListener('USER_UPDATED', () => loadUsers());
@@ -5566,12 +5684,14 @@
       activeInspectionSubTab = tab;
       const views = {
         history: document.getElementById('chk-view-history'),
+        notices: document.getElementById('chk-view-notices'),
         schedule: document.getElementById('chk-view-schedule'),
         stats: document.getElementById('chk-view-stats'),
         builder: document.getElementById('chk-view-builder')
       };
       const btns = {
         history: document.getElementById('chk-tab-history'),
+        notices: document.getElementById('chk-tab-notices'),
         schedule: document.getElementById('chk-tab-schedule'),
         stats: document.getElementById('chk-tab-stats'),
         builder: document.getElementById('chk-tab-builder')
@@ -5592,6 +5712,8 @@
 
       if (tab === 'history') {
         loadInspectionLogs();
+      } else if (tab === 'notices') {
+        loadNotices();
       } else if (tab === 'schedule') {
         const dInput = document.getElementById('sched-date-input');
         if (dInput && !dInput.value) dInput.value = new Date().toISOString().slice(0, 10);
@@ -5895,58 +6017,354 @@
       const warnEl = document.getElementById('chk-kpi-warn');
       if (warnEl) warnEl.innerText = warnCount + ' 건';
       const logCountEl = document.getElementById('chk-log-total-count');
-      if (logCountEl) logCountEl.innerText = `총 ${filtered.length}건 (전체 ${total}건 중)`;
 
-      const tbody = document.getElementById('inspection-log-table-body');
+      renderDailyLogCalendar(filtered);
+      renderDailyCategoryAccordions(filtered, logCountEl, total);
+    }
+
+    // ⭐️ 일일 상황일지 월간 달력 + 카테고리별 아코디언 상태
+    const _nowKst = new Date(Date.now() + 9 * 3600 * 1000);
+    let dailyCalYear = _nowKst.getUTCFullYear();
+    let dailyCalMonth = _nowKst.getUTCMonth();
+    let dailyCalSelectedDate = _nowKst.toISOString().slice(0, 10);
+    let dailyCalShowAll = false;
+    let lastFilteredInspectionLogs = [];
+    const expandedDailyCategories = new Set(['시설일지', '미화일지', '보안일지', '안전일지', '기타일지']);
+
+    function getLogDateKey(log) {
+      const raw = String(log.completed_at || log.created_at || '');
+      return raw.length >= 10 ? raw.slice(0, 10) : '';
+    }
+
+    function classifyDailyLogCategory(log) {
+      const src = `${log.role_name || ''} ${log.template_title || ''}`;
+      if (/시설|전기|기계|설비|영선|공조|승강기/.test(src)) return '시설일지';
+      if (/미화|청소|위생|환경/.test(src)) return '미화일지';
+      if (/보안|경비|주차|순찰|출입/.test(src)) return '보안일지';
+      if (/안전|소방|방재|위험/.test(src)) return '안전일지';
+      return '기타일지';
+    }
+
+    function shiftDailyLogCalendarMonth(delta) {
+      dailyCalMonth += delta;
+      if (dailyCalMonth < 0) { dailyCalMonth = 11; dailyCalYear--; }
+      if (dailyCalMonth > 11) { dailyCalMonth = 0; dailyCalYear++; }
+      renderDailyLogCalendar(lastFilteredInspectionLogs);
+    }
+
+    function goDailyLogToday() {
+      const kst = new Date(Date.now() + 9 * 3600 * 1000);
+      dailyCalYear = kst.getUTCFullYear();
+      dailyCalMonth = kst.getUTCMonth();
+      dailyCalSelectedDate = kst.toISOString().slice(0, 10);
+      dailyCalShowAll = false;
+      updateAllDatesToggleBtn();
+      renderDailyLogCalendar(lastFilteredInspectionLogs);
+      renderDailyCategoryAccordions(lastFilteredInspectionLogs, document.getElementById('chk-log-total-count'), currentInspectionLogs.length);
+    }
+
+    function toggleDailyLogAllDates() {
+      dailyCalShowAll = !dailyCalShowAll;
+      updateAllDatesToggleBtn();
+      renderDailyLogCalendar(lastFilteredInspectionLogs);
+      renderDailyCategoryAccordions(lastFilteredInspectionLogs, document.getElementById('chk-log-total-count'), currentInspectionLogs.length);
+    }
+
+    function updateAllDatesToggleBtn() {
+      const btn = document.getElementById('btn-daily-all-dates');
+      if (!btn) return;
+      btn.className = dailyCalShowAll
+        ? 'px-2.5 py-1.5 rounded-lg border border-[#0084B4] bg-[#EBF7FD] text-xs font-bold text-[#007EA8] transition'
+        : 'px-2.5 py-1.5 rounded-lg border border-[#D5D3CF] bg-white hover:bg-[#F0F8FC] text-xs font-semibold text-[#6D6E6F] transition';
+    }
+
+    function selectDailyLogDate(dateStr) {
+      dailyCalSelectedDate = dateStr;
+      dailyCalShowAll = false;
+      updateAllDatesToggleBtn();
+      renderDailyLogCalendar(lastFilteredInspectionLogs);
+      renderDailyCategoryAccordions(lastFilteredInspectionLogs, document.getElementById('chk-log-total-count'), currentInspectionLogs.length);
+    }
+
+    function renderDailyLogCalendar(filteredLogs) {
+      lastFilteredInspectionLogs = filteredLogs || [];
+      const monthLabel = document.getElementById('daily-cal-month-label');
+      if (monthLabel) monthLabel.innerText = `${dailyCalYear}년 ${dailyCalMonth + 1}월`;
+
+      const grid = document.getElementById('daily-log-calendar-grid');
+      if (!grid) return;
+
+      const countByDate = {};
+      lastFilteredInspectionLogs.forEach(log => {
+        const dk = getLogDateKey(log);
+        if (dk) countByDate[dk] = (countByDate[dk] || 0) + 1;
+      });
+
+      const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const firstDay = new Date(dailyCalYear, dailyCalMonth, 1).getDay();
+      const daysInMonth = new Date(dailyCalYear, dailyCalMonth + 1, 0).getDate();
+      const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+      let html = '';
+      for (let i = 0; i < totalCells; i++) {
+        const dayNum = i - firstDay + 1;
+        const colIdx = i % 7;
+        const borderCls = 'border-b border-r border-[#EAE8E5]';
+        if (dayNum < 1 || dayNum > daysInMonth) {
+          html += `<div class="h-16 sm:h-20 p-1.5 bg-[#FAF9F8]/60 ${borderCls}"></div>`;
+          continue;
+        }
+        const mm = String(dailyCalMonth + 1).padStart(2, '0');
+        const dd = String(dayNum).padStart(2, '0');
+        const dateStr = `${dailyCalYear}-${mm}-${dd}`;
+        const cnt = countByDate[dateStr] || 0;
+        const isToday = dateStr === todayStr;
+        const isSelected = !dailyCalShowAll && dateStr === dailyCalSelectedDate;
+
+        const numColor = colIdx === 0 ? 'text-[#F06A6A]' : (colIdx === 6 ? 'text-[#0084B4]' : 'text-[#1E1F21]');
+        const cellBg = isSelected
+          ? 'bg-[#EBF7FD] ring-2 ring-inset ring-[#0084B4]'
+          : (isToday ? 'bg-[#F5FBFE]' : 'bg-white hover:bg-[#FAF9F8]');
+
+        html += `
+          <button type="button" onclick="selectDailyLogDate('${dateStr}')" class="h-16 sm:h-20 p-1.5 text-left flex flex-col justify-between transition ${borderCls} ${cellBg}">
+            <div class="flex items-center justify-between w-full">
+              <span class="text-xs font-bold ${isToday ? 'text-[#0084B4] underline' : numColor}">${dd}</span>
+              ${isToday ? '<span class="text-[9px] font-bold text-[#0084B4]">오늘</span>' : ''}
+            </div>
+            <div class="w-full flex justify-end">
+              ${cnt > 0
+                ? `<span class="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${isSelected ? 'bg-[#0084B4] text-white' : 'bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40'}">${cnt}</span>`
+                : ''
+              }
+            </div>
+          </button>
+        `;
+      }
+      grid.innerHTML = html;
+    }
+
+    function toggleDailyCategoryAccordion(catName) {
+      if (expandedDailyCategories.has(catName)) expandedDailyCategories.delete(catName);
+      else expandedDailyCategories.add(catName);
+      renderDailyCategoryAccordions(lastFilteredInspectionLogs, document.getElementById('chk-log-total-count'), currentInspectionLogs.length);
+    }
+
+    function renderDailyCategoryAccordions(filteredLogs, logCountEl, totalCount) {
+      const dateLabelEl = document.getElementById('daily-selected-date-label');
+      const dayLogs = dailyCalShowAll
+        ? (filteredLogs || [])
+        : (filteredLogs || []).filter(l => getLogDateKey(l) === dailyCalSelectedDate);
+
+      if (dateLabelEl) {
+        dateLabelEl.innerText = dailyCalShowAll ? '전체 기간 일일 상황일지' : dailyCalSelectedDate;
+      }
+      if (logCountEl) {
+        logCountEl.innerText = dailyCalShowAll
+          ? `총 ${dayLogs.length}건 (전체 ${totalCount}건)`
+          : `${dayLogs.length}건 등록됨`;
+      }
+
+      const container = document.getElementById('daily-category-accordions');
+      if (!container) return;
+
+      const categories = ['시설일지', '미화일지', '보안일지', '안전일지', '기타일지'];
+      const grouped = {};
+      categories.forEach(c => { grouped[c] = []; });
+      dayLogs.forEach(log => {
+        const cat = classifyDailyLogCategory(log);
+        grouped[cat].push(log);
+      });
+
+      const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+
+      container.innerHTML = categories.map(cat => {
+        const items = grouped[cat];
+        const isOpen = expandedDailyCategories.has(cat) && items.length > 0;
+        const rowsHtml = items.length === 0
+          ? `<div class="px-4 py-3 text-xs text-[#A0A1A2] bg-[#FAF9F8]">등록된 ${cat} 내역이 없습니다.</div>`
+          : items.map(log => {
+              let badgeCls = 'bg-[#34A853]/15 text-[#34A853]';
+              if (log.status === '주의') badgeCls = 'bg-[#E5983B]/15 text-[#E5983B]';
+              else if (log.status === '불량') badgeCls = 'bg-[#F06A6A]/15 text-[#F06A6A]';
+              const timeStr = log.completed_at ? log.completed_at.substring(0, 16) : '-';
+              return `
+                <div class="px-4 py-3 border-t border-[#EAE8E5] hover:bg-[#FAF9F8] flex flex-wrap items-center justify-between gap-2 transition">
+                  <div class="min-w-0 flex-1 space-y-0.5">
+                    <div class="flex items-center space-x-2">
+                      <span class="px-2 py-0.5 rounded text-[11px] font-bold ${badgeCls}">${esc(log.status || '양호')}</span>
+                      <span class="font-bold text-sm text-[#111827] truncate">${esc(log.template_title)}</span>
+                    </div>
+                    <div class="text-xs text-[#6D6E6F] flex flex-wrap items-center gap-x-2">
+                      <span class="font-semibold text-[#007EA8]">${esc(log.building || '본관')} ${esc(log.floor || '')} · ${esc(log.location_name || '-')}</span>
+                      <span>· 작성: <b class="text-[#1E1F21]">${esc(log.worker_name || '-')}</b></span>
+                      <span class="font-mono">${esc(timeStr)}</span>
+                    </div>
+                    ${log.notes ? `<div class="text-xs text-[#6D6E6F] truncate">${esc(log.notes)}</div>` : ''}
+                  </div>
+                  <div class="flex items-center space-x-1.5 shrink-0">
+                    <button type="button" onclick="openInspectionDetailModal('${log.id}')" class="px-2.5 py-1.5 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#111827] font-bold rounded text-xs transition">상세</button>
+                    ${log.is_confirmed
+                      ? `<button type="button" onclick="toggleInspectionConfirm('${log.id}')" class="px-2.5 py-1.5 bg-emerald-50 border border-emerald-300 text-[#0F9D58] font-bold rounded text-xs hover:bg-emerald-100 transition">확인됨</button>`
+                      : `<button type="button" onclick="toggleInspectionConfirm('${log.id}')" class="px-3 py-1.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded text-xs transition">확인</button>`
+                    }
+                  </div>
+                </div>
+              `;
+            }).join('');
+
+        return `
+          <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-2xs overflow-hidden">
+            <button type="button" onclick="toggleDailyCategoryAccordion('${cat}')" class="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#FAF9F8] transition">
+              <span class="text-sm font-bold text-[#1E1F21]">${cat} <span class="${items.length > 0 ? 'text-[#0084B4]' : 'text-[#8A8B8D]'}">(${items.length})</span></span>
+              <span class="text-xs text-[#6D6E6F] font-bold">${isOpen ? '▲' : '▼'}</span>
+            </button>
+            <div class="${isOpen ? '' : 'hidden'}">${rowsHtml}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ⭐️ 공지사항 게시판 관리 (업무보고 > 공지사항 게시판)
+    let currentNotices = [];
+    async function loadNotices() {
+      try {
+        const res = await fetch('/api/notices');
+        currentNotices = await res.json();
+        renderNoticesTable();
+      } catch (e) {
+        console.error('loadNotices error:', e);
+      }
+    }
+
+    function renderNoticesTable() {
+      const scopeFilter = document.getElementById('notice-filter-scope')?.value || 'ALL_VIEW';
+      const kw = (document.getElementById('notice-filter-keyword')?.value || '').trim().toLowerCase();
+      const filtered = (currentNotices || []).filter(n => {
+        if (scopeFilter === 'ALL' && n.target_scope !== 'ALL') return false;
+        if (scopeFilter === 'GROUP' && n.target_scope !== 'GROUP') return false;
+        if (kw) {
+          const hay = `${n.title || ''} ${n.content || ''} ${n.target_role_name || ''} ${n.author_name || ''}`.toLowerCase();
+          if (!hay.includes(kw)) return false;
+        }
+        return true;
+      });
+      const cntEl = document.getElementById('notice-total-count');
+      if (cntEl) cntEl.innerText = `총 ${filtered.length}건`;
+
+      const tbody = document.getElementById('notices-table-body');
       if (!tbody) return;
-      tbody.innerHTML = '';
-
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-[#A0A1A2] text-xs">일치하는 점검 내역이 없습니다.</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="7" class="py-10 text-center text-xs text-[#A0A1A2]">등록된 공지사항이 없습니다.</td></tr>';
+        return;
+      }
+      const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+      tbody.innerHTML = filtered.map((n, idx) => {
+        const scopeBadge = n.target_scope === 'GROUP'
+          ? `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/40">${esc(n.target_role_name || '직무그룹')}</span>`
+          : `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-[#34A853]/15 text-[#34A853]">전체</span>`;
+        const pinTag = n.is_pinned ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-[#F06A6A]/15 text-[#F06A6A]">중요</span>' : `<span class="text-[#8A8B8D] font-mono">${filtered.length - idx}</span>`;
+        return `
+          <tr class="hover:bg-[#FAF9F8] text-xs transition">
+            <td class="px-4 py-3 text-center">${pinTag}</td>
+            <td class="px-4 py-3">${scopeBadge}</td>
+            <td class="px-4 py-3">
+              <button type="button" onclick="openNoticeDetailModal('${n.id}')" class="font-bold text-sm text-[#111827] hover:text-[#0084B4] text-left truncate max-w-[360px] block">${esc(n.title)}</button>
+            </td>
+            <td class="px-4 py-3 font-semibold text-[#1E1F21]">${esc(n.author_name || '관리자')}</td>
+            <td class="px-4 py-3 text-center text-[#6D6E6F] font-semibold">${n.read_count || 0}명</td>
+            <td class="px-4 py-3 font-mono text-[#6D6E6F]">${(n.created_at || '').slice(0, 16).replace('T', ' ')}</td>
+            <td class="px-4 py-3 text-right pr-4 space-x-1 whitespace-nowrap">
+              <button type="button" onclick="openNoticeEditorModal('${n.id}')" class="px-2 py-1 border border-[#D5D3CF] rounded bg-white hover:bg-[#FAF9F8] font-semibold text-[#1E1F21]">수정</button>
+              <button type="button" onclick="deleteNotice('${n.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-semibold">삭제</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function toggleNoticeRoleSelect() {
+      const scope = document.querySelector('input[name="notice-scope"]:checked')?.value || 'ALL';
+      const wrap = document.getElementById('notice-role-select-wrap');
+      if (wrap) wrap.classList.toggle('hidden', scope !== 'GROUP');
+    }
+
+    async function openNoticeEditorModal(editId) {
+      await loadRoles();
+      const roleSel = document.getElementById('notice-role-select');
+      if (roleSel) {
+        roleSel.innerHTML = currentRoles.map(r => `<option value="${r.id}">${window.escapeHtml ? window.escapeHtml(r.name) : r.name}</option>`).join('');
+      }
+      const existing = editId ? currentNotices.find(n => n.id === editId) : null;
+      document.getElementById('notice-edit-id').value = existing ? existing.id : '';
+      document.getElementById('notice-editor-title').innerText = existing ? '공지사항 수정' : '공지사항 작성';
+      document.getElementById('notice-title-input').value = existing ? existing.title : '';
+      document.getElementById('notice-content-input').value = existing ? existing.content : '';
+      document.getElementById('notice-pinned-input').checked = !!(existing && existing.is_pinned);
+      const scopeVal = existing ? existing.target_scope : 'ALL';
+      document.querySelectorAll('input[name="notice-scope"]').forEach(r => { r.checked = (r.value === scopeVal); });
+      if (existing && existing.target_role_id && roleSel) roleSel.value = existing.target_role_id;
+      toggleNoticeRoleSelect();
+      document.getElementById('modal-notice-editor')?.classList.remove('hidden');
+    }
+
+    function closeNoticeEditorModal() {
+      document.getElementById('modal-notice-editor')?.classList.add('hidden');
+    }
+
+    async function submitNotice() {
+      const editId = document.getElementById('notice-edit-id')?.value || '';
+      const title = document.getElementById('notice-title-input')?.value.trim();
+      const content = document.getElementById('notice-content-input')?.value.trim();
+      const targetScope = document.querySelector('input[name="notice-scope"]:checked')?.value || 'ALL';
+      const targetRoleId = targetScope === 'GROUP' ? document.getElementById('notice-role-select')?.value : null;
+      const isPinned = !!document.getElementById('notice-pinned-input')?.checked;
+
+      if (!title || !content) {
+        alert('공지 제목과 내용을 모두 입력하세요.');
+        return;
+      }
+      if (targetScope === 'GROUP' && !targetRoleId) {
+        alert('대상 직무그룹을 선택하세요.');
         return;
       }
 
-      filtered.forEach(log => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-[#FAF9F8] text-xs transition border-b border-[#EAE8E5] last:border-none';
-        
-        let statusBadge = `<span class="px-2 py-0.5 rounded font-bold text-[11px] bg-[#34A853]/15 text-[#34A853]">양호</span>`;
-        if (log.status === '주의') {
-          statusBadge = `<span class="px-2 py-0.5 rounded font-bold text-[11px] bg-[#E5983B]/15 text-[#E5983B]">주의</span>`;
-        } else if (log.status === '불량') {
-          statusBadge = `<span class="px-2 py-0.5 rounded font-bold text-[11px] bg-[#F06A6A]/15 text-[#F06A6A]">불량</span>`;
-        }
-
-        const dateStr = log.completed_at ? log.completed_at.substring(0, 16) : '-';
-
-        tr.innerHTML = `
-          <td class="px-3.5 py-3 text-[#6D6E6F] whitespace-nowrap font-mono">${dateStr}</td>
-          <td class="px-3.5 py-3 text-[15px] font-bold text-[#111827] truncate">${log.template_title}</td>
-          <td class="px-3.5 py-3 whitespace-nowrap">
-            <span class="px-2 py-0.5 rounded text-xs font-bold bg-[#EBF7FD] text-[#007EA8] border border-[#13B5EA]/30">${log.role_name || '일반'}</span>
-          </td>
-          <td class="px-3.5 py-3 text-[#007EA8] truncate font-bold">
-            ${log.building} ${log.floor} · ${log.location_name}
-          </td>
-          <td class="px-3.5 py-3 font-bold text-[#111827] whitespace-nowrap">${log.worker_name}</td>
-          <td class="px-3.5 py-3 text-center whitespace-nowrap">${statusBadge}</td>
-          <td class="px-3.5 py-3 text-[#6D6E6F] truncate">${log.notes || '-'}</td>
-          <td class="px-3.5 py-3 text-right whitespace-nowrap space-x-1.5 pr-4">
-            <button onclick="openInspectionDetailModal('${log.id}')" class="px-2.5 py-1.5 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#111827] font-bold rounded text-xs transition">
-              상세
-            </button>
-            ${log.is_confirmed 
-              ? `<button onclick="toggleInspectionConfirm('${log.id}')" class="px-2.5 py-1.5 bg-emerald-50 border border-emerald-300 text-[#0F9D58] font-bold rounded text-xs hover:bg-emerald-100 transition">
-                   확인됨
-                 </button>`
-              : `<button onclick="toggleInspectionConfirm('${log.id}')" class="px-3 py-1.5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded text-xs transition">
-                   확인
-                 </button>`
-            }
-          </td>
-        `;
-        tbody.appendChild(tr);
+      const res = await fetch(editId ? `/api/notices/${editId}` : '/api/notices', {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content, target_scope: targetScope, target_role_id: targetRoleId, is_pinned: isPinned })
       });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || '공지사항 저장에 실패했습니다.');
+        return;
+      }
+      closeNoticeEditorModal();
+      showToastNotification(editId ? '✅ 공지사항이 수정되었습니다.' : '📢 공지사항이 등록되었습니다.');
+      await loadNotices();
+    }
+
+    function openNoticeDetailModal(id) {
+      const n = currentNotices.find(item => item.id === id);
+      if (!n) return;
+      document.getElementById('notice-detail-badge').innerText = n.target_scope === 'GROUP' ? `직무그룹: ${n.target_role_name}` : '전체 공지';
+      document.getElementById('notice-detail-title').innerText = n.title;
+      document.getElementById('notice-detail-meta').innerText = `${n.author_name || '관리자'} · ${(n.created_at || '').slice(0, 16).replace('T', ' ')}`;
+      document.getElementById('notice-detail-content').innerText = n.content;
+      document.getElementById('modal-notice-detail')?.classList.remove('hidden');
+    }
+
+    function closeNoticeDetailModal() {
+      document.getElementById('modal-notice-detail')?.classList.add('hidden');
+    }
+
+    async function deleteNotice(id) {
+      if (!confirm('이 공지사항을 삭제하시겠습니까?')) return;
+      const res = await fetch(`/api/notices/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToastNotification('🗑️ 공지사항이 삭제되었습니다.');
+        await loadNotices();
+      }
     }
 
     async function toggleInspectionConfirm(logId) {
