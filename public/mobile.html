@@ -249,8 +249,11 @@
             <textarea id="staff-report-desc" rows="3" placeholder="현장 상황 및 긴급도를 입력하세요..." class="w-full border border-[#D5D3CF] rounded-xl p-3 text-sm outline-none"></textarea>
           </div>
           <div>
-            <label class="block text-xs text-[#6D6E6F] font-semibold mb-1.5">현장 사진 첨부 (선택)</label>
-            <input type="file" id="staff-report-photo-input" accept="image/*" capture="environment" onchange="handleStaffReportPhoto(this)" class="w-full text-xs text-[#6D6E6F]">
+            <label class="block text-xs text-[#6D6E6F] font-semibold mb-1.5">현장 사진 첨부 (선택 · 클릭 또는 사진 드래그)</label>
+            <div id="dropzone-staff-report-photo" onclick="document.getElementById('staff-report-photo-input').click()" class="border border-dashed border-[#D5D3CF] rounded-xl p-3 text-center bg-[#FAF9F8] hover:border-[#13B5EA] cursor-pointer transition">
+              <div id="staff-report-photo-status" class="text-xs font-medium text-[#6D6E6F]">사진 선택 또는 PC에서 이미지 드래그 첨부</div>
+              <input type="file" id="staff-report-photo-input" accept="image/*" capture="environment" onchange="handleStaffReportPhoto(this)" class="hidden">
+            </div>
             <img id="staff-report-photo-preview" class="hidden mt-2 w-full max-h-36 object-cover rounded-xl border border-[#EDECEB]" alt="미리보기">
           </div>
           <button onclick="submitStaffReport(this)" class="w-full h-11 bg-[#C53030] hover:bg-[#A61B1B] text-white font-bold rounded-xl text-sm shadow-sm transition">
@@ -268,20 +271,22 @@
         <div id="mobile-notice-list" class="space-y-2.5"></div>
       </div>
 
-      <!-- 하단 바 (내 작업 / 상황일지 / 공지 / 신고접수 / 내 정보) -->
+      <!-- 하단 바 (작업지시 / 일일보고 / 공지사항 / 신고접수 / 내 정보) -->
       <div class="bg-white border-t border-[#EDECEB] px-1.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex justify-around text-xs select-none shrink-0">
         <button onclick="setWorkerNavTab('tasks')" id="worker-nav-tasks" class="flex flex-col items-center py-1 px-2 text-[#1E1F21] font-bold">
           <span class="text-lg leading-none">📋</span>
-          <span class="text-xs mt-1 whitespace-nowrap">내 작업</span>
+          <span class="text-xs mt-1 whitespace-nowrap">작업지시</span>
         </button>
         <button onclick="setWorkerNavTab('patrol')" id="worker-nav-patrol" class="flex flex-col items-center py-1 px-2 text-[#6D6E6F] font-semibold hover:text-[#1E1F21]">
           <span class="text-lg leading-none">📝</span>
-          <span class="text-xs mt-1 whitespace-nowrap">상황일지</span>
+          <span class="text-xs mt-1 whitespace-nowrap">일일보고</span>
         </button>
-        <button onclick="setWorkerNavTab('notices')" id="worker-nav-notices" class="relative flex flex-col items-center py-1 px-2 text-[#6D6E6F] font-semibold hover:text-[#1E1F21]">
+        <button onclick="setWorkerNavTab('notices')" id="worker-nav-notices" class="flex flex-col items-center py-1 px-2 text-[#6D6E6F] font-semibold hover:text-[#1E1F21]">
           <span class="text-lg leading-none">📢</span>
-          <span id="worker-notice-unread-badge" class="hidden absolute top-0 right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#F06A6A] text-white text-[10px] font-black flex items-center justify-center">0</span>
-          <span class="text-xs mt-1 whitespace-nowrap">공지사항</span>
+          <span class="mt-1 inline-flex items-center whitespace-nowrap text-xs">
+            <span>공지사항</span>
+            <span id="worker-notice-unread-badge" class="hidden ml-1 min-w-[16px] h-4 px-1 rounded-full bg-[#F06A6A] text-white text-[10px] font-black inline-flex items-center justify-center leading-none">0</span>
+          </span>
         </button>
         <button onclick="setWorkerNavTab('report')" id="worker-nav-report" class="flex flex-col items-center py-1 px-2 text-[#6D6E6F] font-semibold hover:text-[#1E1F21]">
           <span class="text-lg leading-none">🚨</span>
@@ -352,9 +357,9 @@
         <!-- [분기 A: 현장문제 해결 가능 폼] -->
         <div id="form-resolved-section" class="space-y-4">
           <div>
-            <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">조치 완료 사진 등록 (선택)</span>
-            <div onclick="simulatePhotoCapture('done')" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] cursor-pointer text-sm">
-              <div class="font-medium text-[#1E1F21]" id="photo-status-resolved">완료 사진 첨부하기</div>
+            <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">조치 완료 사진 등록 (선택 · 클릭 또는 드래그)</span>
+            <div id="dropzone-photo-resolved" onclick="simulatePhotoCapture('done')" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] hover:border-[#13B5EA] cursor-pointer text-sm transition">
+              <div class="font-medium text-[#1E1F21]" id="photo-status-resolved">완료 사진 첨부하기 (클릭 또는 드래그)</div>
             </div>
           </div>
           <div>
@@ -378,9 +383,9 @@
             </select>
           </div>
           <div>
-            <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">현장 상태 증빙 사진 (선택)</span>
-            <div onclick="simulatePhotoCapture('unresolved')" class="border border-dashed border-[#EDECEB] rounded-xl p-3.5 text-center bg-[#FAF9F8] cursor-pointer text-sm">
-              <span id="photo-status-unresolved" class="text-[#6D6E6F] font-medium">파손/부품 규격 사진 첨부</span>
+            <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">현장 상태 증빙 사진 (선택 · 클릭 또는 드래그)</span>
+            <div id="dropzone-photo-unresolved" onclick="simulatePhotoCapture('unresolved')" class="border border-dashed border-[#EDECEB] rounded-xl p-3.5 text-center bg-[#FAF9F8] hover:border-[#13B5EA] cursor-pointer text-sm transition">
+              <span id="photo-status-unresolved" class="text-[#6D6E6F] font-medium">파손/부품 규격 사진 첨부 (클릭 또는 드래그)</span>
             </div>
           </div>
           <div>
@@ -415,8 +420,8 @@
             </div>
             <div>
               <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">현장 증빙</span>
-              <div onclick="simulatePhotoCapture('outsource')" class="border border-dashed border-[#EDECEB] rounded-xl h-11 flex items-center justify-center bg-[#FAF9F8] cursor-pointer">
-                <span id="photo-status-outsource" class="text-xs text-[#6D6E6F] font-semibold">사진 첨부</span>
+              <div id="dropzone-photo-outsource" onclick="simulatePhotoCapture('outsource')" class="border border-dashed border-[#EDECEB] rounded-xl h-11 flex items-center justify-center bg-[#FAF9F8] hover:border-[#13B5EA] cursor-pointer transition">
+                <span id="photo-status-outsource" class="text-xs text-[#6D6E6F] font-semibold">사진 첨부 (드래그)</span>
               </div>
             </div>
           </div>
@@ -592,6 +597,11 @@
           loadWorkerTasks();
         });
       });
+      ['NOTICE_CREATED', 'NOTICE_UPDATED', 'NOTICE_DELETED'].forEach(evt => {
+        mobileSse.addEventListener(evt, () => {
+          loadMobileNotices();
+        });
+      });
     }
 
     async function logoutMobile() {
@@ -691,6 +701,7 @@
       await loadLocations();
       await loadWorkerTasks();
       await loadMobileNotices();
+      bindMobilePhotoDropZones();
     }
 
     async function loadLocations() {
@@ -714,6 +725,10 @@
         if (t.status === 'COMPLETED') return false;
         const isIndividual = t.target_type === 'INDIVIDUAL' && t.assignee_id === currentWorkerId;
         const isGroup = t.target_type === 'GROUP' && t.target_group_role_id === currentWorkerGroupId;
+        // 팀(그룹) 지시 중 다른 팀원이 먼저 접수한 건은 나머지 팀원 목록에서 즉시 제거
+        if (isGroup && t.started_at && t.assignee_id && t.assignee_id !== currentWorkerId) {
+          return false;
+        }
         return isIndividual || isGroup;
       });
 
@@ -756,34 +771,27 @@
         }
 
         let actionButtonHtml = '';
-        const isConfirmed = confirmedTaskIds.has(t.id) || isClaimedByMe || isWaitingApproval;
+        const escapedTitle = (t.instruction_title || t.title || '').replace(/'/g, "\\'");
         if (isWaitingApproval) {
           actionButtonHtml = '<span class="text-xs font-bold text-[#8250DF] bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200">관리자 승인 대기중</span>';
-        } else if (isClaimedByOther) {
-          actionButtonHtml = `<span class="text-xs text-[#6D6E6F] font-semibold bg-slate-100 px-2.5 py-1 rounded-lg">${t.claimed_by_name || '동료'} 작업중</span>`;
-        } else if (!isConfirmed) {
-          actionButtonHtml = `
-            <button onclick="confirmWorkerTask('${t.id}')" class="px-4 py-2 bg-[#4573D2] hover:bg-[#3460B8] text-white text-[13px] font-bold rounded-xl shadow-sm">
-              내용확인
-            </button>
-          `;
-        } else if (isNotClaimedYet) {
-          actionButtonHtml = `
-            <button onclick="claimWorkerTask('${t.id}')" class="px-4 py-2 bg-[#34A853] hover:bg-[#2B8E44] text-white text-[13px] font-bold rounded-xl shadow-sm flex items-center space-x-1">
-              <span>접수 / 조치 착수</span>
-            </button>
-          `;
-        } else {
-          // 내가 접수한 건 -> 조치 보고 & 외주/아웃소싱 처리 버튼 제공!
+        } else if (isGroupTask && isNotClaimedYet) {
+          // 팀(그룹)으로 온 경우만 [접수] + [조치 보고] 2개 버튼 유지
           actionButtonHtml = `
             <div class="flex items-center space-x-2">
-              <button onclick="openWorkerDetail('${t.id}', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'")}', true, 'OUTSOURCE')" class="px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-xl shadow-2xs">
-                외주/아웃소싱
+              <button onclick="claimWorkerTask('${t.id}')" class="px-3.5 py-2 bg-[#34A853] hover:bg-[#2B8E44] text-white text-[13px] font-bold rounded-xl shadow-sm whitespace-nowrap">
+                접수
               </button>
-              <button onclick="openWorkerDetail('${t.id}', '${(t.instruction_title || t.title || '').replace(/'/g, "\\'")}', true, 'RESOLVED')" class="px-3.5 py-2 bg-[#1E1F21] hover:bg-black text-white text-[13px] font-bold rounded-xl shadow-sm">
+              <button onclick="openWorkerDetail('${t.id}', '${escapedTitle}', true, 'RESOLVED')" class="px-3.5 py-2 bg-[#1E1F21] hover:bg-black text-white text-[13px] font-bold rounded-xl shadow-sm whitespace-nowrap">
                 조치 보고
               </button>
             </div>
+          `;
+        } else {
+          // 개인으로 내려왔거나 본인이 이미 접수한 경우 [조치 보고] 버튼만 표시 (외주/아웃소싱 버튼 삭제)
+          actionButtonHtml = `
+            <button onclick="openWorkerDetail('${t.id}', '${escapedTitle}', true, 'RESOLVED')" class="px-3.5 py-2 bg-[#1E1F21] hover:bg-black text-white text-[13px] font-bold rounded-xl shadow-sm whitespace-nowrap">
+              조치 보고
+            </button>
           `;
         }
 
@@ -887,7 +895,7 @@
       document.getElementById('report-ticket-title').innerText = title;
       setResolutionMode(defaultMode);
       hasCompletePhoto = false;
-      document.getElementById('photo-status-resolved').innerText = '완료 사진 첨부하기';
+      document.getElementById('photo-status-resolved').innerText = '완료 사진 첨부하기 (클릭 또는 드래그)';
       document.getElementById('modal-worker-report').classList.remove('hidden');
     }
 
@@ -933,6 +941,26 @@
     }
 
     const capturedMobilePhotos = {};
+    async function handleMobilePhotoFile(type, file) {
+      if (!file || !String(file.type || '').startsWith('image/')) return;
+      let infoText = `${file.name} (${Math.max(1, Math.round(file.size / 1024))}KB)`;
+      if (window.compressImageFile) {
+        try {
+          const res = await window.compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.78 });
+          capturedMobilePhotos[type] = res.dataUrl;
+          infoText = `${res.originalKB}KB -> ${res.compressedKB}KB 압축`;
+        } catch (e) {}
+      }
+      if (type === 'done') {
+        hasCompletePhoto = true;
+        document.getElementById('photo-status-resolved').innerHTML = `<span class="text-[#34A853] font-bold">완료 사진 첨부됨 (${infoText})</span>`;
+      } else if (type === 'outsource') {
+        document.getElementById('photo-status-outsource').innerHTML = `<span class="text-indigo-600 font-bold">사진 첨부됨 (${infoText})</span>`;
+      } else {
+        document.getElementById('photo-status-unresolved').innerHTML = `<span class="text-[#F06A6A] font-bold">증빙 사진 첨부됨 (${infoText})</span>`;
+      }
+    }
+
     function simulatePhotoCapture(type) {
       const input = document.createElement('input');
       input.type = 'file';
@@ -941,24 +969,39 @@
       input.onchange = async function() {
         const file = input.files && input.files[0];
         if (!file) return;
-        let infoText = `${file.name} (${Math.max(1, Math.round(file.size / 1024))}KB)`;
-        if (window.compressImageFile) {
-          try {
-            const res = await window.compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.78 });
-            capturedMobilePhotos[type] = res.dataUrl;
-            infoText = `${res.originalKB}KB -> ${res.compressedKB}KB 압축`;
-          } catch (e) {}
-        }
-        if (type === 'done') {
-          hasCompletePhoto = true;
-          document.getElementById('photo-status-resolved').innerHTML = `<span class="text-[#34A853] font-bold">완료 사진 첨부됨 (${infoText})</span>`;
-        } else if (type === 'outsource') {
-          document.getElementById('photo-status-outsource').innerHTML = `<span class="text-indigo-600 font-bold">사진 첨부됨 (${infoText})</span>`;
-        } else {
-          document.getElementById('photo-status-unresolved').innerHTML = `<span class="text-[#F06A6A] font-bold">증빙 사진 첨부됨 (${infoText})</span>`;
-        }
+        await handleMobilePhotoFile(type, file);
       };
       input.click();
+    }
+
+    function bindPhotoDropZone(el, onFile) {
+      if (!el || el.dataset.dropBound === '1') return;
+      el.dataset.dropBound = '1';
+      ['dragenter', 'dragover'].forEach(ev => {
+        el.addEventListener(ev, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          el.classList.add('border-[#13B5EA]', 'bg-[#EBF7FD]');
+        });
+      });
+      ['dragleave', 'drop'].forEach(ev => {
+        el.addEventListener(ev, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          el.classList.remove('border-[#13B5EA]', 'bg-[#EBF7FD]');
+        });
+      });
+      el.addEventListener('drop', (e) => {
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files[0]) onFile(files[0]);
+      });
+    }
+
+    function bindMobilePhotoDropZones() {
+      bindPhotoDropZone(document.getElementById('dropzone-photo-resolved'), (f) => handleMobilePhotoFile('done', f));
+      bindPhotoDropZone(document.getElementById('dropzone-photo-unresolved'), (f) => handleMobilePhotoFile('unresolved', f));
+      bindPhotoDropZone(document.getElementById('dropzone-photo-outsource'), (f) => handleMobilePhotoFile('outsource', f));
+      bindPhotoDropZone(document.getElementById('dropzone-staff-report-photo'), (f) => handleStaffReportPhotoFile(f));
     }
 
     // 최종 보고 제출 (해결 가능 vs 해결 불가능 vs 외주 의뢰 API 분기 호출)
@@ -1171,32 +1214,37 @@
       }
     }
 
+    function updateNoticeUnreadBadge() {
+      const unreadCount = (mobileNotices || []).filter(n => !n.is_read).length;
+      const badge = document.getElementById('worker-notice-unread-badge');
+      if (badge) {
+        if (unreadCount > 0) {
+          badge.innerText = unreadCount > 9 ? '9+' : String(unreadCount);
+          badge.classList.remove('hidden');
+        } else {
+          badge.innerText = '0';
+          badge.classList.add('hidden');
+        }
+      }
+      const banner = document.getElementById('mobile-latest-notice-banner');
+      const bannerTitle = document.getElementById('mobile-latest-notice-title');
+      if (banner && bannerTitle) {
+        const latest = (mobileNotices || []).find(n => !n.is_read) || (mobileNotices || [])[0];
+        if (latest) {
+          bannerTitle.innerText = latest.title;
+          banner.classList.remove('hidden');
+        } else {
+          banner.classList.add('hidden');
+        }
+      }
+    }
+
     async function loadMobileNotices() {
       try {
         const res = await fetch('/api/notices?_=' + Date.now(), { cache: 'no-store' });
         if (!res.ok) return;
         mobileNotices = await res.json();
-        const unreadCount = mobileNotices.filter(n => !n.is_read).length;
-        const badge = document.getElementById('worker-notice-unread-badge');
-        if (badge) {
-          if (unreadCount > 0) {
-            badge.innerText = unreadCount > 9 ? '9+' : String(unreadCount);
-            badge.classList.remove('hidden');
-          } else {
-            badge.classList.add('hidden');
-          }
-        }
-        const banner = document.getElementById('mobile-latest-notice-banner');
-        const bannerTitle = document.getElementById('mobile-latest-notice-title');
-        if (banner && bannerTitle) {
-          const latest = mobileNotices.find(n => !n.is_read) || mobileNotices[0];
-          if (latest) {
-            bannerTitle.innerText = latest.title;
-            banner.classList.remove('hidden');
-          } else {
-            banner.classList.add('hidden');
-          }
-        }
+        updateNoticeUnreadBadge();
         renderMobileNotices();
       } catch (e) {
         console.error('loadMobileNotices error:', e);
@@ -1245,6 +1293,7 @@
 
       if (!n.is_read) {
         n.is_read = 1;
+        updateNoticeUnreadBadge();
         renderMobileNotices();
         try {
           await fetch(`/api/notices/${id}/read`, { method: 'POST' });
@@ -1258,9 +1307,8 @@
     }
 
     let staffReportPhotoData = '';
-    function handleStaffReportPhoto(input) {
-      const file = input && input.files && input.files[0];
-      if (!file) return;
+    function handleStaffReportPhotoFile(file) {
+      if (!file || !String(file.type || '').startsWith('image/')) return;
       const reader = new FileReader();
       reader.onload = (e) => {
         staffReportPhotoData = e.target.result || '';
@@ -1269,8 +1317,14 @@
           img.src = staffReportPhotoData;
           img.classList.remove('hidden');
         }
+        const st = document.getElementById('staff-report-photo-status');
+        if (st) st.innerHTML = `<span class="text-[#34A853] font-bold">사진 첨부됨 (${file.name})</span>`;
       };
       reader.readAsDataURL(file);
+    }
+    function handleStaffReportPhoto(input) {
+      const file = input && input.files && input.files[0];
+      if (file) handleStaffReportPhotoFile(file);
     }
 
     async function submitStaffReport(btn) {

@@ -2329,6 +2329,7 @@ const server = http.createServer(async (req, res) => {
       `).run(id, companyId, title, content, targetScope, targetRoleId, targetRoleName, isPinned, authorId, authorName, attachmentName, attachmentUrl, nowIso);
 
       const created = db.prepare('SELECT * FROM notices WHERE id = ?').get(id);
+      broadcastSSE('NOTICE_CREATED', { id, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, notice: created });
     }
 
