@@ -3308,8 +3308,8 @@ const server = http.createServer(async (req, res) => {
             SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
             FROM users u
             LEFT JOIN companies c ON u.company_id = c.id
-            WHERE u.company_id = ? AND LOWER(TRIM(u.name)) = ?
-          `).get(tenantComp.id, cleanNameLookup);
+            WHERE u.company_id = ? AND (LOWER(TRIM(u.name)) = ? OR LOWER(TRIM(u.name)) LIKE ? || ' %')
+          `).get(tenantComp.id, cleanNameLookup, cleanNameLookup);
         }
       } else if (!tenant || tenant === 'null' || tenant === 'undefined') {
         if (looksLikeEmail) {
@@ -3324,8 +3324,8 @@ const server = http.createServer(async (req, res) => {
             SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
             FROM users u
             LEFT JOIN companies c ON u.company_id = c.id
-            WHERE LOWER(TRIM(u.name)) = ?
-          `).all(cleanNameLookup);
+            WHERE LOWER(TRIM(u.name)) = ? OR LOWER(TRIM(u.name)) LIKE ? || ' %'
+          `).all(cleanNameLookup, cleanNameLookup);
           if (matches.length === 1) {
             user = matches[0];
           } else if (matches.length > 1) {

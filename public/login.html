@@ -180,19 +180,19 @@
     #force-pw-modal button { white-space: nowrap; }
 
     @media (max-width: 640px) {
-      body > header { padding-left: 16px; padding-right: 16px; }
-      body > header .leading-tight {
+      body:not(.mobile-worker-login) > header { padding-left: 16px; padding-right: 16px; }
+      body:not(.mobile-worker-login) > header .leading-tight {
         min-width: 0;
         flex: 1 1 auto;
         max-width: 46%;
       }
-      body > header .leading-tight > div {
+      body:not(.mobile-worker-login) > header .leading-tight > div {
         flex-wrap: nowrap;
         min-width: 0;
         overflow: hidden;
       }
-      body > header #login-header-title,
-      body > header #login-header-subtitle {
+      body:not(.mobile-worker-login) > header #login-header-title,
+      body:not(.mobile-worker-login) > header #login-header-subtitle {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -200,29 +200,29 @@
         max-width: 100%;
       }
       body > header #login-signup-link { display: none; }
-      body > header > div > div:last-child { flex: 0 0 auto; gap: 8px; }
+      body:not(.mobile-worker-login) > header > div > div:last-child { flex: 0 0 auto; gap: 8px; }
     }
   </style>
 </head>
 <body class="bg-[#F8F9FA] text-[#1E1F21] min-h-screen flex flex-col justify-between antialiased">
 
-  <!-- 1. 헤더 (A안 브랜드 남색 헤더 유지) -->
+  <!-- 1. 헤더 (A안 브랜드 남색 헤더 유지 / 모바일 실무자 접속 시 로고 좌측 + 회사명 중앙 정렬) -->
   <header class="w-full bg-[#002B41] border-b border-[#001F30] py-3.5 px-4 sm:px-10">
-    <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
-      <div class="flex items-center space-x-3 cursor-pointer min-w-0" onclick="location.href='/'">
-        <span style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
+    <div id="login-header-inner" class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+      <div id="login-header-brand" class="flex items-center space-x-3 cursor-pointer min-w-0" onclick="location.href='/'">
+        <span id="login-header-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
           Fielder
         </span>
-        <div class="leading-tight min-w-0">
+        <div id="login-header-title-wrap" class="leading-tight min-w-0">
           <div class="flex items-center space-x-1 font-bold text-sm sm:text-base text-white">
             <span id="login-header-title">Fielder 통합시설운영본부</span>
-            <span class="text-xs text-[#13B5EA] shrink-0">▾</span>
+            <span id="login-header-caret" class="text-xs text-[#13B5EA] shrink-0">▾</span>
           </div>
           <span id="login-header-subtitle" class="text-xs text-[#B8D9E8] font-medium">종합 관제 센터</span>
         </div>
       </div>
 
-      <div class="flex items-center space-x-3 shrink-0">
+      <div id="login-header-right-actions" class="flex items-center space-x-3 shrink-0">
         <button onclick="openProcessModal()" class="btn-navy-pill px-4 py-1.5 text-xs">
           전체 진행 프로세스
         </button>
@@ -241,7 +241,7 @@
         
         <div class="text-left space-y-1">
           <h1 class="text-2xl font-semibold text-[#002B41] tracking-tight">로그인</h1>
-          <p class="text-[13px] text-[#4B5563]">관리자 또는 현장 점검원 계정으로 로그인하세요.</p>
+          <p id="login-card-desc" class="text-[13px] text-[#4B5563]">관리자 또는 현장 점검원 계정으로 로그인하세요.</p>
         </div>
 
         <div id="login-tenant-badge" class="hidden px-3 py-2 rounded-xl bg-[#F0F7FA] border border-[#C5E4F0] flex items-center justify-between text-xs">
@@ -296,7 +296,7 @@
           </button>
         </form>
 
-        <div class="text-center text-[13px] text-[#4B5563]">
+        <div id="login-card-signup-row" class="text-center text-[13px] text-[#4B5563]">
           계정이 없으신가요? 
           <a href="/signup" class="font-bold text-[#005B82] underline hover:text-[#002B41] ml-1">
             신규 회원가입 (100건 무료)
@@ -332,9 +332,9 @@
 
   <!-- 3. 푸터 (A안 브랜드 남색 푸터 유지) -->
   <footer class="w-full bg-[#002B41] border-t border-[#001F30] py-4 px-6 text-center text-xs text-[#B8D9E8]">
-    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+    <div id="login-footer-inner" class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
       <div>© Fielder 시설관리운영시스템</div>
-      <div class="flex space-x-3">
+      <div id="login-footer-links" class="flex space-x-3">
         <a href="/signup" class="hover:text-white">회원가입</a>
         <span>·</span>
         <a href="/super-admin" class="hover:text-white text-[#13B5EA] font-semibold">슈퍼 관리자 센터</a>
@@ -449,10 +449,35 @@
       const isMobileClient = sp.get('client') === 'mobile' || (sp.get('redirect') || '').startsWith('/mobile');
       const wantInstall = sp.get('install') === '1' || isMobileClient;
       if (isMobileClient) {
-        const subEl = document.getElementById('login-header-subtitle');
-        if (subEl) subEl.textContent = '모바일 현장 콘솔';
-        const signupEl = document.getElementById('login-signup-link');
-        if (signupEl) signupEl.classList.add('hidden');
+        document.body.classList.add('mobile-worker-login');
+        const hdrInner = document.getElementById('login-header-inner');
+        if (hdrInner) hdrInner.className = 'max-w-md mx-auto relative flex items-center justify-center min-h-[36px]';
+        const hdrBrand = document.getElementById('login-header-brand');
+        if (hdrBrand) {
+          hdrBrand.className = 'w-full flex items-center justify-center';
+          hdrBrand.removeAttribute('onclick');
+        }
+        const hdrLogo = document.getElementById('login-header-logo');
+        if (hdrLogo) {
+          hdrLogo.className = 'absolute left-0 min-w-[36px] h-9 px-3 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap';
+        }
+        const hdrTitleWrap = document.getElementById('login-header-title-wrap');
+        if (hdrTitleWrap) {
+          hdrTitleWrap.className = 'w-full text-center pl-16 pr-2';
+        }
+        const hdrTitle = document.getElementById('login-header-title');
+        if (hdrTitle) {
+          hdrTitle.className = 'font-extrabold text-[17px] sm:text-xl leading-tight tracking-tight text-white block';
+        }
+        document.getElementById('login-header-caret')?.classList.add('hidden');
+        document.getElementById('login-header-subtitle')?.classList.add('hidden');
+        document.getElementById('login-header-right-actions')?.classList.add('hidden');
+        document.getElementById('login-card-signup-row')?.classList.add('hidden');
+        document.getElementById('login-footer-links')?.classList.add('hidden');
+        const footerInner = document.getElementById('login-footer-inner');
+        if (footerInner) footerInner.className = 'max-w-6xl mx-auto flex items-center justify-center text-xs';
+        const descEl = document.getElementById('login-card-desc');
+        if (descEl) descEl.textContent = '이름과 휴대폰 뒷번호 4자리로 로그인하세요.';
         const idLbl = document.getElementById('login-id-label');
         if (idLbl) idLbl.textContent = '이름 (아이디)';
         const idInp = document.getElementById('login-email');
@@ -472,7 +497,9 @@
             const c = await r.json();
             if (c && c.name) {
               document.getElementById('login-tenant-name').textContent = c.name;
-              document.getElementById('login-tenant-badge').classList.remove('hidden');
+              if (!isMobileClient) {
+                document.getElementById('login-tenant-badge').classList.remove('hidden');
+              }
               const hdrTitle = document.getElementById('login-header-title');
               if (hdrTitle) hdrTitle.textContent = c.name;
             }
