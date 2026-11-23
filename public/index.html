@@ -1252,7 +1252,7 @@
           사용자 관리
         </button>
         <button onclick="setSettingSubTab('roles')" id="set-tab-roles" class="px-4 py-2 bg-white border border-[#E2E8F0] text-[#64748B] hover:text-[#002B41] hover:border-slate-300 rounded-xl font-medium transition">
-          직무 그룹 관리
+          직무/직위 관리
         </button>
         <button onclick="setSettingSubTab('company')" id="set-tab-company" class="px-4 py-2 bg-white border border-[#E2E8F0] text-[#64748B] hover:text-[#002B41] hover:border-slate-300 rounded-xl font-medium transition">
           기본 설정 (회사 정보 & 층수 관리)
@@ -1584,26 +1584,32 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1">
             <div>
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">소속 직무 그룹 (현장 실무자 필수)</label>
               <select id="new-user-group" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white outline-none font-semibold text-[#1E1F21] focus:border-[#0084B4]"></select>
             </div>
+            <div>
+              <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">직위 (팀장/반장/간사 등)</label>
+              <select id="new-user-position" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white outline-none font-semibold text-[#1E1F21] focus:border-[#0084B4]">
+                <option value="">직위 선택 안 함</option>
+              </select>
+            </div>
             <div class="flex items-end justify-end space-x-2">
-              <button id="btn-user-cancel" type="button" onclick="cancelUserEdit()" class="hidden h-10 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition">
+              <button id="btn-user-cancel" type="button" onclick="cancelUserEdit()" class="hidden h-10 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition whitespace-nowrap">
                 수정 취소
               </button>
-              <button id="btn-user-submit" type="button" onclick="submitNewUser()" class="h-10 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg hover:bg-[#001D2C] text-xs shadow-xs transition">
+              <button id="btn-user-submit" type="button" onclick="submitNewUser()" class="h-10 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg text-xs shadow-xs transition whitespace-nowrap">
                 사용자 등록
               </button>
-              <button id="btn-user-update" type="button" onclick="submitUpdateUser()" class="hidden h-10 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition">
+              <button id="btn-user-update" type="button" onclick="submitUpdateUser()" class="hidden h-10 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition whitespace-nowrap">
                 사용자 정보 수정 완료
               </button>
             </div>
           </div>
         </div>
 
-        <!-- ⭐️ 3. 검색 툴바 & 등록된 사용자 리스트 (체크박스 제거, 이메일 ID 열 추가) -->
+        <!-- ⭐️ 3. 검색 툴바 & 등록된 사용자 리스트 (이름, 직위, 그룹, 권한, 연락처, 관리 순서) -->
         <div class="bg-white rounded-xl border border-[#D5D3CF] shadow-xs overflow-hidden">
           <div class="px-4 py-3 bg-[#FAF9F8] border-b border-[#E2E0DD] flex flex-wrap justify-between items-center gap-3">
             <div class="flex items-center space-x-2">
@@ -1612,7 +1618,7 @@
             </div>
             <!-- 실시간 검색 및 권한 필터 -->
             <div class="flex items-center space-x-2">
-              <input type="text" id="user-search-keyword" oninput="renderFilteredUsers()" placeholder="이름, 이메일, 연락처, 직무 검색..." class="h-9 text-xs px-3 border border-[#D5D3CF] rounded-lg w-56 outline-none bg-white">
+              <input type="text" id="user-search-keyword" oninput="renderFilteredUsers()" placeholder="이름, 직위, 그룹, 연락처 검색..." class="h-9 text-xs px-3 border border-[#D5D3CF] rounded-lg w-56 outline-none bg-white">
               <select id="user-filter-role" onchange="renderFilteredUsers()" class="h-9 text-xs px-2.5 border border-[#D5D3CF] rounded-lg bg-white outline-none font-semibold text-[#1E1F21]">
                 <option value="ALL">전체 권한</option>
                 <option value="ADMIN">관리자만</option>
@@ -1621,21 +1627,21 @@
             </div>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full table-fixed divide-y divide-[#EAE8E5] text-left min-w-[780px]">
+            <table class="w-full min-w-[780px] divide-y divide-[#EAE8E5] text-left">
               <colgroup>
                 <col class="w-36">
-                <col class="w-48">
+                <col class="w-28">
+                <col class="w-36">
                 <col class="w-24">
                 <col class="w-36">
-                <col class="w-32">
-                <col class="w-56">
+                <col class="w-64">
               </colgroup>
-              <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-[11px] border-b border-[#D8D6D2]">
+              <thead class="bg-[#F2F1EF] text-[#2C2D2F] font-bold text-xs border-b border-[#D8D6D2]">
                 <tr>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">이름 (클릭시 수정)</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">로그인 ID (이메일)</th>
+                  <th class="px-3.5 py-2.5 whitespace-nowrap">이름</th>
+                  <th class="px-3.5 py-2.5 whitespace-nowrap">직위</th>
+                  <th class="px-3.5 py-2.5 whitespace-nowrap">그룹</th>
                   <th class="px-3.5 py-2.5 whitespace-nowrap">권한</th>
-                  <th class="px-3.5 py-2.5 whitespace-nowrap">소속 직무 그룹</th>
                   <th class="px-3.5 py-2.5 whitespace-nowrap">연락처</th>
                   <th class="px-3.5 py-2.5 text-right whitespace-nowrap pr-4">관리</th>
                 </tr>
@@ -1646,32 +1652,63 @@
         </div>
       </div>
 
-      <!-- 5-4. 직무 그룹 관리 -->
-      <div id="set-view-roles" class="hidden bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-bold text-[#1E1F21] text-sm">직무 그룹 관리 (조직 역할 정의)</div>
-            <p class="text-[11px] text-[#6D6E6F] mt-0.5">각 직무 그룹을 수정하거나 신규 역할을 추가할 수 있습니다.</p>
+      <!-- 5-4. 직무/직위 관리 -->
+      <div id="set-view-roles" class="hidden space-y-4">
+        <!-- (1) 직무 그룹 관리 박스 -->
+        <div class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-bold text-[#1E1F21] text-sm">직무 그룹 관리 (조직 부서/역할 정의)</div>
+              <p class="text-xs text-[#6D6E6F] mt-0.5">각 직무 그룹(예: 시설팀, 미화팀, 보안팀)을 수정하거나 신규 그룹을 추가할 수 있습니다.</p>
+            </div>
+            <span id="role-edit-badge" class="hidden px-2 py-0.5 rounded text-xs font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">그룹 수정 모드</span>
           </div>
-          <span id="role-edit-badge" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">그룹 수정 모드</span>
+
+          <input type="hidden" id="edit-role-id">
+
+          <div class="flex gap-2.5">
+            <input type="text" id="new-role-input" placeholder="새 직무 그룹명 입력 (예: 시설팀, 미화팀, 보안팀)" class="flex-1 h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
+            <button id="btn-role-cancel" type="button" onclick="cancelRoleEdit()" class="hidden h-11 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition whitespace-nowrap">
+              취소
+            </button>
+            <button id="btn-role-submit" onclick="addCustomRole()" class="h-11 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg text-xs shadow-xs transition whitespace-nowrap">
+              직무 그룹 추가
+            </button>
+            <button id="btn-role-update" onclick="submitUpdateRole()" class="hidden h-11 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition whitespace-nowrap">
+              수정 완료
+            </button>
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-[#EDECEB]" id="settings-role-list"></div>
         </div>
 
-        <input type="hidden" id="edit-role-id">
+        <!-- (2) 직위 관리 박스 (팀장 / 반장 / 간사 등) -->
+        <div class="bg-white p-5 rounded-xl border border-[#D5D3CF] shadow-xs space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-bold text-[#1E1F21] text-sm">직위 관리 (직책 정의)</div>
+              <p class="text-xs text-[#6D6E6F] mt-0.5">사용자 등록 시 선택할 직위(예: 팀장, 반장, 간사, 조장, 기사, 사원)를 추가하거나 수정할 수 있습니다.</p>
+            </div>
+            <span id="position-edit-badge" class="hidden px-2 py-0.5 rounded text-xs font-bold bg-[#E5983B]/15 text-[#E5983B] border border-[#E5983B]/30">직위 수정 모드</span>
+          </div>
 
-        <div class="flex gap-2.5">
-          <input type="text" id="new-role-input" placeholder="새 직무 그룹명 입력 또는 선택 수정할 이름 입력" class="flex-1 h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
-          <button id="btn-role-cancel" type="button" onclick="cancelRoleEdit()" class="hidden h-11 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition">
-            취소
-          </button>
-          <button id="btn-role-submit" onclick="addCustomRole()" class="h-11 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg hover:bg-[#001D2C] text-xs shadow-xs transition">
-            직무 그룹 추가
-          </button>
-          <button id="btn-role-update" onclick="submitUpdateRole()" class="hidden h-11 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition">
-            수정 완료
-          </button>
+          <input type="hidden" id="edit-position-id">
+
+          <div class="flex gap-2.5">
+            <input type="text" id="new-position-input" placeholder="새 직위명 입력 (예: 팀장, 반장, 간사, 조장)" class="flex-1 h-11 border border-[#D5D3CF] rounded-lg px-3.5 text-sm outline-none focus:border-[#0084B4] bg-white font-medium text-[#1E1F21]">
+            <button id="btn-position-cancel" type="button" onclick="cancelPositionEdit()" class="hidden h-11 px-4 border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#6D6E6F] font-bold rounded-lg text-xs transition whitespace-nowrap">
+              취소
+            </button>
+            <button id="btn-position-submit" type="button" onclick="addJobPosition()" class="h-11 px-5 bg-[#0084B4] hover:bg-[#006C9C] text-white font-bold rounded-lg text-xs shadow-xs transition whitespace-nowrap">
+              직위 추가
+            </button>
+            <button id="btn-position-update" type="button" onclick="submitUpdatePosition()" class="hidden h-11 px-5 bg-[#4573D2] text-white font-bold rounded-lg hover:bg-[#3462c1] text-xs shadow-xs transition whitespace-nowrap">
+              수정 완료
+            </button>
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-[#EDECEB]" id="settings-position-list"></div>
         </div>
-
-        <div class="space-y-2 pt-2 border-t border-[#EDECEB]" id="settings-role-list"></div>
       </div>
 
       <!-- 5-5. SMS 차단 목록 -->
@@ -4872,7 +4909,7 @@
       }
       if (keyword) {
         filtered = filtered.filter(u => {
-          const text = [u.name, u.email, u.phone, u.role_name].filter(Boolean).join(' ').toLowerCase();
+          const text = [u.name, u.position_name, u.email, u.phone, u.role_name].filter(Boolean).join(' ').toLowerCase();
           return text.includes(keyword);
         });
       }
@@ -4889,34 +4926,36 @@
         return;
       }
 
+      const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
       filtered.forEach(u => {
         const isSelected = editingUserId === u.id;
         const isInactive = u.is_active === 0;
         const tr = document.createElement('tr');
         tr.className = `hover:bg-[#FAF9F8] text-xs transition ${isSelected ? 'bg-sky-50/80 border-l-4 border-l-[#0084B4]' : ''} ${isInactive ? 'opacity-50' : ''}`;
+        const posBadge = u.position_name
+          ? `<span class="px-2 py-0.5 rounded text-xs font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21]">${esc(u.position_name)}</span>`
+          : `<span class="text-[#A0A1A2]">-</span>`;
         tr.innerHTML = `
-          <td class="px-3.5 py-2.5 font-bold text-[#1E1F21] cursor-pointer hover:text-[#0084B4] truncate" onclick="editUser('${u.id}')" title="클릭하여 사용자 정보 수정">
+          <td class="px-3.5 py-2.5 font-bold text-[#1E1F21] cursor-pointer hover:text-[#0084B4] whitespace-nowrap" onclick="editUser('${u.id}')" title="클릭하여 사용자 정보 수정">
             <span class="inline-flex items-center space-x-1">
-              <span>${u.name}</span>
-              ${isInactive ? '<span class="px-1 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px]">비활성</span>' : ''}
+              <span>${esc(u.name)}</span>
+              ${isInactive ? '<span class="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px]">비활성</span>' : ''}
             </span>
           </td>
-          <td class="px-3.5 py-2.5 font-mono text-[11px] text-[#1E1F21] truncate font-semibold">
-            <span class="cursor-pointer hover:text-[#0084B4] underline decoration-dotted" onclick="editUser('${u.id}')" title="클릭하여 계정 정보 수정">${u.email || '-'}</span>
-          </td>
-          <td class="px-3.5 py-2.5 truncate">
-            <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : 'bg-[#4573D2]/10 text-[#4573D2]'}">
+          <td class="px-3.5 py-2.5 whitespace-nowrap">${posBadge}</td>
+          <td class="px-3.5 py-2.5 font-medium text-[#1E1F21] whitespace-nowrap">${u.role_name ? esc(u.role_name) : '<span class="text-[#A0A1A2]">전체 총괄</span>'}</td>
+          <td class="px-3.5 py-2.5 whitespace-nowrap">
+            <span class="px-2 py-0.5 rounded text-xs font-semibold ${u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : 'bg-[#4573D2]/10 text-[#4573D2]'}">
               ${u.role === 'ADMIN' ? '관리자' : '실무자'}
             </span>
           </td>
-          <td class="px-3.5 py-2.5 font-medium text-[#1E1F21] truncate">${u.role_name || '<i class="text-[#A0A1A2]">전체 총괄</i>'}</td>
-          <td class="px-3.5 py-2.5 text-[#6D6E6F] truncate">${u.phone || '-'}</td>
+          <td class="px-3.5 py-2.5 text-[#6D6E6F] whitespace-nowrap font-mono">${esc(u.phone || '-')}</td>
           <td class="px-3.5 py-2.5 text-right whitespace-nowrap space-x-1 pr-4">
-            <button onclick="openSendAccessModal('${u.id}')" class="px-2 py-1 bg-[#EBF7FD] border border-[#13B5EA]/40 text-[#007EA8] hover:bg-[#DDF2FB] font-bold rounded text-[11px] shadow-2xs">접속주소</button>
-            <button onclick="editUser('${u.id}')" class="px-2 py-1 ${isSelected ? 'bg-[#0084B4] text-white font-bold' : 'bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold'} rounded text-[11px] shadow-2xs">${isSelected ? '수정중' : '수정'}</button>
-            <button onclick="openPasswordResetModal('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email || ''}')" class="px-2 py-1 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-bold rounded text-[11px] shadow-2xs">비번재설정</button>
-            <button onclick="toggleUserActive('${u.id}')" class="px-2 py-1 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 font-medium rounded text-[11px]">${isInactive ? '활성화' : '비활성'}</button>
-            <button onclick="deleteUser('${u.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-medium text-[11px]">삭제</button>
+            <button onclick="openSendAccessModal('${u.id}')" class="px-2 py-1 bg-[#EBF7FD] border border-[#13B5EA]/40 text-[#007EA8] hover:bg-[#DDF2FB] font-bold rounded text-xs shadow-2xs whitespace-nowrap">접속주소</button>
+            <button onclick="editUser('${u.id}')" class="px-2 py-1 ${isSelected ? 'bg-[#0084B4] text-white font-bold' : 'bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold'} rounded text-xs shadow-2xs whitespace-nowrap">${isSelected ? '수정중' : '수정'}</button>
+            <button onclick="openPasswordResetModal('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email || ''}')" class="px-2 py-1 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 font-bold rounded text-xs shadow-2xs whitespace-nowrap">비번재설정</button>
+            <button onclick="toggleUserActive('${u.id}')" class="px-2 py-1 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 font-medium rounded text-xs whitespace-nowrap">${isInactive ? '활성화' : '비활성'}</button>
+            <button onclick="deleteUser('${u.id}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded font-medium text-xs whitespace-nowrap">삭제</button>
           </td>
         `;
         tbody.appendChild(tr);
@@ -5097,8 +5136,9 @@
       document.getElementById('new-user-phone').value = u.phone || '';
       document.getElementById('new-user-role').value = u.role;
       document.getElementById('new-user-group').value = u.custom_role_id || '';
+      if (document.getElementById('new-user-position')) document.getElementById('new-user-position').value = u.position_id || '';
 
-      document.getElementById('user-form-title').innerText = `사용자 계정 정보 수정: ${u.name} (${u.email || ''})`;
+      document.getElementById('user-form-title').innerText = `사용자 계정 정보 수정: ${u.name}`;
       document.getElementById('user-edit-badge').classList.remove('hidden');
       document.getElementById('btn-user-submit').classList.add('hidden');
       document.getElementById('btn-user-update').classList.remove('hidden');
@@ -5132,6 +5172,7 @@
       if (document.getElementById('new-user-email')) document.getElementById('new-user-email').value = '';
       if (document.getElementById('new-user-password')) document.getElementById('new-user-password').value = '';
       document.getElementById('new-user-phone').value = '';
+      if (document.getElementById('new-user-position')) document.getElementById('new-user-position').value = '';
 
       const formBox = document.getElementById('user-form-container');
       if (formBox) {
@@ -5161,6 +5202,7 @@
       const phone = document.getElementById('new-user-phone').value.trim();
       const role = document.getElementById('new-user-role').value;
       const groupId = document.getElementById('new-user-group').value;
+      const positionId = document.getElementById('new-user-position')?.value || '';
 
       if (!name) { showToastNotification('이름을 입력하세요.', 'ERROR'); return; }
       if (role !== 'WORKER' && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) { showToastNotification('관리자는 유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
@@ -5178,7 +5220,7 @@
         const res = await fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password: password || '', phone, role, custom_role_id: groupId || null })
+          body: JSON.stringify({ name, email, password: password || '', phone, role, custom_role_id: groupId || null, position_id: positionId || null })
         });
         const data = await res.json();
         if (!res.ok || data.success === false) { showToastNotification(data.error || '사용자 등록 실패', 'ERROR'); return; }
@@ -5210,6 +5252,7 @@
       const phone = document.getElementById('new-user-phone').value.trim();
       const role = document.getElementById('new-user-role').value;
       const groupId = document.getElementById('new-user-group').value;
+      const positionId = document.getElementById('new-user-position')?.value || '';
 
       if (!name) { showToastNotification('이름을 입력하세요.', 'ERROR'); return; }
       if (role !== 'WORKER' && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) { showToastNotification('관리자는 유효한 이메일(로그인 ID)을 입력하세요.', 'ERROR'); return; }
@@ -5227,7 +5270,7 @@
         const res = await fetch('/api/users/' + id, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password, phone, role, custom_role_id: groupId || null })
+          body: JSON.stringify({ name, email, password, phone, role, custom_role_id: groupId || null, position_id: positionId || null })
         });
         const data = await res.json();
         if (!res.ok || data.success === false) { showToastNotification(data.error || '수정 중 오류가 발생했습니다.', 'ERROR'); return; }
@@ -5412,6 +5455,7 @@
         `;
         settingsList.appendChild(row);
       });
+      loadPositions();
     }
 
     function editRole(id) {
@@ -5485,6 +5529,120 @@
       }
       showToastNotification('직무 그룹이 삭제되었습니다.');
       await loadRoles();
+    }
+
+    // ⭐️ 직위(팀장/반장/간사 등) 관리
+    let currentPositions = [];
+    let editingPositionId = null;
+
+    async function loadPositions() {
+      try {
+        const res = await fetch('/api/positions?_=' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+        currentPositions = await res.json();
+        const posSelect = document.getElementById('new-user-position');
+        if (posSelect) {
+          const cur = posSelect.value;
+          posSelect.innerHTML = '<option value="">직위 선택 안 함</option>';
+          currentPositions.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.innerText = p.name;
+            posSelect.appendChild(opt);
+          });
+          if (cur && Array.from(posSelect.options).some(o => o.value === cur)) posSelect.value = cur;
+        }
+        const listEl = document.getElementById('settings-position-list');
+        if (listEl) {
+          listEl.innerHTML = '';
+          const esc = window.escapeHtml || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+          currentPositions.forEach(p => {
+            const isSelected = editingPositionId === p.id;
+            const row = document.createElement('div');
+            row.className = `flex justify-between items-center p-3 rounded-xl border border-[#D5D3CF] text-xs transition ${isSelected ? 'bg-amber-50/60 border-amber-300' : 'bg-white'}`;
+            row.innerHTML = `
+              <div class="flex items-center space-x-2">
+                <b class="text-[#1E1F21] text-xs cursor-pointer hover:text-[#4573D2] underline decoration-dotted" onclick="editPosition('${esc(p.id)}')" title="클릭하여 직위명 수정">${esc(p.name)}</b>
+                <span class="text-[#6D6E6F] ml-1.5 text-[11px]">적용 인원: <b class="text-[#1E1F21]">${p.worker_count || 0}명</b></span>
+              </div>
+              <div class="space-x-1.5 whitespace-nowrap">
+                <button type="button" onclick="editPosition('${esc(p.id)}')" class="px-2.5 py-1 bg-[#FAF9F8] border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold rounded text-xs shadow-2xs">수정</button>
+                <button type="button" onclick="deletePosition('${esc(p.id)}')" class="px-2 py-1 text-[#F06A6A] hover:bg-red-50 rounded text-xs font-medium">삭제</button>
+              </div>
+            `;
+            listEl.appendChild(row);
+          });
+        }
+      } catch (e) {
+        console.error('loadPositions error:', e);
+      }
+    }
+
+    function editPosition(id) {
+      const p = currentPositions.find(item => item.id === id);
+      if (!p) return;
+      editingPositionId = p.id;
+      document.getElementById('edit-position-id').value = p.id;
+      document.getElementById('new-position-input').value = p.name;
+      document.getElementById('position-edit-badge').classList.remove('hidden');
+      document.getElementById('btn-position-submit').classList.add('hidden');
+      document.getElementById('btn-position-update').classList.remove('hidden');
+      document.getElementById('btn-position-cancel').classList.remove('hidden');
+      loadPositions();
+      document.getElementById('new-position-input').focus();
+    }
+
+    function cancelPositionEdit() {
+      editingPositionId = null;
+      document.getElementById('edit-position-id').value = '';
+      document.getElementById('new-position-input').value = '';
+      document.getElementById('position-edit-badge').classList.add('hidden');
+      document.getElementById('btn-position-submit').classList.remove('hidden');
+      document.getElementById('btn-position-update').classList.add('hidden');
+      document.getElementById('btn-position-cancel').classList.add('hidden');
+      loadPositions();
+    }
+
+    async function submitUpdatePosition() {
+      const id = document.getElementById('edit-position-id').value;
+      const name = document.getElementById('new-position-input').value.trim();
+      if (!name) { alert('직위명을 입력하세요.'); return; }
+      const res = await fetch('/api/positions/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (!res.ok) { showToastNotification(data.error || '직위 수정 실패', 'ERROR'); return; }
+      cancelPositionEdit();
+      showToastNotification('직위가 수정되었습니다.');
+      await loadPositions();
+      await loadUsers();
+    }
+
+    async function addJobPosition() {
+      const val = document.getElementById('new-position-input').value.trim();
+      if (!val) { alert('직위명을 입력하세요.'); return; }
+      const res = await fetch('/api/positions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: val })
+      });
+      const data = await res.json();
+      if (!res.ok) { showToastNotification(data.error || '직위 등록 실패', 'ERROR'); return; }
+      document.getElementById('new-position-input').value = '';
+      showToastNotification('직위가 등록되었습니다.');
+      await loadPositions();
+    }
+
+    async function deletePosition(id) {
+      if (!confirm('이 직위를 삭제하시겠습니까?')) return;
+      const res = await fetch('/api/positions/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { showToastNotification(data.error || '삭제할 수 없습니다.', 'ERROR'); return; }
+      showToastNotification('직위가 삭제되었습니다.');
+      await loadPositions();
+      await loadUsers();
     }
 
     // ==========================================

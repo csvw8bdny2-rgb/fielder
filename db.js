@@ -557,11 +557,22 @@ function initDatabase() {
       PRIMARY KEY (notice_id, user_id),
       FOREIGN KEY (notice_id) REFERENCES notices(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS job_positions (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    );
   `);
 
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_at DATETIME;"); } catch (e) {}
   try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_by TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN position_id TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN position_name TEXT;"); } catch (e) {}
 
   if (process.env.SEED_DEMO !== 'false') {
     seedData();

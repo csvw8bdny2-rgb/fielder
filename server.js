@@ -621,6 +621,7 @@ const server = http.createServer(async (req, res) => {
         isTicketAdminEndpoint ||
         pathname.startsWith('/api/users') ||
         pathname.startsWith('/api/roles') ||
+        pathname.startsWith('/api/positions') ||
         pathname.startsWith('/api/blocked-users') ||
         pathname === '/api/analytics' ||
         pathname === '/api/inspections/stats' ||
@@ -1566,9 +1567,12 @@ const server = http.createServer(async (req, res) => {
       const companyId = resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const users = db.prepare(`
-        SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.custom_role_id, u.is_active, u.must_change_password, u.created_at, u.last_login_at, r.name as role_name 
+        SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.custom_role_id, u.position_id,
+               COALESCE(p.name, u.position_name, '') as position_name,
+               u.is_active, u.must_change_password, u.created_at, u.last_login_at, r.name as role_name 
         FROM users u 
         LEFT JOIN custom_roles r ON u.custom_role_id = r.id 
+        LEFT JOIN job_positions p ON u.position_id = p.id
         WHERE u.company_id = ?
         ORDER BY (u.role = 'ADMIN') DESC, u.created_at DESC
       `).all(companyId);
@@ -1644,11 +1648,21 @@ const server = http.createServer(async (req, res) => {
         validRoleId = roleRow.id;
       }
 
+      let validPosId = null;
+      let validPosName = body.position_name ? String(body.position_name).trim() : null;
+      if (body.position_id && String(body.position_id).trim()) {
+        const posRow = db.prepare('SELECT id, name FROM job_positions WHERE id = ? AND company_id = ?').get(String(body.position_id).trim(), companyId);
+        if (posRow) {
+          validPosId = posRow.id;
+          validPosName = posRow.name;
+        }
+      }
+
       try {
         db.prepare(`
-          INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, is_active, must_change_password, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-        `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, cleanPhone, validRoleId, isTemp, nowIso);
+          INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, position_id, position_name, is_active, must_change_password, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, cleanPhone, validRoleId, validPosId, validPosName, isTemp, nowIso);
       } catch (insertErr) {
         console.error('User insert error:', insertErr);
         if (String(insertErr.message || '').includes('UNIQUE')) {
@@ -1745,11 +1759,28 @@ const server = http.createServer(async (req, res) => {
         pwdVal = hashPassword(password.trim());
       }
 
+      let newPosId = targetUser.position_id || null;
+      let newPosName = targetUser.position_name || null;
+      if (body.position_id !== undefined) {
+        if (!body.position_id) {
+          newPosId = null;
+          newPosName = body.position_name ? String(body.position_name).trim() : null;
+        } else {
+          const posRow = db.prepare('SELECT id, name FROM job_positions WHERE id = ? AND company_id = ?').get(String(body.position_id).trim(), companyId);
+          if (posRow) {
+            newPosId = posRow.id;
+            newPosName = posRow.name;
+          }
+        }
+      } else if (body.position_name !== undefined) {
+        newPosName = String(body.position_name || '').trim() || null;
+      }
+
       db.prepare(`
         UPDATE users
-        SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?, must_change_password = CASE WHEN ? != '' AND ? = 'WORKER' THEN 0 ELSE must_change_password END
+        SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?, position_id = ?, position_name = ?, must_change_password = CASE WHEN ? != '' AND ? = 'WORKER' THEN 0 ELSE must_change_password END
         WHERE id = ? AND company_id = ?
-      `).run(newName, newEmail, pwdVal, pwdVal, newPhone, newRole, newRoleId, pwdVal, newRole, userId, companyId);
+      `).run(newName, newEmail, pwdVal, pwdVal, newPhone, newRole, newRoleId, newPosId, newPosName, pwdVal, newRole, userId, companyId);
 
       // ⭐️ 관리자(ADMIN)이거나 user_admin인 경우 companies 테이블의 admin_name 및 admin_email 도 즉시 동기화!
       if (targetUser.role === 'ADMIN' || userId === 'user_admin' || newRole === 'ADMIN') {
@@ -1924,6 +1955,76 @@ const server = http.createServer(async (req, res) => {
         WHERE id = ? AND company_id = ?
       `).run(cleanName, category, roleId, companyId);
       return sendJSON(res, 200, { success: true, message: '직무 그룹이 수정되었습니다.' });
+    }
+
+    // ⭐️ 직위(직책) 관리 API (팀장/반장/간사/조장/사원 등)
+    if (pathname === '/api/positions' && method === 'GET') {
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      let positions = db.prepare(`
+        SELECT p.*, COUNT(u.id) as worker_count
+        FROM job_positions p
+        LEFT JOIN users u ON u.position_id = p.id AND u.company_id = p.company_id
+        WHERE p.company_id = ?
+        GROUP BY p.id
+        ORDER BY p.sort_order ASC, p.created_at ASC
+      `).all(companyId);
+      if (positions.length === 0) {
+        const defaults = ['팀장', '반장', '간사', '조장', '기사', '사원'];
+        const ins = db.prepare('INSERT INTO job_positions (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)');
+        defaults.forEach((pName, idx) => {
+          ins.run(`pos_${companyId}_${idx + 1}`, companyId, pName, idx + 1);
+        });
+        positions = db.prepare(`
+          SELECT p.*, COUNT(u.id) as worker_count
+          FROM job_positions p
+          LEFT JOIN users u ON u.position_id = p.id AND u.company_id = p.company_id
+          WHERE p.company_id = ?
+          GROUP BY p.id
+          ORDER BY p.sort_order ASC, p.created_at ASC
+        `).all(companyId);
+      }
+      return sendJSON(res, 200, positions);
+    }
+    if (pathname === '/api/positions' && method === 'POST') {
+      const body = await parseBody(req);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const cleanName = String(body.name || '').trim();
+      if (!cleanName) return sendJSON(res, 400, { error: '직위명을 입력하세요.' });
+      if (cleanName.length > 20) return sendJSON(res, 400, { error: '직위명은 최대 20자까지 입력할 수 있습니다.' });
+
+      const dup = db.prepare('SELECT id FROM job_positions WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
+      if (dup) return sendJSON(res, 409, { error: `이미 존재하는 직위 [${cleanName}] 입니다.` });
+
+      const id = 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+      const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) as m FROM job_positions WHERE company_id = ?').get(companyId).m;
+      db.prepare('INSERT INTO job_positions (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)').run(id, companyId, cleanName, maxOrder + 1);
+      return sendJSON(res, 201, { success: true, id, name: cleanName, message: '직위가 등록되었습니다.' });
+    }
+    const posMatch = pathname.match(/^\/api\/positions\/([^/]+)$/);
+    if (posMatch && (method === 'PUT' || method === 'DELETE')) {
+      const posId = posMatch[1];
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
+      const existing = db.prepare('SELECT * FROM job_positions WHERE id = ? AND company_id = ?').get(posId, companyId);
+      if (!existing) return sendJSON(res, 404, { error: '직위를 찾을 수 없습니다.' });
+
+      if (method === 'DELETE') {
+        db.prepare('UPDATE users SET position_id = NULL, position_name = NULL WHERE position_id = ? AND company_id = ?').run(posId, companyId);
+        db.prepare('DELETE FROM job_positions WHERE id = ? AND company_id = ?').run(posId, companyId);
+        return sendJSON(res, 200, { success: true, message: '직위가 삭제되었습니다.' });
+      }
+
+      const body = await parseBody(req);
+      const cleanName = String(body.name || '').trim();
+      if (!cleanName) return sendJSON(res, 400, { error: '직위명을 입력하세요.' });
+      const dup = db.prepare('SELECT id FROM job_positions WHERE company_id = ? AND LOWER(TRIM(name)) = ? AND id != ?').get(companyId, cleanName.toLowerCase(), posId);
+      if (dup) return sendJSON(res, 409, { error: `이미 존재하는 직위 [${cleanName}] 입니다.` });
+
+      db.prepare('UPDATE job_positions SET name = ? WHERE id = ? AND company_id = ?').run(cleanName, posId, companyId);
+      db.prepare('UPDATE users SET position_name = ? WHERE position_id = ? AND company_id = ?').run(cleanName, posId, companyId);
+      return sendJSON(res, 200, { success: true, message: '직위가 수정되었습니다.' });
     }
 
     // ==========================================
