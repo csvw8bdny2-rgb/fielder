@@ -1138,7 +1138,7 @@
     let mobileNotices = [];
     async function loadMobileNotices() {
       try {
-        const res = await fetch('/api/notices');
+        const res = await fetch('/api/notices?_=' + Date.now(), { cache: 'no-store' });
         if (!res.ok) return;
         mobileNotices = await res.json();
         const unreadCount = mobileNotices.filter(n => !n.is_read).length;
