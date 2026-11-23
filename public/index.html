@@ -4504,9 +4504,17 @@
               </td>
               <td class="px-3 py-2.5 text-[#6D6E6F] truncate">${l.description || '-'}</td>
               <td class="px-3 py-2.5 text-center whitespace-nowrap">
-                <button onclick="openQrModal('${l.id}')" class="px-2.5 py-1 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded text-[11px] shadow-2xs inline-flex items-center space-x-1">
-                  <span>QR 인쇄 / 다운로드</span>
-                </button>
+                <div class="inline-flex items-center gap-1.5">
+                  <button type="button" onclick="openQrModal('${l.id}')" class="px-2.5 py-1 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#1E1F21] font-bold rounded text-xs shadow-2xs whitespace-nowrap">
+                    QR 인쇄 / 다운로드
+                  </button>
+                  <button type="button" onclick="openLocationReportLink('${l.id}')" class="px-2.5 py-1 bg-[#EBF7FD] border border-[#13B5EA]/50 hover:bg-[#D6EFFB] text-[#007EA8] font-bold rounded text-xs shadow-2xs whitespace-nowrap" title="새 탭에서 민원 페이지 직접 확인">
+                    링크 열기
+                  </button>
+                  <button type="button" onclick="copyLocationReportLink('${l.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#FAF9F8] text-[#4B5563] font-semibold rounded text-xs shadow-2xs whitespace-nowrap" title="접수 링크 주소 복사">
+                    복사
+                  </button>
+                </div>
               </td>
               <td class="px-3 py-2.5 text-right whitespace-nowrap space-x-1">
                 <button onclick="editLocation('${l.id}')" class="px-2 py-1 bg-white border border-[#D5D3CF] hover:bg-[#F2F1EF] text-[#1E1F21] font-semibold rounded text-[11px] shadow-2xs">수정</button>
@@ -4681,6 +4689,36 @@
       }
       showToastNotification(data.message || '구역이 삭제되었습니다.');
       await loadLocations();
+    }
+
+    function getLocationReportUrl(locId) {
+      const tenant = (typeof getTenantParam === 'function' ? getTenantParam() : '') || (typeof currentCompany !== 'undefined' && currentCompany?.subdomain) || '';
+      const tenantQs = tenant ? `&tenant=${encodeURIComponent(tenant)}` : '';
+      return `${window.location.origin}/report?locId=${encodeURIComponent(locId)}${tenantQs}`;
+    }
+
+    function openLocationReportLink(locId) {
+      const url = getLocationReportUrl(locId);
+      window.open(url, '_blank', 'noopener');
+    }
+
+    async function copyLocationReportLink(locId) {
+      const url = getLocationReportUrl(locId);
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = url;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        showToastNotification(`🔗 현장 QR 접수 링크가 복사되었습니다: ${url}`);
+      } catch (e) {
+        prompt('아래 링크 주소를 복사하세요:', url);
+      }
     }
 
     // ⭐️ [신규] 층수/구역 QR 코드 모달 및 인쇄/다운로드
