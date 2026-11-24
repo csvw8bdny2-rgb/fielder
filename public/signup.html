@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>회원가입 - Fielder 종합 관제 센터</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap">
   <style>
     :root {
@@ -313,7 +313,7 @@
               <input type="text" id="subdomain" required pattern="[a-zA-Z0-9_-]+" placeholder="company" onkeyup="updateDomainPreview(this.value)" class="flex-1 h-11 border border-[#D1D5DB] rounded-r-xl px-4 text-sm font-mono font-bold outline-none bg-white text-[#1E1F21] transition-colors">
             </div>
             <p class="text-xs text-[#4B5563] mt-1">
-              실제 접속 주소: <span class="text-[#005B82] font-mono font-semibold" id="domain-preview">https://fielder-h1j5.onrender.com/?tenant=company</span>
+              실제 접속 주소: <span class="text-[#005B82] font-mono font-semibold" id="domain-preview">/?tenant=company</span>
             </p>
           </div>
 
@@ -408,7 +408,7 @@
           <div class="w-6 h-6 rounded bg-[#00A3E0] text-[#002B41] flex items-center justify-center font-bold text-xs shrink-0">2</div>
           <div>
             <h4 class="font-bold text-[#1E1F21]">회사 및 서브도메인 자동 배정</h4>
-            <p class="text-[#4B5563] text-xs">회사 전용 도메인(예: central.fielder.kr) 및 데이터 영역 생성.</p>
+            <p class="text-[#4B5563] text-xs">회사 전용 접속 경로(예: /?tenant=central) 및 독립 데이터 영역 생성.</p>
           </div>
         </div>
 

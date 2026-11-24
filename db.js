@@ -1,18 +1,140 @@
-const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
-// ⭐️ Render Persistent Disk (/var/data) 또는 환경변수(DB_PATH) 우선 사용 (컨테이너 재배포 시 DB 초기화 방지)
-const PERSISTENT_DIR = process.env.DB_DIR || (fs.existsSync('/var/data') ? '/var/data' : __dirname);
-if (!fs.existsSync(PERSISTENT_DIR)) {
-  try { fs.mkdirSync(PERSISTENT_DIR, { recursive: true }); } catch (e) {}
-}
-const DB_PATH = process.env.DB_PATH || path.join(PERSISTENT_DIR, 'fms.db');
-console.log(`💾 SQLite DB 경로: ${DB_PATH} (Persistent Disk: ${PERSISTENT_DIR === '/var/data' || !!process.env.DB_PATH})`);
-const db = new DatabaseSync(DB_PATH);
+const HAS_PG = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim());
 
-db.exec('PRAGMA foreign_keys = ON;');
+function translateSqlForPg(sql) {
+  let out = String(sql || '');
+  if (/^\s*PRAGMA\b/i.test(out)) return '';
+
+  // datetime('now', '+10 minutes') -> to_char(((CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '10 minutes'), 'YYYY-MM-DD HH24:MI:SS')
+  out = out.replace(/datetime\(\s*'now'\s*,\s*'([^']+)'\s*\)/gi, (_, mod) => {
+    const cleanMod = mod.trim().replace(/^\+/, '');
+    return `to_char(((CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '${cleanMod}'), 'YYYY-MM-DD HH24:MI:SS')`;
+  });
+  out = out.replace(/datetime\(\s*'now'\s*\)/gi, "to_char((CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD HH24:MI:SS')");
+  out = out.replace(/\bjulianday\(\s*([a-zA-Z0-9_.]+)\s*\)/gi, '(EXTRACT(EPOCH FROM ($1)::timestamp) / 86400.0)');
+  out = out.replace(/\bDATETIME\s+DEFAULT\s+CURRENT_TIMESTAMP\b/gi, "TEXT DEFAULT to_char((CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'YYYY-MM-DD HH24:MI:SS')");
+  out = out.replace(/\bALTER\s+TABLE\s+([a-zA-Z0-9_]+)\s+ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS)/gi, 'ALTER TABLE $1 ADD COLUMN IF NOT EXISTS ');
+
+  let isInsertOrIgnore = false;
+  if (/\bINSERT\s+OR\s+IGNORE\s+INTO\b/i.test(out)) {
+    isInsertOrIgnore = true;
+    out = out.replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/i, 'INSERT INTO');
+  }
+
+  // Replace ? placeholders outside single-quoted string literals with $1, $2, ...
+  let idx = 1;
+  let res = '';
+  let inStr = false;
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i];
+    if (ch === "'") {
+      res += ch;
+      if (inStr && out[i + 1] === "'") {
+        res += "'";
+        i++;
+      } else {
+        inStr = !inStr;
+      }
+    } else if (ch === '?' && !inStr) {
+      res += `$${idx++}`;
+    } else {
+      res += ch;
+    }
+  }
+  out = res;
+
+  if (isInsertOrIgnore) {
+    out = out.replace(/;\s*$/, '') + ' ON CONFLICT DO NOTHING';
+  }
+  return out;
+}
+
+function createDbAdapter() {
+  if (HAS_PG) {
+    const { Pool } = require('pg');
+    const useSsl = process.env.PGSSLMODE !== 'disable' && !/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL);
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: useSsl ? { rejectUnauthorized: false } : false,
+    });
+    console.log('🐘 PostgreSQL DB 연결 모드 활성화 (DATABASE_URL)');
+
+    const makeAdapter = (runner) => ({
+      isPg: true,
+      async exec(sql) {
+        const pgSql = translateSqlForPg(sql);
+        if (!pgSql.trim()) return;
+        await runner.query(pgSql);
+      },
+      prepare(sql) {
+        const pgSql = translateSqlForPg(sql);
+        return {
+          async get(...params) {
+            if (!pgSql.trim()) return undefined;
+            const r = await runner.query(pgSql, params);
+            return r.rows[0];
+          },
+          async all(...params) {
+            if (!pgSql.trim()) return [];
+            const r = await runner.query(pgSql, params);
+            return r.rows;
+          },
+          async run(...params) {
+            if (!pgSql.trim()) return { changes: 0 };
+            const r = await runner.query(pgSql, params);
+            return { changes: r.rowCount || 0 };
+          },
+        };
+      },
+    });
+
+    const root = makeAdapter(pool);
+    root.transaction = async (fn) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const tx = makeAdapter(client);
+        const result = await fn(tx);
+        await client.query('COMMIT');
+        return result;
+      } catch (e) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+        throw e;
+      } finally {
+        client.release();
+      }
+    };
+    return root;
+  }
+
+  const { DatabaseSync } = require('node:sqlite');
+  const PERSISTENT_DIR = process.env.DB_DIR || (fs.existsSync('/var/data') ? '/var/data' : __dirname);
+  if (!fs.existsSync(PERSISTENT_DIR)) {
+    try { fs.mkdirSync(PERSISTENT_DIR, { recursive: true }); } catch (e) {}
+  }
+  const DB_PATH = process.env.DB_PATH || path.join(PERSISTENT_DIR, 'fms.db');
+  console.log(`💾 SQLite DB 경로: ${DB_PATH} (Persistent Disk: ${PERSISTENT_DIR === '/var/data' || !!process.env.DB_PATH})`);
+  const sqlite = new DatabaseSync(DB_PATH);
+  sqlite.exec('PRAGMA foreign_keys = ON;');
+  sqlite.isPg = false;
+  sqlite.transaction = async (fn) => {
+    sqlite.exec('BEGIN');
+    try {
+      const result = await fn(sqlite);
+      sqlite.exec('COMMIT');
+      return result;
+    } catch (e) {
+      try { sqlite.exec('ROLLBACK'); } catch (_) {}
+      throw e;
+    }
+  };
+  return sqlite;
+}
+
+const db = createDbAdapter();
 
 // ⭐️ 비밀번호 해시 생성 및 검증 (scrypt 기반 안전 암호화 + 기존 평문 투명 호환)
 function hashPassword(password) {
@@ -41,39 +163,11 @@ function verifyPassword(password, stored) {
   }
 }
 
-function initDatabase() {
+async function initDatabase() {
   console.log('📦 데이터베이스 스키마 구성 중...');
 
-  // ⭐️ 멀티테넌트 컬럼 동적 마이그레이션
-  const compCols = db.prepare("PRAGMA table_info(companies)").all().map(c => c.name);
-  if (!compCols.includes('subdomain')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN subdomain TEXT UNIQUE;"); } catch(e){}
-  }
-  if (!compCols.includes('status')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'ACTIVE';"); } catch(e){}
-  }
-  if (!compCols.includes('storage_limit_mb')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN storage_limit_mb INTEGER DEFAULT 500;"); } catch(e){}
-  }
-  if (!compCols.includes('storage_used_mb')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN storage_used_mb INTEGER DEFAULT 15;"); } catch(e){}
-  }
-  if (!compCols.includes('enabled_features')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN enabled_features TEXT DEFAULT '{\"checklists\":true,\"realtime_sse\":true,\"public_qr\":true,\"outsource\":true}';"); } catch(e){}
-  }
-  if (!compCols.includes('admin_name')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN admin_name TEXT;"); } catch(e){}
-  }
-  if (!compCols.includes('admin_email')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN admin_email TEXT;"); } catch(e){}
-  }
-  if (!compCols.includes('admin_phone')) {
-    try { db.exec("ALTER TABLE companies ADD COLUMN admin_phone TEXT;"); } catch(e){}
-  }
-
-
   // 1. 고객사 및 기본 설정
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS companies (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -96,8 +190,22 @@ function initDatabase() {
     );
   `);
 
+  // ⭐️ 멀티테넌트 컬럼 동적 마이그레이션
+  for (const alterSql of [
+    "ALTER TABLE companies ADD COLUMN subdomain TEXT UNIQUE;",
+    "ALTER TABLE companies ADD COLUMN status TEXT DEFAULT 'ACTIVE';",
+    "ALTER TABLE companies ADD COLUMN storage_limit_mb INTEGER DEFAULT 500;",
+    "ALTER TABLE companies ADD COLUMN storage_used_mb INTEGER DEFAULT 15;",
+    "ALTER TABLE companies ADD COLUMN enabled_features TEXT DEFAULT '{\"checklists\":true,\"realtime_sse\":true,\"public_qr\":true,\"outsource\":true}';",
+    "ALTER TABLE companies ADD COLUMN admin_name TEXT;",
+    "ALTER TABLE companies ADD COLUMN admin_email TEXT;",
+    "ALTER TABLE companies ADD COLUMN admin_phone TEXT;",
+  ]) {
+    try { await db.exec(alterSql); } catch(e){}
+  }
+
   // 2. 직무 그룹
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS custom_roles (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -109,7 +217,7 @@ function initDatabase() {
   `);
 
   // 3. 구역 및 층(Floor) 위치 관리
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS locations (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -124,7 +232,7 @@ function initDatabase() {
   `);
 
   // 4. 사용자
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -139,7 +247,7 @@ function initDatabase() {
   `);
 
   // 5. 티켓 및 작업지시 (민원/건의사항 구분 포함)
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS tickets (
       id TEXT PRIMARY KEY,
       ticket_no TEXT UNIQUE NOT NULL,
@@ -186,7 +294,7 @@ function initDatabase() {
   `);
 
   // 6. 불량 신고자 블랙리스트
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS blocked_users (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -198,7 +306,7 @@ function initDatabase() {
   `);
 
   // 7. SMS OTP 인증
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS sms_otps (
       phone TEXT PRIMARY KEY,
       otp_code TEXT NOT NULL,
@@ -207,7 +315,7 @@ function initDatabase() {
   `);
 
   // 8. 모바일 실무자 현장순찰 일지 (Patrol Logs)
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS patrol_logs (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -225,7 +333,7 @@ function initDatabase() {
   `);
 
   // ⭐️ 9. 세션 테이블 (인터넷 다고객 보안 인증)
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -237,7 +345,7 @@ function initDatabase() {
   `);
 
   // ⭐️ 10. 서비스 기업 가입 신청서 테이블 (승인/반려 워크플로)
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS company_applications (
       id TEXT PRIMARY KEY,
       company_name TEXT NOT NULL,
@@ -256,30 +364,30 @@ function initDatabase() {
   `);
 
   // 안전 마이그레이션 (기존 컬럼 보충)
-  try { db.exec("ALTER TABLE tickets ADD COLUMN admin_notes TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN claimed_by_name TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN photo_url TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN due_date TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN cancelled_at DATETIME;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN cancelled_reason TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN email TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN password TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN invite_token TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN invite_expires_at DATETIME;"); } catch (e) {}
-  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_company_email ON users(company_id, LOWER(email)) WHERE email IS NOT NULL AND email != '';"); } catch (e) {}
-  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_company_name ON custom_roles(company_id, LOWER(TRIM(name)));"); } catch (e) {}
-  try { db.exec("ALTER TABLE locations ADD COLUMN building TEXT DEFAULT '본관';"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN buildings TEXT DEFAULT '[\"본관\", \"별관\"]';"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN address TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN contact_phone TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN message_monthly_limit INTEGER DEFAULT 50;"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN message_extra_credit INTEGER DEFAULT 0;"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN message_enabled INTEGER DEFAULT 1;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN admin_notes TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN claimed_by_name TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN photo_url TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN due_date TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN cancelled_at DATETIME;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN cancelled_reason TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN email TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN password TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN last_login_at DATETIME;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN invite_token TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN invite_expires_at DATETIME;"); } catch (e) {}
+  try { await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_company_email ON users(company_id, LOWER(email)) WHERE email IS NOT NULL AND email != '';"); } catch (e) {}
+  try { await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_company_name ON custom_roles(company_id, LOWER(TRIM(name)));"); } catch (e) {}
+  try { await db.exec("ALTER TABLE locations ADD COLUMN building TEXT DEFAULT '본관';"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN buildings TEXT DEFAULT '[\"본관\", \"별관\"]';"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN address TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN contact_phone TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN message_monthly_limit INTEGER DEFAULT 50;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN message_extra_credit INTEGER DEFAULT 0;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN message_enabled INTEGER DEFAULT 1;"); } catch (e) {}
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS message_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       company_id TEXT NOT NULL,
@@ -327,17 +435,17 @@ function initDatabase() {
       created_at TEXT NOT NULL
     );
   `);
-  try { db.exec("ALTER TABLE companies ADD COLUMN deleted_at TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
-  try { db.exec("ALTER TABLE companies ADD COLUMN buildings_config TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN work_status TEXT DEFAULT 'WORKING';"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN cs_memo TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN cs_updated_at TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN cs_agent_name TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN deleted_at TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
+  try { await db.exec("ALTER TABLE companies ADD COLUMN buildings_config TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN work_status TEXT DEFAULT 'WORKING';"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN cs_memo TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN cs_updated_at TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE tickets ADD COLUMN cs_agent_name TEXT;"); } catch (e) {}
 
   // ⭐️ comp_central_tower 서브도메인 'central' 보장 (/?tenant=null 버그 원천 방지)
   try {
-    db.exec("UPDATE companies SET subdomain = 'central' WHERE id = 'comp_central_tower' AND (subdomain IS NULL OR subdomain = '' OR subdomain = 'null');");
+    await db.exec("UPDATE companies SET subdomain = 'central' WHERE id = 'comp_central_tower' AND (subdomain IS NULL OR subdomain = '' OR subdomain = 'null');");
   } catch(e) {}
 
   // 기본 건물동 및 운영 층수 데이터 보장 (기본: 본관 1층만 존재)
@@ -345,7 +453,7 @@ function initDatabase() {
     const defaultBc = JSON.stringify({
       '본관': { basement: 'NONE', ground: 1, hasRooftop: false, floors: ['1F'] }
     });
-    db.prepare(`
+    await db.prepare(`
       UPDATE companies 
       SET buildings_config = ? 
       WHERE (buildings_config IS NULL OR buildings_config = '')
@@ -354,7 +462,7 @@ function initDatabase() {
 
   // 기본 건물동 및 운영 층수 데이터 보장 (기본: 본관 1층만 존재)
   try {
-    db.exec(`
+    await db.exec(`
       UPDATE companies 
       SET buildings = '["본관"]' 
       WHERE (buildings IS NULL OR buildings = '');
@@ -377,7 +485,7 @@ function initDatabase() {
   ];
   for (const wp of demoWorkerProfiles) {
     const last4 = wp.phone.replace(/\D/g, '').slice(-4);
-    db.prepare(`
+    await db.prepare(`
       UPDATE users
       SET name = ?,
           position_name = COALESCE(NULLIF(position_name, ''), ?),
@@ -391,27 +499,27 @@ function initDatabase() {
 
   // 관리자 계정 이름 및 이메일 동기화 (기존 데이터 보정)
   try {
-    db.exec("UPDATE users SET name = 'Fielder 소장' WHERE id = 'user_admin' AND (name = '김관리 소장' OR name IS NULL);");
-    db.exec("UPDATE companies SET admin_name = 'Fielder 소장' WHERE id = 'comp_central_tower' AND (admin_name = '김관리 소장' OR admin_name IS NULL);");
-    const adminUser = db.prepare("SELECT name, email FROM users WHERE id = 'user_admin'").get();
+    await db.exec("UPDATE users SET name = 'Fielder 소장' WHERE id = 'user_admin' AND (name = '김관리 소장' OR name IS NULL);");
+    await db.exec("UPDATE companies SET admin_name = 'Fielder 소장' WHERE id = 'comp_central_tower' AND (admin_name = '김관리 소장' OR admin_name IS NULL);");
+    const adminUser = await db.prepare("SELECT name, email FROM users WHERE id = 'user_admin'").get();
     if (adminUser) {
-      db.prepare("UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = 'comp_central_tower'").run(adminUser.name, adminUser.email);
+      await db.prepare("UPDATE companies SET admin_name = ?, admin_email = ? WHERE id = 'comp_central_tower'").run(adminUser.name, adminUser.email);
     }
   } catch (e) {}
 
   // ⭐️ 모든 회사의 기본 ADMIN 관리자 계정 누락 방지 및 자동 보강 동기화
   try {
     // 1) companies.id가 비어있는 불량 데이터(예: gabal 등) 보정
-    const badComps = db.prepare("SELECT rowid, id, subdomain FROM companies WHERE id IS NULL OR id = ''").all();
+    const badComps = await db.prepare("SELECT rowid, id, subdomain FROM companies WHERE id IS NULL OR id = ''").all();
     for (const bc of badComps) {
       const fixedId = 'comp_' + ((bc.subdomain || 'tenant').replace(/[^a-zA-Z0-9_-]/g, ''));
-      db.prepare("UPDATE companies SET id = ? WHERE rowid = ?").run(fixedId, bc.rowid);
+      await db.prepare("UPDATE companies SET id = ? WHERE rowid = ?").run(fixedId, bc.rowid);
     }
 
-    const allCompanies = db.prepare('SELECT id, subdomain, admin_name, admin_email, admin_phone FROM companies').all();
+    const allCompanies = await db.prepare('SELECT id, subdomain, admin_name, admin_email, admin_phone FROM companies').all();
     for (const c of allCompanies) {
       if (!c.id) continue;
-      const hasAdmin = db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(c.id);
+      const hasAdmin = await db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(c.id);
       if (!hasAdmin) {
         const slug = c.subdomain || c.id.replace('comp_', '');
         const adminId = 'user_admin_' + slug;
@@ -419,7 +527,7 @@ function initDatabase() {
         const adminName = c.admin_name || '총괄 관리자';
         const adminPhone = c.admin_phone || '010-0000-0000';
         const randPw = crypto.randomBytes(6).toString('base64url').slice(0, 10);
-        db.prepare(`
+        await db.prepare(`
           INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active, must_change_password)
           VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1, 1)
         `).run(adminId, c.id, adminName, adminPhone, adminEmail, hashPassword(randPw));
@@ -431,11 +539,11 @@ function initDatabase() {
 
   // ⭐️ 평문 비밀번호 scrypt 일괄 해시 전환
   try {
-    const plainUsers = db.prepare("SELECT id, password FROM users WHERE password IS NULL OR password = '' OR password NOT LIKE '%:%'").all();
+    const plainUsers = await db.prepare("SELECT id, password FROM users WHERE password IS NULL OR password = '' OR password NOT LIKE '%:%'").all();
     for (const pu of plainUsers) {
       const raw = (pu.password && pu.password.trim()) ? pu.password.trim() : crypto.randomBytes(6).toString('base64url').slice(0, 10);
       const mustChange = (pu.password && pu.password.trim()) ? 0 : 1;
-      db.prepare("UPDATE users SET password = ?, must_change_password = COALESCE(must_change_password, ?) WHERE id = ?").run(hashPassword(raw), mustChange, pu.id);
+      await db.prepare("UPDATE users SET password = ?, must_change_password = COALESCE(must_change_password, ?) WHERE id = ?").run(hashPassword(raw), mustChange, pu.id);
     }
   } catch (e) {
     console.error('Password hash migration error:', e);
@@ -443,23 +551,23 @@ function initDatabase() {
 
   // ⭐️ QA 테스트 데이터 정리 (central QA 잔여 데이터 및 qatest/qatest2 테넌트 제거)
   try {
-    db.prepare("DELETE FROM tickets WHERE company_id = 'comp_central_tower' AND (title LIKE '%[QA]%' OR title = '[QA] 테스트 작업지시')").run();
-    db.prepare("DELETE FROM users WHERE company_id = 'comp_central_tower' AND (name = 'QA테스터' OR name LIKE '%QA테스터%')").run();
-    db.prepare("DELETE FROM custom_roles WHERE company_id = 'comp_central_tower' AND (name = 'QA테스트팀' OR name LIKE '%QA테스트팀%')").run();
-    const qaComps = db.prepare("SELECT id FROM companies WHERE subdomain IN ('qatest-20261116', 'qatest2-20261116', 'qatest3-20261116', 'qatest4-20261116', 'qatest5-20261116') OR id IN ('comp_qatest-20261116', 'comp_qatest2-20261116', 'comp_qatest3-20261116', 'comp_qatest4-20261116', 'comp_qatest5-20261116')").all();
+    await db.prepare("DELETE FROM tickets WHERE company_id = 'comp_central_tower' AND (title LIKE '%[QA]%' OR title = '[QA] 테스트 작업지시')").run();
+    await db.prepare("DELETE FROM users WHERE company_id = 'comp_central_tower' AND (name = 'QA테스터' OR name LIKE '%QA테스터%')").run();
+    await db.prepare("DELETE FROM custom_roles WHERE company_id = 'comp_central_tower' AND (name = 'QA테스트팀' OR name LIKE '%QA테스트팀%')").run();
+    const qaComps = await db.prepare("SELECT id FROM companies WHERE subdomain IN ('qatest-20261116', 'qatest2-20261116', 'qatest3-20261116', 'qatest4-20261116', 'qatest5-20261116') OR id IN ('comp_qatest-20261116', 'comp_qatest2-20261116', 'comp_qatest3-20261116', 'comp_qatest4-20261116', 'comp_qatest5-20261116')").all();
     for (const qc of qaComps) {
-      db.prepare('DELETE FROM inspection_logs WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM inspection_templates WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM patrol_logs WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM blocked_users WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM tickets WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM locations WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM custom_roles WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM users WHERE company_id = ?').run(qc.id);
-      db.prepare('DELETE FROM companies WHERE id = ?').run(qc.id);
+      await db.prepare('DELETE FROM inspection_logs WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM inspection_templates WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM patrol_logs WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM blocked_users WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM tickets WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM locations WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM custom_roles WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM users WHERE company_id = ?').run(qc.id);
+      await db.prepare('DELETE FROM companies WHERE id = ?').run(qc.id);
     }
     // 이번 달 실제 티켓 수 재계산 반영
-    db.prepare(`
+    await db.prepare(`
       UPDATE companies
       SET monthly_used_count = (
         SELECT COUNT(*) FROM tickets
@@ -473,30 +581,30 @@ function initDatabase() {
   }
 
   // 기존 구역에 건물(본관) 기본값 설정
-  db.exec("UPDATE locations SET building = '본관' WHERE building IS NULL OR building = '';");
+  await db.exec("UPDATE locations SET building = '본관' WHERE building IS NULL OR building = '';");
 
   // 본관 8층 및 별관 샘플 구역 없으면 보강 (센트럴타워 존재 시에만)
-  const hasCentral = db.prepare("SELECT id FROM companies WHERE id = 'comp_central_tower'").get();
+  const hasCentral = await db.prepare("SELECT id FROM companies WHERE id = 'comp_central_tower'").get();
   if (hasCentral) {
-    const has8F = db.prepare("SELECT count(*) as cnt FROM locations WHERE company_id = 'comp_central_tower' AND (floor = '8F' OR name LIKE '%8층%')").get().cnt;
+    const has8F = await db.prepare("SELECT count(*) as cnt FROM locations WHERE company_id = 'comp_central_tower' AND (floor = '8F' OR name LIKE '%8층%')").get().cnt;
     if (has8F === 0) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO locations (id, company_id, floor, building, code, name, category, description)
         VALUES ('loc_8f_exec', 'comp_central_tower', '8F', '본관', 'LOC-8F-01', '본관 8층 임원실 및 대회의실', 'OFFICE', 'VIP 접견실 및 통신설비')
       `).run();
     }
-    const hasAnnex = db.prepare("SELECT count(*) as cnt FROM locations WHERE company_id = 'comp_central_tower' AND building = '별관'").get().cnt;
+    const hasAnnex = await db.prepare("SELECT count(*) as cnt FROM locations WHERE company_id = 'comp_central_tower' AND building = '별관'").get().cnt;
     if (hasAnnex === 0) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO locations (id, company_id, floor, building, code, name, category, description)
         VALUES ('loc_annex_3f', 'comp_central_tower', '3F', '별관', 'LOC-AN-01', '별관 3층 스마트오피스 지원실', 'OFFICE', '별관 사무공간')
       `).run();
     }
 
     // 순찰 샘플 데이터 초기화 (없는 경우)
-    const patrolCount = db.prepare('SELECT count(*) as cnt FROM patrol_logs').get().cnt;
+    const patrolCount = await db.prepare('SELECT count(*) as cnt FROM patrol_logs').get().cnt;
     if (patrolCount === 0) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO patrol_logs (id, company_id, user_id, worker_name, building, floor, location_name, check_items, notes, created_at)
         VALUES 
         ('pt_01', 'comp_central_tower', 'user_worker_park_s', '박보안 대원', '본관', '8F', '본관 8층 임원실 및 대회의실', '{"fire_safety":true,"lighting":true,"leak":true,"emergency_exit":true}', '비상계단 조명 및 소화전 점검 완료. 이상 무.', datetime('now', '-2 hours')),
@@ -506,7 +614,7 @@ function initDatabase() {
   }
 
   // ⭐️ 9 & 10. 현장 점검표 템플릿 & 점검 수행 기록 테이블
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS inspection_templates (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,
@@ -580,23 +688,23 @@ function initDatabase() {
     );
   `);
 
-  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}
-  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_at DATETIME;"); } catch (e) {}
-  try { db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_by TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN position_id TEXT;"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN position_name TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE inspection_logs ADD COLUMN is_confirmed INTEGER DEFAULT 0;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_at DATETIME;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE inspection_logs ADD COLUMN confirmed_by TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN position_id TEXT;"); } catch (e) {}
+  try { await db.exec("ALTER TABLE users ADD COLUMN position_name TEXT;"); } catch (e) {}
 
   if (process.env.SEED_DEMO !== 'false') {
-    seedData();
-    initInspectionSeeds();
+    await seedData();
+    await initInspectionSeeds();
   } else {
     console.log('ℹ️ SEED_DEMO=false 설정으로 데모 회사/계정 시드를 건너뜁니다.');
   }
   console.log('✅ 데이터베이스 스키마 구성 완료!');
 }
 
-function initInspectionSeeds() {
-  const tmplCount = db.prepare('SELECT count(*) as cnt FROM inspection_templates').get().cnt;
+async function initInspectionSeeds() {
+  const tmplCount = await db.prepare('SELECT count(*) as cnt FROM inspection_templates').get().cnt;
   if (tmplCount === 0) {
     const defaultTemplates = [
       {
@@ -653,14 +761,14 @@ function initInspectionSeeds() {
     ];
 
     for (const t of defaultTemplates) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO inspection_templates (id, company_id, title, target_role_id, target_role_name, building, frequency, items, description, created_at)
         VALUES (?, 'comp_central_tower', ?, ?, ?, ?, ?, ?, ?, datetime('now', '-3 days'))
       `).run(t.id, t.title, t.target_role_id, t.target_role_name, t.building, t.frequency, t.items, t.description);
     }
   }
 
-  const logCount = db.prepare('SELECT count(*) as cnt FROM inspection_logs').get().cnt;
+  const logCount = await db.prepare('SELECT count(*) as cnt FROM inspection_logs').get().cnt;
   if (logCount === 0) {
     const sampleLogs = [
       {
@@ -750,7 +858,7 @@ function initInspectionSeeds() {
     ];
 
     for (const l of sampleLogs) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO inspection_logs (id, company_id, template_id, template_title, worker_id, worker_name, role_name, building, floor, location_name, status, notes, results, completed_at)
         VALUES (?, 'comp_central_tower', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${l.completed_at})
       `).run(l.id, l.template_id, l.template_title, l.worker_id, l.worker_name, l.role_name, l.building, l.floor, l.location_name, l.status, l.notes, l.results);
@@ -758,14 +866,14 @@ function initInspectionSeeds() {
   }
 }
 
-function seedData() {
-  const compCount = db.prepare('SELECT count(*) as cnt FROM companies').get().cnt;
+async function seedData() {
+  const compCount = await db.prepare('SELECT count(*) as cnt FROM companies').get().cnt;
   if (compCount > 0) return;
 
   console.log('🌱 층수 구조 및 25개 데이터셋 생성 중...');
 
   // 기본 고객사
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO companies (id, name, subdomain, logo_url, plan, monthly_ticket_limit, monthly_used_count)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run('comp_central_tower', '센트럴타워 통합시설운영본부', 'central', 'FMS', 'FREE', 100, 48);
@@ -779,7 +887,7 @@ function seedData() {
     { id: 'role_elev', name: '승강기/특수팀', category: 'ELEVATOR', is_system: 0 }
   ];
   for (const r of roles) {
-    db.prepare('INSERT INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, ?)').run(
+    await db.prepare('INSERT INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, ?)').run(
       r.id, 'comp_central_tower', r.name, r.category, r.is_system
     );
   }
@@ -799,7 +907,7 @@ function seedData() {
     { id: 'loc_el_02', floor: 'B1', code: 'LOC-EL-02', name: '승강기 2호기 (비상용)', category: 'ELEVATOR', description: '화물용 도어' }
   ];
   for (const l of locs) {
-    db.prepare('INSERT INTO locations (id, company_id, floor, code, name, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    await db.prepare('INSERT INTO locations (id, company_id, floor, code, name, category, description) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       l.id, 'comp_central_tower', l.floor, l.code, l.name, l.category, l.description
     );
   }
@@ -820,7 +928,7 @@ function seedData() {
     { id: 'user_worker_song_v', role: 'WORKER', name: '송승강', pos: '기사', email: 'song.elev@fms.kr', phone: '010-9999-1111', custom_role_id: 'role_elev', pw: hashPassword('1111') }
   ];
   for (const u of users) {
-    db.prepare('INSERT INTO users (id, company_id, role, name, position_name, email, password, phone, custom_role_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)').run(
+    await db.prepare('INSERT INTO users (id, company_id, role, name, position_name, email, password, phone, custom_role_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)').run(
       u.id, 'comp_central_tower', u.role, u.name, u.pos, u.email, u.pw, u.phone, u.custom_role_id
     );
   }
@@ -936,7 +1044,7 @@ function seedData() {
     const isStarted = t.started === true;
     const isCompleted = t.status === 'COMPLETED';
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO tickets (
         id, ticket_no, company_id, location_id, category, title, description,
         reporter_type, reporter_name, reporter_phone, status,
@@ -967,7 +1075,7 @@ function seedData() {
   }
 
   // 블랙리스트
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO blocked_users (id, company_id, phone, reason, created_at)
     VALUES (?, ?, ?, ?, datetime('now', '-3 days'))
   `).run('block_01', 'comp_central_tower', '010-8888-1294', '허위 사진 반복 신고 (3회 누적)');

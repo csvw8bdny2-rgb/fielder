@@ -5,11 +5,32 @@ const url = require('node:url');
 const crypto = require('node:crypto');
 const QRCode = require('qrcode');
 const { db, initDatabase, hashPassword, verifyPassword } = require('./db.js');
-
-initDatabase();
+const { processAndUploadImage } = require('./r2.js');
+const { sendSmsOtpMessage, isLiveSmsConfigured } = require('./sms.js');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const APP_BASE_URL = String(process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+
+function isSecureRequest(req) {
+  const proto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return process.env.NODE_ENV === 'production' || proto === 'https';
+}
+
+function buildSessionCookie(name, value, req, maxAge = 604800) {
+  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${isSecureRequest(req) ? '; Secure' : ''}`;
+}
+
+function clearSessionCookie(name, req) {
+  return `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax${isSecureRequest(req) ? '; Secure' : ''}`;
+}
+
+function getBaseOrigin(req) {
+  if (APP_BASE_URL) return APP_BASE_URL;
+  const proto = String(req?.headers?.['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  const host = req?.headers?.['x-forwarded-host'] || req?.headers?.host || ('localhost:' + PORT);
+  return `${proto}://${host}`;
+}
 
 // ==========================================
 // ⭐️ 쿠키 및 세션 관리 헬퍼 (인터넷 다고객 보안 체계)
@@ -40,7 +61,7 @@ function isMobileClientRequest(req, body = null) {
   return false;
 }
 
-function getSession(req, forceClientType = null) {
+async function getSession(req, forceClientType = null) {
   if (!req) return null;
   const cookies = parseCookies(req);
   const isMobile = forceClientType ? forceClientType === 'mobile' : isMobileClientRequest(req);
@@ -52,7 +73,7 @@ function getSession(req, forceClientType = null) {
   if (!sessionId) return null;
 
   try {
-    const sess = db.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > datetime('now')").get(sessionId);
+    const sess = await db.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > datetime('now')").get(sessionId);
     if (!sess) return null;
 
     let user = null;
@@ -65,7 +86,7 @@ function getSession(req, forceClientType = null) {
         role_title: '슈퍼관리자'
       };
     } else {
-      user = db.prepare(`
+      user = await db.prepare(`
         SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.is_active, u.must_change_password, COALESCE(u.work_status, 'WORKING') as work_status, u.custom_role_id, r.name as role_name
         FROM users u
         LEFT JOIN custom_roles r ON u.custom_role_id = r.id
@@ -73,15 +94,15 @@ function getSession(req, forceClientType = null) {
       `).get(sess.user_id);
     }
     if (!user || user.is_active === 0) {
-      try { db.prepare("DELETE FROM sessions WHERE id = ?").run(sess.id); } catch (e) {}
+      try { await db.prepare("DELETE FROM sessions WHERE id = ?").run(sess.id); } catch (e) {}
       return null;
     }
 
     let company = null;
     if (sess.company_id) {
-      company = db.prepare("SELECT * FROM companies WHERE id = ?").get(sess.company_id);
+      company = await db.prepare("SELECT * FROM companies WHERE id = ?").get(sess.company_id);
       if (!company || company.status === 'DELETED' || company.status === 'SUSPENDED' || company.status === 'CLOSED') {
-        try { db.prepare("DELETE FROM sessions WHERE id = ?").run(sess.id); } catch (e) {}
+        try { await db.prepare("DELETE FROM sessions WHERE id = ?").run(sess.id); } catch (e) {}
         return null;
       }
     }
@@ -93,16 +114,16 @@ function getSession(req, forceClientType = null) {
   }
 }
 
-function createSession(userId, role, companyId) {
+async function createSession(userId, role, companyId) {
   const sessionId = 'sess_' + crypto.randomBytes(24).toString('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-  db.prepare("INSERT INTO sessions (id, user_id, role, company_id, expires_at) VALUES (?, ?, ?, ?, ?)").run(
+  await db.prepare("INSERT INTO sessions (id, user_id, role, company_id, expires_at) VALUES (?, ?, ?, ?, ?)").run(
     sessionId, userId, role, companyId || null, expiresAt
   );
   return { sessionId, expiresAt };
 }
 
-function deleteSession(reqOrSessionId, forceClientType = null) {
+async function deleteSession(reqOrSessionId, forceClientType = null) {
   if (!reqOrSessionId) return;
   let sessionId = null;
   if (typeof reqOrSessionId === 'string') {
@@ -113,7 +134,7 @@ function deleteSession(reqOrSessionId, forceClientType = null) {
     sessionId = isMobile ? cookies['fielder_mobile_session'] : cookies['fielder_session'];
   }
   if (sessionId) {
-    db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+    await db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
   }
 }
 
@@ -164,15 +185,15 @@ function getChannelCostUnits(channel) {
   return 1; // SMS, ALIMTALK
 }
 
-function getMonthlyMessageStats(companyId, yearMonth = null) {
+async function getMonthlyMessageStats(companyId, yearMonth = null) {
   const prefix = getMonthPrefix(yearMonth);
-  const comp = db.prepare('SELECT message_monthly_limit, message_extra_credit, message_enabled FROM companies WHERE id = ?').get(companyId) || {};
+  const comp = await db.prepare('SELECT message_monthly_limit, message_extra_credit, message_enabled FROM companies WHERE id = ?').get(companyId) || {};
   const baseLimit = comp.message_monthly_limit !== null && comp.message_monthly_limit !== undefined ? Number(comp.message_monthly_limit) : 50;
   const extraCredit = Number(comp.message_extra_credit || 0);
   const enabled = comp.message_enabled !== undefined && comp.message_enabled !== null ? Number(comp.message_enabled) === 1 : true;
   const totalLimit = baseLimit + extraCredit;
 
-  const rows = db.prepare(`
+  const rows = await db.prepare(`
     SELECT channel, purpose, status, cost_units
     FROM message_logs
     WHERE company_id = ? AND substr(created_at, 1, 7) = ?
@@ -229,7 +250,7 @@ function getMonthlyMessageStats(companyId, yearMonth = null) {
   };
 }
 
-function sendMessage(companyId, opts = {}) {
+async function sendMessage(companyId, opts = {}) {
   const provider = (process.env.MESSAGE_PROVIDER || 'mock').toLowerCase();
   const channel = String(opts.channel || 'SMS').toUpperCase();
   const purpose = String(opts.purpose || 'GENERAL').toUpperCase();
@@ -243,38 +264,38 @@ function sendMessage(companyId, opts = {}) {
     return { ok: false, status: 'FAILED', fail_reason: 'MISSING_PARAMS' };
   }
 
-  db.exec('BEGIN');
+  await db.exec('BEGIN');
   try {
-    const stats = getMonthlyMessageStats(companyId);
+    const stats = await getMonthlyMessageStats(companyId);
     if (!stats.enabled && purpose !== 'OTP') {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO message_logs (company_id, channel, purpose, recipient_phone, template_code, content_preview, provider, provider_msg_id, status, fail_reason, cost_units, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', 'MESSAGE_DISABLED', ?, ?)
       `).run(companyId, channel, purpose, recipientPhone, templateCode, contentPreview, provider, null, costUnits, nowIso);
-      db.exec('COMMIT');
+      await db.exec('COMMIT');
       return { ok: false, status: 'FAILED', fail_reason: 'MESSAGE_DISABLED' };
     }
 
     if (purpose !== 'OTP' && stats.total_limit > 0 && stats.used_count >= stats.total_limit) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO message_logs (company_id, channel, purpose, recipient_phone, template_code, content_preview, provider, provider_msg_id, status, fail_reason, cost_units, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'FAILED', 'MONTHLY_LIMIT_EXCEEDED', ?, ?)
       `).run(companyId, channel, purpose, recipientPhone, templateCode, contentPreview, provider, null, costUnits, nowIso);
-      db.exec('COMMIT');
+      await db.exec('COMMIT');
       return { ok: false, status: 'FAILED', fail_reason: 'MONTHLY_LIMIT_EXCEEDED' };
     }
 
     // Provider adapter: currently mock-only unless explicit external integration is enabled via env
     const providerMsgId = `${provider}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     const finalStatus = 'SENT';
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO message_logs (company_id, channel, purpose, recipient_phone, template_code, content_preview, provider, provider_msg_id, status, fail_reason, cost_units, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
     `).run(companyId, channel, purpose, recipientPhone, templateCode, contentPreview, provider, providerMsgId, finalStatus, costUnits, nowIso);
-    db.exec('COMMIT');
+    await db.exec('COMMIT');
     return { ok: true, status: finalStatus, provider, provider_msg_id: providerMsgId, cost_units: costUnits };
   } catch (err) {
-    try { db.exec('ROLLBACK'); } catch (e) {}
+    try { await db.exec('ROLLBACK'); } catch (e) {}
     console.error('[sendMessage error]', err.message);
     return { ok: false, status: 'FAILED', fail_reason: 'INTERNAL_ERROR' };
   }
@@ -407,9 +428,9 @@ function getFloorRank(floorStr) {
 }
 
 // ⭐️ 테넌트 식별 및 데이터 격리 (대체값 central 누수 완전 제거)
-function resolveCompanyId(parsedUrl, body, req) {
+async function resolveCompanyId(parsedUrl, body, req) {
   if (req) {
-    const auth = getSession(req);
+    const auth = await getSession(req);
     if (auth && auth.role !== 'SUPER_ADMIN' && auth.companyId) {
       return auth.companyId;
     }
@@ -421,15 +442,15 @@ function resolveCompanyId(parsedUrl, body, req) {
   }
   if (tenant && tenant !== 'null' && tenant !== 'undefined') {
     const cleanTenant = String(tenant).trim().toLowerCase();
-    const row = db.prepare("SELECT id FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(cleanTenant, String(tenant).trim());
+    const row = await db.prepare("SELECT id FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(cleanTenant, String(tenant).trim());
     if (row && row.id) return row.id;
   }
   return null;
 }
 
-function getMonthlyTicketCount(companyId) {
+async function getMonthlyTicketCount(companyId) {
   if (!companyId) return 0;
-  const row = db.prepare(`
+  const row = await db.prepare(`
     SELECT COUNT(*) as cnt FROM tickets
     WHERE company_id = ?
       AND status != 'CANCELLED'
@@ -438,9 +459,9 @@ function getMonthlyTicketCount(companyId) {
   return row ? row.cnt : 0;
 }
 
-function checkTicketLimit(companyId) {
-  const comp = db.prepare('SELECT monthly_ticket_limit, plan FROM companies WHERE id = ?').get(companyId);
-  const used = getMonthlyTicketCount(companyId);
+async function checkTicketLimit(companyId) {
+  const comp = await db.prepare('SELECT monthly_ticket_limit, plan FROM companies WHERE id = ?').get(companyId);
+  const used = await getMonthlyTicketCount(companyId);
   if (comp && comp.plan === 'FREE' && used >= comp.monthly_ticket_limit) {
     return {
       allowed: false,
@@ -450,20 +471,20 @@ function checkTicketLimit(companyId) {
   return { allowed: true };
 }
 
-function consumeTicketLimit(companyId) {
-  const used = getMonthlyTicketCount(companyId);
-  db.prepare('UPDATE companies SET monthly_used_count = ? WHERE id = ?').run(used, companyId);
+async function consumeTicketLimit(companyId) {
+  const used = await getMonthlyTicketCount(companyId);
+  await db.prepare('UPDATE companies SET monthly_used_count = ? WHERE id = ?').run(used, companyId);
 }
 
 // ⭐️ 사이트 자동 생성 및 독립 프로비저닝 (센트럴타워 의존성 완전 제거)
-function seedDefaultTenantData(companyId) {
+async function seedDefaultTenantData(companyId) {
   const roles = [
     { id: `role_maint_${companyId}`, name: '영선/시설보수팀', category: 'FACILITY' },
     { id: `role_clean_${companyId}`, name: '환경/미화청결팀', category: 'CLEANING' },
     { id: `role_sec_${companyId}`, name: '보안/방재안전팀', category: 'SECURITY' },
     { id: `role_elec_${companyId}`, name: '전기/기계설비팀', category: 'ELECTRICAL' }
   ];
-  const insertRole = db.prepare('INSERT OR IGNORE INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, 1)');
+  const insertRole = await db.prepare('INSERT OR IGNORE INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, 1)');
   for (const r of roles) {
     insertRole.run(r.id, companyId, r.name, r.category);
   }
@@ -509,7 +530,7 @@ function seedDefaultTenantData(companyId) {
     }
   ];
 
-  const insertTmpl = db.prepare(`
+  const insertTmpl = await db.prepare(`
     INSERT OR IGNORE INTO inspection_templates (id, company_id, title, target_role_id, target_role_name, building, frequency, items, description, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `);
@@ -521,7 +542,7 @@ function seedDefaultTenantData(companyId) {
 }
 
 // ⭐️ 원스톱 프로비저닝 (회사 + 관리자 계정 + 기본 설정 일괄 생성)
-function provisionTenant({ name, company_name, subdomain, adminName, admin_name, adminEmail, admin_email, adminPhone, admin_phone, password, password_hash, plan, monthlyTicketLimit, monthly_ticket_limit, enabledFeatures, enabled_features }) {
+async function provisionTenant({ name, company_name, subdomain, adminName, admin_name, adminEmail, admin_email, adminPhone, admin_phone, password, password_hash, plan, monthlyTicketLimit, monthly_ticket_limit, enabledFeatures, enabled_features }) {
   const companyName = name || company_name;
   const adminN = adminName || admin_name || '관리자';
   const adminE = adminEmail || admin_email || '';
@@ -538,7 +559,7 @@ function provisionTenant({ name, company_name, subdomain, adminName, admin_name,
     '본관': { basement: 'NONE', ground: 1, hasRooftop: false, floors: ['1F'] }
   });
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO companies (
       id, name, subdomain, logo_url, plan, status,
       monthly_ticket_limit, monthly_used_count,
@@ -555,12 +576,12 @@ function provisionTenant({ name, company_name, subdomain, adminName, admin_name,
   const userId = 'user_admin_' + slug;
   const pwdHash = password_hash || hashPassword(password || '1234');
   const mustChangePw = password_hash ? 0 : 1;
-  db.prepare(`
+  await db.prepare(`
     INSERT OR REPLACE INTO users (id, company_id, role, name, phone, email, password, is_active, must_change_password)
     VALUES (?, ?, 'ADMIN', ?, ?, ?, ?, 1, ?)
   `).run(userId, id, adminN, adminP || '010-0000-0000', adminE || `admin@${slug}.fielder.kr`, pwdHash, mustChangePw);
 
-  seedDefaultTenantData(id);
+  await seedDefaultTenantData(id);
 
   return {
     id,
@@ -590,10 +611,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (pathname === '/health' && method === 'GET') {
+      await db.prepare('SELECT 1 as ok').get();
+      return sendJSON(res, 200, {
+        status: 'ok',
+        db: db.isPg ? 'postgres' : 'sqlite',
+        r2_enabled: Boolean(process.env.R2_BUCKET && process.env.R2_ENDPOINT),
+        sms_live: isLiveSmsConfigured(),
+        timestamp: new Date().toISOString()
+      });
+    }
+
     // ==========================================
     // ⭐️ 전역 API 인증 미들웨어 (모든 /api/* 보호, 공개 엔드포인트 제외)
     // ==========================================
     const publicApiPaths = [
+      '/health',
       '/api/login',
       '/api/logout',
       '/api/signup',
@@ -605,7 +638,7 @@ const server = http.createServer(async (req, res) => {
       '/api/tickets/qr'
     ];
     if (pathname.startsWith('/api/') && !publicApiPaths.includes(pathname)) {
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       if (!reqSession) {
         return sendJSON(res, 401, { error: '로그인이 필요합니다.' });
       }
@@ -643,8 +676,8 @@ const server = http.createServer(async (req, res) => {
       // 슈퍼관리자 대리 접속(Impersonation) 쓰기 작업 감사 로그 기록
       if (reqSession.role === 'SUPER_ADMIN' && method !== 'GET' && !pathname.startsWith('/api/super-admin')) {
         try {
-          const targetCid = resolveCompanyId(parsedUrl, null, req);
-          db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          const targetCid = await resolveCompanyId(parsedUrl, null, req);
+          await db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
             .run(targetCid || null, reqSession.user.id, 'SUPER_ADMIN', 'IMPERSONATION_WRITE', 'API', pathname, `${method} ${pathname}`, new Date().toISOString());
         } catch (e) {}
       }
@@ -654,7 +687,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/public/company' && method === 'GET') {
       const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare("SELECT name, subdomain, logo_url FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+      const comp = await db.prepare("SELECT name, subdomain, logo_url FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       return sendJSON(res, 200, comp);
     }
@@ -664,13 +697,13 @@ const server = http.createServer(async (req, res) => {
       const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       const locId = (parsedUrl.query?.locId || parsedUrl.query?.location || '').trim();
       if (!tenant) return sendJSON(res, 400, { error: '테넌트 파라미터가 필요합니다.' });
-      const comp = db.prepare("SELECT id FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+      const comp = await db.prepare("SELECT id FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
       if (!comp) return sendJSON(res, 404, { error: '존재하지 않는 회사입니다.' });
       if (locId) {
-        const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? AND id = ?').all(comp.id, locId);
+        const locs = await db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? AND id = ?').all(comp.id, locId);
         return sendJSON(res, 200, locs);
       }
-      const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? ORDER BY building ASC, floor ASC, name ASC').all(comp.id);
+      const locs = await db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? ORDER BY building ASC, floor ASC, name ASC').all(comp.id);
       return sendJSON(res, 200, locs);
     }
 
@@ -678,13 +711,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/locations\/([^/]+)\/qr\.(svg|png)$/) && method === 'GET') {
       const locId = pathname.split('/')[3];
       const ext = pathname.endsWith('.png') ? 'png' : 'svg';
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const loc = db.prepare('SELECT id, company_id, name, building, floor FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
+      const loc = await db.prepare('SELECT id, company_id, name, building, floor FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
       if (!loc) return sendJSON(res, 404, { error: '해당 회사의 구역을 찾을 수 없습니다.' });
 
-      const comp = db.prepare('SELECT subdomain FROM companies WHERE id = ?').get(companyId);
+      const comp = await db.prepare('SELECT subdomain FROM companies WHERE id = ?').get(companyId);
       const slug = (comp && comp.subdomain) || 'central';
       const baseOrigin = (process.env.PUBLIC_BASE_URL || `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`).replace(/\/$/, '');
       const targetUrl = `${baseOrigin}/report?locId=${encodeURIComponent(loc.id)}&tenant=${encodeURIComponent(slug)}`;
@@ -712,11 +745,11 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ 0. 실시간 이벤트 스트림 (Server-Sent Events - 회사별 엄격 격리)
     // ==========================================
     if (pathname === '/api/events' && method === 'GET') {
-      const sseSession = getSession(req);
+      const sseSession = await getSession(req);
       if (!sseSession) {
         return sendJSON(res, 401, { error: '로그인이 필요합니다.' });
       }
-      const sseCompanyId = sseSession.role === 'SUPER_ADMIN' ? resolveCompanyId(parsedUrl, null, req) : sseSession.companyId;
+      const sseCompanyId = sseSession.role === 'SUPER_ADMIN' ? await resolveCompanyId(parsedUrl, null, req) : sseSession.companyId;
       if (!sseCompanyId) {
         return sendJSON(res, 400, { error: '테넌트 정보가 필요합니다.' });
       }
@@ -743,9 +776,9 @@ const server = http.createServer(async (req, res) => {
     // 1. 기본 설정 (회사명/로고)
     // ==========================================
     if (pathname === '/api/settings/company' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 404, { error: '회사를 찾을 수 없습니다.' });
-      const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
+      const company = await db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
       if (!company) return sendJSON(res, 404, { error: '회사를 찾을 수 없습니다.' });
       let buildings = ['본관'];
       let floors = ['1F'];
@@ -764,14 +797,14 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {}
 
       // ⭐️ users 테이블의 관리자 최신 이름을 항상 우선 반영하여 헤더와 완벽 동기화
-      const adminUser = db.prepare("SELECT name, email FROM users WHERE company_id = ? AND role = 'ADMIN' ORDER BY (id = 'user_admin') DESC, created_at ASC LIMIT 1").get(company.id);
+      const adminUser = await db.prepare("SELECT name, email FROM users WHERE company_id = ? AND role = 'ADMIN' ORDER BY (id = 'user_admin') DESC, created_at ASC LIMIT 1").get(company.id);
       const effectiveAdminName = adminUser?.name || company.admin_name || '관리자';
       const effectiveAdminEmail = adminUser?.email || company.admin_email;
 
       return sendJSON(res, 200, {
         ...company,
-        monthly_used_count: getMonthlyTicketCount(company.id),
-        message_stats: getMonthlyMessageStats(company.id),
+        monthly_used_count: await getMonthlyTicketCount(company.id),
+        message_stats: await getMonthlyMessageStats(company.id),
         admin_name: effectiveAdminName,
         admin_email: effectiveAdminEmail,
         buildings: Object.keys(buildingsConfig),
@@ -781,7 +814,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/settings/company' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트 정보를 확인할 수 없습니다.' });
       const { name, logo_url, buildings_config, buildings, floors, address, contact_phone } = body;
       if (contact_phone && !isValidPhone(contact_phone)) {
@@ -809,7 +842,7 @@ const server = http.createServer(async (req, res) => {
         if (Array.isArray(floors)) fStr = JSON.stringify(floors);
       }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE companies 
         SET name = COALESCE(?, name), 
             logo_url = COALESCE(?, logo_url),
@@ -837,9 +870,9 @@ const server = http.createServer(async (req, res) => {
     // 2. 구역 및 층수(Floor) / 건물동(Building) 위치 관리 API
     // ==========================================
     if (pathname === '/api/locations' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const locs = db.prepare('SELECT * FROM locations WHERE company_id = ?').all(companyId);
+      const locs = await db.prepare('SELECT * FROM locations WHERE company_id = ?').all(companyId);
       locs.sort((a, b) => {
         const bldgA = a.building || '본관';
         const bldgB = b.building || '본관';
@@ -853,14 +886,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/locations' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { building, floor, name, code, description } = body;
       if (!name || !name.trim() || !floor) return sendJSON(res, 400, { error: '층수와 구역명을 입력하세요.' });
       const cleanName = name.trim();
       const id = 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
       const locCode = code || `LOC-${floor}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO locations (id, company_id, building, floor, code, name, category, description, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'MAIN_TOWER', ?, ?)
       `).run(id, companyId, building || '본관', floor, locCode, cleanName, description || '', new Date().toISOString());
@@ -869,19 +902,19 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname.match(/^\/api\/locations\/([^/]+)$/) && method === 'DELETE') {
       const locId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const locRow = db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
+      const locRow = await db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(locId, companyId);
       if (!locRow) return sendJSON(res, 404, { error: '구역을 찾을 수 없습니다.' });
 
-      const ticketRef = db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE location_id = ? AND company_id = ?').get(locId, companyId).cnt;
+      const ticketRef = await db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE location_id = ? AND company_id = ?').get(locId, companyId).cnt;
       if (ticketRef > 0) {
         return sendJSON(res, 409, { error: '작업지시 또는 이력에서 사용 중인 구역은 삭제할 수 없습니다.' });
       }
 
       try {
-        db.prepare('DELETE FROM locations WHERE id = ? AND company_id = ?').run(locId, companyId);
+        await db.prepare('DELETE FROM locations WHERE id = ? AND company_id = ?').run(locId, companyId);
       } catch (delErr) {
         return sendJSON(res, 409, { error: '다른 데이터에서 참조 중인 구역은 삭제할 수 없습니다.' });
       }
@@ -891,10 +924,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/locations\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const locId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { building, floor, name, code, description } = body;
-      db.prepare(`
+      await db.prepare(`
         UPDATE locations
         SET building = ?, floor = ?, name = ?, code = ?, description = ?
         WHERE id = ? AND company_id = ?
@@ -908,7 +941,7 @@ const server = http.createServer(async (req, res) => {
     // ==========================================
     // [GET] /api/tickets (전체 티켓 및 그룹별 카운트 제공)
     if (pathname === '/api/tickets' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const query = `
         SELECT 
@@ -927,16 +960,16 @@ const server = http.createServer(async (req, res) => {
         WHERE t.company_id = ? AND t.status != 'CANCELLED'
         ORDER BY t.created_at DESC
       `;
-      const tickets = db.prepare(query).all(companyId);
+      const tickets = await db.prepare(query).all(companyId);
       return sendJSON(res, 200, tickets);
     }
 
     // ⭐️ [POST] /api/tickets/direct-dispatch (관리자 직접 작업지시 등록 및 즉시 발송)
     if (pathname === '/api/tickets/direct-dispatch' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const limitCheck = checkTicketLimit(companyId);
+      const limitCheck = await checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
@@ -962,12 +995,12 @@ const server = http.createServer(async (req, res) => {
       if (!finalLocId && (floor || location_custom_name)) {
         finalLocId = 'loc_' + Date.now();
         const locName = location_custom_name || `${building || '본관'} ${floor || '1F'} 지정 작업 구역`;
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO locations (id, company_id, building, floor, code, name, category, description)
           VALUES (?, ?, ?, ?, ?, ?, 'FACILITY', '관리자 직접 작업지시 지정 구역')
         `).run(finalLocId, companyId, building || '본관', floor || '1F', `LOC-AUTO-${Date.now().toString().slice(-4)}`, locName);
       } else if (!finalLocId) {
-        const firstLoc = db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
+        const firstLoc = await db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
         finalLocId = firstLoc ? firstLoc.id : null;
       }
 
@@ -977,12 +1010,12 @@ const server = http.createServer(async (req, res) => {
 
       // 서버 중복 생성 방지 (5초 이내 동일 제목/구역)
       const fiveSecAgo = new Date(Date.now() - 5000).toISOString();
-      const dup = db.prepare('SELECT id FROM tickets WHERE company_id = ? AND title = ? AND location_id = ? AND created_at > ? AND status != \'CANCELLED\'').get(companyId, cleanTitle, finalLocId, fiveSecAgo);
+      const dup = await db.prepare('SELECT id FROM tickets WHERE company_id = ? AND title = ? AND location_id = ? AND created_at > ? AND status != \'CANCELLED\'').get(companyId, cleanTitle, finalLocId, fiveSecAgo);
       if (dup) {
         return sendJSON(res, 409, { error: '동일한 작업지시가 방금 등록되었습니다. 잠시 후 다시 시도하세요.' });
       }
 
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       const actorName = (reqSession && reqSession.user && reqSession.user.name) || '관리자';
       const actorPhone = (reqSession && reqSession.user && reqSession.user.phone) || '';
       const nowIso = new Date().toISOString();
@@ -990,7 +1023,7 @@ const server = http.createServer(async (req, res) => {
       const id = 't_' + Date.now();
       const ticketNo = 'T-DIR-' + Math.floor(1000 + Math.random() * 9000);
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO tickets (
           id, ticket_no, company_id, location_id, category, title, description,
           reporter_type, reporter_name, reporter_phone, status,
@@ -1017,7 +1050,7 @@ const server = http.createServer(async (req, res) => {
         nowIso, nowIso
       );
 
-      consumeTicketLimit(companyId);
+      await consumeTicketLimit(companyId);
       broadcastSSE('TICKET_CREATED', { ticket_id: id, title: cleanTitle, type: 'ADMIN_DIRECT', company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, ticket_no: ticketNo, message: '관리자 직접 작업지시가 발송되었습니다.' });
     }
@@ -1026,10 +1059,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)$/) && method === 'PUT') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const existing = db.prepare('SELECT * FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const existing = await db.prepare('SELECT * FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '작업지시를 찾을 수 없습니다.' });
 
       const { title, instruction_notes, location_id, due_date, category, target_type, target_group_role_id, assignee_id } = body;
@@ -1043,7 +1076,7 @@ const server = http.createServer(async (req, res) => {
         ? (assignee_id !== undefined ? (assignee_id || null) : existing.assignee_id)
         : null;
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets
         SET title = ?,
             instruction_title = ?,
@@ -1076,20 +1109,20 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ [DELETE] /api/tickets/:id (작업지시 취소 - Soft Delete)
     if (pathname.match(/^\/api\/tickets\/([^/]+)$/) && method === 'DELETE') {
       const ticketId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const existing = db.prepare('SELECT * FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const existing = await db.prepare('SELECT * FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '작업지시를 찾을 수 없습니다.' });
 
       const nowIso = new Date().toISOString();
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets
         SET status = 'CANCELLED', cancelled_at = ?, cancelled_reason = '관리자 취소'
         WHERE id = ? AND company_id = ?
       `).run(nowIso, ticketId, companyId);
 
-      consumeTicketLimit(companyId);
+      await consumeTicketLimit(companyId);
       broadcastSSE('TICKET_UPDATED', { ticket_id: ticketId, status: 'CANCELLED', company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '작업지시가 취소되었습니다.' });
     }
@@ -1097,8 +1130,8 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ [GET] /api/tickets/:id/history (진행프로세스 상세 타임라인 히스토리)
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/history$/) && method === 'GET') {
       const ticketId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
-      const t = db.prepare(`
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
+      const t = await db.prepare(`
         SELECT 
           t.*, 
           l.name as location_name, 
@@ -1173,13 +1206,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/close-direct$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
       const closeComment = (body.comment || '').trim() || '관리자 현장 확인 후 직접 마감 종결 처리됨';
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets 
         SET 
           status = 'COMPLETED',
@@ -1198,14 +1231,14 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/claim$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
       const effWorkerId = (reqSession && reqSession.user && reqSession.user.id) || body.worker_id;
       const effWorkerName = (reqSession && reqSession.user && reqSession.user.name) || body.worker_name || '실무자';
 
-      const existing = db.prepare('SELECT company_id, assignee_id, started_at, claimed_by_name FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const existing = await db.prepare('SELECT company_id, assignee_id, started_at, claimed_by_name FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
       if (existing.started_at && existing.assignee_id && existing.assignee_id !== effWorkerId) {
         return sendJSON(res, 409, {
@@ -1214,7 +1247,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      const claimUpd = db.prepare(`
+      const claimUpd = await db.prepare(`
         UPDATE tickets 
         SET 
           status = 'IN_PROGRESS',
@@ -1226,7 +1259,7 @@ const server = http.createServer(async (req, res) => {
       `).run(effWorkerId, effWorkerName, effWorkerName, ticketId, companyId, effWorkerId);
 
       if (!claimUpd || claimUpd.changes === 0) {
-        const latest = db.prepare('SELECT claimed_by_name FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+        const latest = await db.prepare('SELECT claimed_by_name FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
         return sendJSON(res, 409, {
           error: 'ALREADY_CLAIMED',
           message: `이미 다른 담당자(${latest?.claimed_by_name || '동료 실무자'})가 접수했습니다.`
@@ -1241,12 +1274,12 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/unclaim$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId || !reqSession?.user) return sendJSON(res, 401, { error: '인증이 필요합니다.' });
 
       const effWorkerId = reqSession.user.id;
-      const upd = db.prepare(`
+      const upd = await db.prepare(`
         UPDATE tickets
         SET status = 'PENDING', assignee_id = NULL, claimed_by_name = NULL, completed_by_name = NULL, started_at = NULL
         WHERE id = ? AND company_id = ? AND target_type = 'GROUP' AND status = 'IN_PROGRESS' AND assignee_id = ?
@@ -1264,17 +1297,17 @@ const server = http.createServer(async (req, res) => {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
       const { target_type, target_group_role_id, assignee_id, instruction_title, instruction_notes, instruction_photo_url } = body;
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
 
-      const limitCheck = checkTicketLimit(companyId);
+      const limitCheck = await checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets 
         SET 
           status = 'IN_PROGRESS',
@@ -1297,7 +1330,7 @@ const server = http.createServer(async (req, res) => {
         companyId
       );
 
-      consumeTicketLimit(companyId);
+      await consumeTicketLimit(companyId);
       broadcastSSE('TICKET_ASSIGNED', { ticket_id: ticketId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '작업 지시가 발송되었습니다.' });
     }
@@ -1306,17 +1339,20 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/unresolved$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       const { unresolved_reason, unresolved_photo_url } = body;
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
 
       const effWorkerId = (reqSession && reqSession.user && reqSession.user.id) || body.worker_id || null;
       const effWorkerName = (reqSession && reqSession.user && reqSession.user.name) || body.worker_name || '실무자';
+      let savedUnresPhoto = '';
+      try { savedUnresPhoto = await processAndUploadImage(unresolved_photo_url, 'tickets/unresolved'); }
+      catch (imgErr) { return sendJSON(res, imgErr.statusCode || 400, { error: imgErr.message }); }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets
         SET 
           status = 'IN_PROGRESS',
@@ -1328,7 +1364,7 @@ const server = http.createServer(async (req, res) => {
         WHERE id = ? AND company_id = ?
       `).run(
         unresolved_reason || '현장 자재 부족으로 보류',
-        unresolved_photo_url || '',
+        savedUnresPhoto,
         effWorkerId,
         effWorkerName,
         ticketId,
@@ -1343,17 +1379,20 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/outsource$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       const { partner_name, outsource_reason, estimated_date, photo_url } = body;
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
 
       const effWorkerName = (reqSession && reqSession.user && reqSession.user.name) || body.worker_name || '실무자';
       const fullReason = `[외주의뢰: ${partner_name || '협력업체'}] ${outsource_reason || '전문 외주 출동 요청'}${estimated_date ? ` (예상일: ${estimated_date})` : ''}`;
+      let savedOutPhoto = '';
+      try { savedOutPhoto = await processAndUploadImage(photo_url, 'tickets/outsource'); }
+      catch (imgErr) { return sendJSON(res, imgErr.statusCode || 400, { error: imgErr.message }); }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets
         SET 
           status = 'IN_PROGRESS',
@@ -1364,7 +1403,7 @@ const server = http.createServer(async (req, res) => {
         WHERE id = ? AND company_id = ?
       `).run(
         fullReason,
-        photo_url || '',
+        savedOutPhoto,
         effWorkerName,
         ticketId,
         companyId
@@ -1378,21 +1417,24 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/complete$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       const { completion_notes, completion_photo_url } = body;
       const cleanNotes = (completion_notes || '').trim();
       if (!cleanNotes) {
         return sendJSON(res, 400, { error: '조치 완료 보고 내용을 입력해주세요.' });
       }
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
 
       const effWorkerId = (reqSession && reqSession.user && reqSession.user.id) || body.worker_id || null;
       const effWorkerName = (reqSession && reqSession.user && reqSession.user.name) || body.worker_name || '실무자';
+      let savedCompPhoto = '';
+      try { savedCompPhoto = await processAndUploadImage(completion_photo_url, 'tickets/completed'); }
+      catch (imgErr) { return sendJSON(res, imgErr.statusCode || 400, { error: imgErr.message }); }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets
         SET 
           status = 'WAITING_APPROVAL',
@@ -1407,7 +1449,7 @@ const server = http.createServer(async (req, res) => {
         effWorkerName,
         effWorkerId,
         cleanNotes,
-        completion_photo_url || '',
+        savedCompPhoto,
         ticketId,
         companyId
       );
@@ -1420,13 +1462,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/approve$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
       const adminComment = (body.admin_notes || '').trim() || '관리자 현장 조치 상태 확인 완료. 정상 승인 종결함.';
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE tickets
         SET 
           status = 'COMPLETED',
@@ -1442,11 +1484,11 @@ const server = http.createServer(async (req, res) => {
     // [POST] /api/tickets/:id/reject (반려)
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/reject$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
-      db.prepare('DELETE FROM tickets WHERE id = ? AND company_id = ?').run(ticketId, companyId);
+      await db.prepare('DELETE FROM tickets WHERE id = ? AND company_id = ?').run(ticketId, companyId);
       broadcastSSE('TICKET_UPDATED', { ticket_id: ticketId, action: 'DELETE', company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: '신고가 반려되었습니다.' });
     }
@@ -1454,7 +1496,7 @@ const server = http.createServer(async (req, res) => {
     // [POST] /api/tickets/staff-report (현장 실무자 이상 신고 즉시 접수 -> 관제실 신규접수 반영)
     if (pathname === '/api/tickets/staff-report' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
       const { location_id, building, floor, location_name, category, title, description, reporter_name, reporter_phone, photo_url } = body;
@@ -1464,23 +1506,23 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '이상 신고 내용 또는 제목을 입력해주세요.' });
       }
 
-      const limitCheck = checkTicketLimit(companyId);
+      const limitCheck = await checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
 
       let finalLocId = location_id || null;
       if (!finalLocId && (building || floor || location_name)) {
-        const matched = db.prepare('SELECT id FROM locations WHERE company_id = ? AND name = ? LIMIT 1').get(companyId, location_name || '');
+        const matched = await db.prepare('SELECT id FROM locations WHERE company_id = ? AND name = ? LIMIT 1').get(companyId, location_name || '');
         if (matched) finalLocId = matched.id;
       }
       if (!finalLocId) {
-        const firstLoc = db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
+        const firstLoc = await db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
         if (firstLoc) {
           finalLocId = firstLoc.id;
         } else {
           const defaultLocId = 'loc_' + Date.now();
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO locations (id, company_id, code, name, building, floor)
             VALUES (?, ?, ?, ?, ?, ?)
           `).run(defaultLocId, companyId, 'LOC-' + Date.now().toString().slice(-6), location_name || '현장 공용 구역', building || '본관', floor || '1F');
@@ -1494,7 +1536,11 @@ const server = http.createServer(async (req, res) => {
       const finalTitle = cleanTitle || `${locPrefix ? `[${locPrefix}] ` : ''}현장 이상 신고`;
       const finalDesc = locPrefix && cleanDesc ? `[위치: ${locPrefix}] ${cleanDesc}` : (cleanDesc || finalTitle);
 
-      db.prepare(`
+      let savedStaffPhoto = '';
+      try { savedStaffPhoto = await processAndUploadImage(photo_url, 'tickets/staff'); }
+      catch (imgErr) { return sendJSON(res, imgErr.statusCode || 400, { error: imgErr.message }); }
+
+      await db.prepare(`
         INSERT INTO tickets (
           id, ticket_no, company_id, location_id, category, title, description,
           reporter_type, reporter_name, reporter_phone, photo_url, status, created_at
@@ -1509,10 +1555,10 @@ const server = http.createServer(async (req, res) => {
         finalDesc,
         reporter_name || '현장 실무자',
         reporter_phone || '',
-        photo_url || null
+        savedStaffPhoto || null
       );
 
-      consumeTicketLimit(companyId);
+      await consumeTicketLimit(companyId);
       broadcastSSE('TICKET_CREATED', { ticket_id: id, title: finalTitle, type: 'STAFF_APP', company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, ticket_no: ticketNo, message: '이상 신고가 관제실에 즉시 접수되었습니다.' });
     }
@@ -1521,7 +1567,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/tickets/qr' && method === 'POST') {
       const body = await parseBody(req);
       const { location_id, category, title, description, phone, reporter_name, photo_url, qr_verify_token } = body;
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) {
         return sendJSON(res, 400, { error: 'TENANT_REQUIRED', message: '회사(테넌트) 정보를 확인할 수 없습니다.' });
       }
@@ -1536,7 +1582,7 @@ const server = http.createServer(async (req, res) => {
       if (!tokenVal) {
         return sendJSON(res, 401, { error: 'PHONE_VERIFICATION_REQUIRED', message: '휴대폰 본인 인증이 필요합니다.' });
       }
-      const tokenRow = db.prepare(`
+      const tokenRow = await db.prepare(`
         SELECT token, company_id, phone FROM qr_verify_tokens
         WHERE token = ? AND company_id = ? AND phone = ? AND used_at IS NULL AND expires_at > datetime('now')
       `).get(tokenVal, companyId, cleanPhone);
@@ -1544,12 +1590,12 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 401, { error: 'INVALID_VERIFICATION_TOKEN', message: '휴대폰 인증이 만료되었거나 유효하지 않습니다. 다시 인증해주세요.' });
       }
 
-      const isBlocked = db.prepare('SELECT reason FROM blocked_users WHERE phone = ? AND company_id = ?').get(cleanPhone, companyId);
+      const isBlocked = await db.prepare('SELECT reason FROM blocked_users WHERE phone = ? AND company_id = ?').get(cleanPhone, companyId);
       if (isBlocked) {
         return sendJSON(res, 403, { error: 'BLOCKED_USER', message: `신고가 제한된 연락처입니다: ${isBlocked.reason}` });
       }
 
-      const limitCheck = checkTicketLimit(companyId);
+      const limitCheck = await checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
@@ -1557,12 +1603,12 @@ const server = http.createServer(async (req, res) => {
       // S4 & S5: 구역 소속 검증 (타사 구역 ID 차단 + 구역 없음 500 방지)
       let finalLocId = location_id ? String(location_id).trim() : '';
       if (finalLocId) {
-        const validLoc = db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(finalLocId, companyId);
+        const validLoc = await db.prepare('SELECT id FROM locations WHERE id = ? AND company_id = ?').get(finalLocId, companyId);
         if (!validLoc) {
           return sendJSON(res, 400, { error: 'INVALID_LOCATION', message: '해당 회사의 유효한 구역이 아닙니다.' });
         }
       } else {
-        const firstLoc = db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
+        const firstLoc = await db.prepare('SELECT id FROM locations WHERE company_id = ? LIMIT 1').get(companyId);
         if (!firstLoc) {
           return sendJSON(res, 400, { error: 'NO_LOCATIONS', message: '등록된 시설 구역이 없어 신고를 접수할 수 없습니다. 관리자에게 문의하세요.' });
         }
@@ -1572,23 +1618,21 @@ const server = http.createServer(async (req, res) => {
       const cleanTitle = String(title || '').trim() || 'QR 현장 불편 신고';
       const id = 't_' + Date.now();
       const ticketNo = 'T-' + Math.floor(1000 + Math.random() * 9000);
+      let savedQrPhoto = '';
+      try { savedQrPhoto = await processAndUploadImage(photo_url, 'tickets/qr'); }
+      catch (imgErr) { return sendJSON(res, imgErr.statusCode || 400, { error: imgErr.message }); }
 
-      db.exec('BEGIN');
-      try {
-        db.prepare(`UPDATE qr_verify_tokens SET used_at = datetime('now') WHERE token = ?`).run(tokenVal);
-        db.prepare(`
+      await db.transaction(async (tx) => {
+        await tx.prepare(`UPDATE qr_verify_tokens SET used_at = datetime('now') WHERE token = ?`).run(tokenVal);
+        await tx.prepare(`
           INSERT INTO tickets (
             id, ticket_no, company_id, location_id, category, title, description, 
             reporter_type, reporter_name, reporter_phone, photo_url, status, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PUBLIC_QR', ?, ?, ?, 'PENDING', datetime('now'))
-        `).run(id, ticketNo, companyId, finalLocId, category || 'FACILITY', cleanTitle, description || '', reporter_name || '방문객', cleanPhone, photo_url || null);
-        db.exec('COMMIT');
-      } catch (err) {
-        try { db.exec('ROLLBACK'); } catch (e) {}
-        throw err;
-      }
+        `).run(id, ticketNo, companyId, finalLocId, category || 'FACILITY', cleanTitle, description || '', reporter_name || '방문객', cleanPhone, savedQrPhoto || null);
+      });
 
-      consumeTicketLimit(companyId);
+      await consumeTicketLimit(companyId);
       broadcastSSE('TICKET_CREATED', { ticket_id: id, title: cleanTitle, type: 'PUBLIC_QR', company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, ticket_no: ticketNo, message: '신고가 접수되었습니다.' });
     }
@@ -1597,9 +1641,9 @@ const server = http.createServer(async (req, res) => {
     // 4. 사용자 & 역할 관리 API
     // ==========================================
     if (pathname === '/api/users' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const users = db.prepare(`
+      const users = await db.prepare(`
         SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.custom_role_id, u.position_id,
                COALESCE(p.name, u.position_name, '') as position_name,
                COALESCE(u.work_status, 'WORKING') as work_status,
@@ -1614,7 +1658,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/users' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { name, email, password, phone, role, custom_role_id } = body;
       const targetRole = (role || 'WORKER').toUpperCase();
@@ -1640,11 +1684,11 @@ const server = http.createServer(async (req, res) => {
         : `worker_${Date.now()}_${Math.random().toString(36).slice(2, 6)}@local.fielder`;
 
       // 중복 이메일 및 중복 이름 명시적 오류 반환 (덮어쓰기 방지)
-      const dupEmail = db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
+      const dupEmail = await db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(email) = ?').get(companyId, cleanEmail);
       if (dupEmail) {
         return sendJSON(res, 409, { error: `이미 등록된 이메일 [${cleanEmail}] 입니다.` });
       }
-      const dupName = db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
+      const dupName = await db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
       if (dupName) {
         return sendJSON(res, 409, { error: `이미 동일한 이름 [${cleanName}]의 사용자가 존재합니다. 구분할 수 있는 이름을 입력하세요.` });
       }
@@ -1675,7 +1719,7 @@ const server = http.createServer(async (req, res) => {
 
       let validRoleId = null;
       if (custom_role_id && String(custom_role_id).trim()) {
-        const roleRow = db.prepare('SELECT id FROM custom_roles WHERE id = ? AND company_id = ?').get(String(custom_role_id).trim(), companyId);
+        const roleRow = await db.prepare('SELECT id FROM custom_roles WHERE id = ? AND company_id = ?').get(String(custom_role_id).trim(), companyId);
         if (!roleRow) {
           return sendJSON(res, 400, { error: '유효하지 않은 직무 그룹입니다.' });
         }
@@ -1685,7 +1729,7 @@ const server = http.createServer(async (req, res) => {
       let validPosId = null;
       let validPosName = body.position_name ? String(body.position_name).trim() : null;
       if (body.position_id && String(body.position_id).trim()) {
-        const posRow = db.prepare('SELECT id, name FROM job_positions WHERE id = ? AND company_id = ?').get(String(body.position_id).trim(), companyId);
+        const posRow = await db.prepare('SELECT id, name FROM job_positions WHERE id = ? AND company_id = ?').get(String(body.position_id).trim(), companyId);
         if (posRow) {
           validPosId = posRow.id;
           validPosName = posRow.name;
@@ -1693,7 +1737,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       try {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO users (id, company_id, role, name, email, password, phone, custom_role_id, position_id, position_name, is_active, must_change_password, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
         `).run(id, companyId, role || 'WORKER', cleanName, cleanEmail, pwdVal, cleanPhone, validRoleId, validPosId, validPosName, isTemp, nowIso);
@@ -1706,7 +1750,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (role === 'ADMIN') {
-        db.prepare("UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = '')").run(cleanName, companyId);
+        await db.prepare("UPDATE companies SET admin_name = ? WHERE id = ? AND (admin_name IS NULL OR admin_name = '')").run(cleanName, companyId);
       }
 
       broadcastSSE('USER_UPDATED', { action: 'CREATE', id, company_id: companyId }, companyId);
@@ -1721,28 +1765,28 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname.match(/^\/api\/users\/([^/]+)$/) && method === 'DELETE') {
       const userId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const targetUser = db.prepare('SELECT id, role FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
+      const targetUser = await db.prepare('SELECT id, role FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
       if (!targetUser) return sendJSON(res, 404, { error: '사용자를 찾을 수 없습니다.' });
 
       if (targetUser.role === 'ADMIN') {
-        const adminCnt = db.prepare("SELECT COUNT(*) as cnt FROM users WHERE company_id = ? AND role = 'ADMIN' AND is_active = 1").get(companyId).cnt;
+        const adminCnt = await db.prepare("SELECT COUNT(*) as cnt FROM users WHERE company_id = ? AND role = 'ADMIN' AND is_active = 1").get(companyId).cnt;
         if (adminCnt <= 1) {
           return sendJSON(res, 409, { error: '최소 1명의 활성 관리자가 필요하므로 삭제할 수 없습니다.' });
         }
       }
 
-      const ticketRef = db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE assignee_id = ?').get(userId).cnt;
-      const patrolRef = db.prepare('SELECT COUNT(*) as cnt FROM patrol_logs WHERE user_id = ?').get(userId).cnt;
+      const ticketRef = await db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE assignee_id = ?').get(userId).cnt;
+      const patrolRef = await db.prepare('SELECT COUNT(*) as cnt FROM patrol_logs WHERE user_id = ?').get(userId).cnt;
       if (ticketRef > 0 || patrolRef > 0) {
         return sendJSON(res, 409, { error: '작업지시 또는 순찰 이력이 있는 사용자는 삭제할 수 없습니다. 비활성화(퇴사/중지) 기능을 이용해주세요.' });
       }
 
       try {
-        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-        db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(userId, companyId);
+        await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+        await db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(userId, companyId);
       } catch (delErr) {
         return sendJSON(res, 409, { error: '다른 데이터에서 참조 중인 사용자는 삭제할 수 없습니다. 비활성화 기능을 이용해주세요.' });
       }
@@ -1751,23 +1795,23 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname.match(/^\/api\/users\/([^/]+)\/toggle-active$/) && method === 'PUT') {
       const userId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const targetUser = db.prepare('SELECT id, is_active, role FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
+      const targetUser = await db.prepare('SELECT id, is_active, role FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
       if (!targetUser) return sendJSON(res, 404, { error: '사용자를 찾을 수 없습니다.' });
       const nextActive = targetUser.is_active ? 0 : 1;
-      db.prepare('UPDATE users SET is_active = ? WHERE id = ? AND company_id = ?').run(nextActive, userId, companyId);
+      await db.prepare('UPDATE users SET is_active = ? WHERE id = ? AND company_id = ?').run(nextActive, userId, companyId);
       broadcastSSE('USER_UPDATED', { action: 'TOGGLE_ACTIVE', id: userId, is_active: nextActive, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, is_active: nextActive, message: nextActive ? '계정이 활성화되었습니다.' : '계정이 비활성화되었습니다.' });
     }
     if (pathname.match(/^\/api\/users\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const userId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { name, email, password, phone, role, custom_role_id } = body;
       
-      const targetUser = db.prepare('SELECT * FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
+      const targetUser = await db.prepare('SELECT * FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
       if (!targetUser) return sendJSON(res, 404, { error: '사용자를 찾을 수 없습니다.' });
 
       const newName = (name && name.trim()) ? name.trim() : targetUser.name;
@@ -1783,7 +1827,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '현장 실무자는 소속 직무 그룹을 반드시 선택해야 합니다.' });
       }
 
-      const dupEmail = db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(email) = ? AND id != ?').get(companyId, newEmail, userId);
+      const dupEmail = await db.prepare('SELECT id FROM users WHERE company_id = ? AND LOWER(email) = ? AND id != ?').get(companyId, newEmail, userId);
       if (dupEmail) return sendJSON(res, 409, { error: `이미 다른 사용자가 사용 중인 이메일 [${newEmail}] 입니다.` });
 
       let pwdVal = '';
@@ -1800,7 +1844,7 @@ const server = http.createServer(async (req, res) => {
           newPosId = null;
           newPosName = body.position_name ? String(body.position_name).trim() : null;
         } else {
-          const posRow = db.prepare('SELECT id, name FROM job_positions WHERE id = ? AND company_id = ?').get(String(body.position_id).trim(), companyId);
+          const posRow = await db.prepare('SELECT id, name FROM job_positions WHERE id = ? AND company_id = ?').get(String(body.position_id).trim(), companyId);
           if (posRow) {
             newPosId = posRow.id;
             newPosName = posRow.name;
@@ -1810,7 +1854,7 @@ const server = http.createServer(async (req, res) => {
         newPosName = String(body.position_name || '').trim() || null;
       }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE users
         SET name = ?, email = ?, password = CASE WHEN ? != '' THEN ? ELSE password END, phone = ?, role = ?, custom_role_id = ?, position_id = ?, position_name = ?, must_change_password = CASE WHEN ? != '' AND ? = 'WORKER' THEN 0 ELSE must_change_password END
         WHERE id = ? AND company_id = ?
@@ -1818,7 +1862,7 @@ const server = http.createServer(async (req, res) => {
 
       // ⭐️ 관리자(ADMIN)이거나 user_admin인 경우 companies 테이블의 admin_name 및 admin_email 도 즉시 동기화!
       if (targetUser.role === 'ADMIN' || userId === 'user_admin' || newRole === 'ADMIN') {
-        db.prepare(`
+        await db.prepare(`
           UPDATE companies
           SET admin_name = COALESCE(?, admin_name),
               admin_email = COALESCE(?, admin_email)
@@ -1832,10 +1876,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/users\/([^/]+)\/reset-password$/) && method === 'POST') {
       const userId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const targetUser = db.prepare('SELECT id, role, phone FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
+      const targetUser = await db.prepare('SELECT id, role, phone FROM users WHERE id = ? AND company_id = ?').get(userId, companyId);
       if (!targetUser) return sendJSON(res, 404, { error: '사용자를 찾을 수 없습니다.' });
 
       const isWorker = (targetUser.role || '').toUpperCase() === 'WORKER';
@@ -1850,7 +1894,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const forceChange = isWorker ? 0 : 1;
-      db.prepare('UPDATE users SET password = ?, must_change_password = ? WHERE id = ? AND company_id = ?').run(hashPassword(rawPw), forceChange, userId, companyId);
+      await db.prepare('UPDATE users SET password = ?, must_change_password = ? WHERE id = ? AND company_id = ?').run(hashPassword(rawPw), forceChange, userId, companyId);
       broadcastSSE('USER_UPDATED', { action: 'PASSWORD_RESET', id: userId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, temp_password: rawPw, message: '임시 비밀번호가 재설정되었습니다. (첫 로그인 시 변경 필수)' });
     }
@@ -1859,9 +1903,9 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ 4-1. 모바일 현장순찰 일지 API
     // ==========================================
     if (pathname === '/api/patrol' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const logs = db.prepare(`
+      const logs = await db.prepare(`
         SELECT p.*, u.role as user_role 
         FROM patrol_logs p 
         LEFT JOIN users u ON p.user_id = u.id 
@@ -1873,8 +1917,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/patrol' && method === 'POST') {
       const body = await parseBody(req);
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { building, floor, location_name, check_items, notes, photo_url } = body;
       const sessionUserId = (reqSession && reqSession.user && reqSession.user.id) || 'user_worker';
@@ -1897,7 +1941,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const id = 'pt_' + Date.now();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO patrol_logs (id, company_id, user_id, worker_name, building, floor, location_name, check_items, notes, photo_url, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
@@ -1917,9 +1961,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/roles' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const roles = db.prepare(`
+      const roles = await db.prepare(`
         SELECT r.*, count(u.id) as worker_count 
         FROM custom_roles r 
         LEFT JOIN users u ON u.custom_role_id = r.id 
@@ -1930,41 +1974,41 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/roles' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const cleanName = (body.name || '').trim();
       const category = body.category || 'FACILITY';
       if (!cleanName) return sendJSON(res, 400, { error: '직무 그룹명을 입력하세요.' });
       if (cleanName.length > 30) return sendJSON(res, 400, { error: '직무 그룹명은 최대 30자까지 입력할 수 있습니다.' });
 
-      const dup = db.prepare('SELECT id FROM custom_roles WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
+      const dup = await db.prepare('SELECT id FROM custom_roles WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
       if (dup) return sendJSON(res, 409, { error: `이미 존재하는 직무 그룹명 [${cleanName}] 입니다.` });
 
       const id = 'role_' + Date.now();
-      db.prepare('INSERT INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, 0)').run(
+      await db.prepare('INSERT INTO custom_roles (id, company_id, name, category, is_system) VALUES (?, ?, ?, ?, 0)').run(
         id, companyId, cleanName, category
       );
       return sendJSON(res, 201, { success: true, id, name: cleanName, message: '직무 그룹이 등록되었습니다.' });
     }
     if (pathname.match(/^\/api\/roles\/([^/]+)$/) && method === 'DELETE') {
       const roleId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const roleRow = db.prepare('SELECT id, is_system FROM custom_roles WHERE id = ? AND company_id = ?').get(roleId, companyId);
+      const roleRow = await db.prepare('SELECT id, is_system FROM custom_roles WHERE id = ? AND company_id = ?').get(roleId, companyId);
       if (!roleRow) return sendJSON(res, 404, { error: '직무 그룹을 찾을 수 없습니다.' });
       if (roleRow.is_system) return sendJSON(res, 409, { error: '기본 시스템 직무 그룹은 삭제할 수 없습니다.' });
 
-      const userRef = db.prepare('SELECT COUNT(*) as cnt FROM users WHERE custom_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
-      const ticketRef = db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE target_group_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
-      const tmplRef = db.prepare('SELECT COUNT(*) as cnt FROM inspection_templates WHERE target_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
+      const userRef = await db.prepare('SELECT COUNT(*) as cnt FROM users WHERE custom_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
+      const ticketRef = await db.prepare('SELECT COUNT(*) as cnt FROM tickets WHERE target_group_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
+      const tmplRef = await db.prepare('SELECT COUNT(*) as cnt FROM inspection_templates WHERE target_role_id = ? AND company_id = ?').get(roleId, companyId).cnt;
 
       if (userRef > 0 || ticketRef > 0 || tmplRef > 0) {
         return sendJSON(res, 409, { error: '작업지시, 점검표 또는 소속 사용자에서 사용 중인 직무 그룹은 삭제할 수 없습니다.' });
       }
 
       try {
-        db.prepare('DELETE FROM custom_roles WHERE id = ? AND company_id = ?').run(roleId, companyId);
+        await db.prepare('DELETE FROM custom_roles WHERE id = ? AND company_id = ?').run(roleId, companyId);
       } catch (delErr) {
         return sendJSON(res, 409, { error: '다른 데이터에서 참조 중인 직무 그룹은 삭제할 수 없습니다.' });
       }
@@ -1973,17 +2017,17 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/roles\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const roleId = pathname.split('/')[3];
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const cleanName = (body.name || '').trim();
       const category = body.category || 'FACILITY';
       if (!cleanName) return sendJSON(res, 400, { error: '직무 그룹명을 입력하세요.' });
       if (cleanName.length > 30) return sendJSON(res, 400, { error: '직무 그룹명은 최대 30자까지 입력할 수 있습니다.' });
 
-      const dup = db.prepare('SELECT id FROM custom_roles WHERE company_id = ? AND LOWER(TRIM(name)) = ? AND id != ?').get(companyId, cleanName.toLowerCase(), roleId);
+      const dup = await db.prepare('SELECT id FROM custom_roles WHERE company_id = ? AND LOWER(TRIM(name)) = ? AND id != ?').get(companyId, cleanName.toLowerCase(), roleId);
       if (dup) return sendJSON(res, 409, { error: `이미 존재하는 직무 그룹명 [${cleanName}] 입니다.` });
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE custom_roles
         SET name = ?, category = ?
         WHERE id = ? AND company_id = ?
@@ -1993,9 +2037,9 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 직위(직책) 관리 API (팀장/반장/간사/조장/사원 등)
     if (pathname === '/api/positions' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      let positions = db.prepare(`
+      let positions = await db.prepare(`
         SELECT p.*, COUNT(u.id) as worker_count
         FROM job_positions p
         LEFT JOIN users u ON u.position_id = p.id AND u.company_id = p.company_id
@@ -2005,11 +2049,11 @@ const server = http.createServer(async (req, res) => {
       `).all(companyId);
       if (positions.length === 0) {
         const defaults = ['팀장', '반장', '간사', '조장', '기사', '사원'];
-        const ins = db.prepare('INSERT INTO job_positions (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)');
+        const ins = await db.prepare('INSERT INTO job_positions (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)');
         defaults.forEach((pName, idx) => {
           ins.run(`pos_${companyId}_${idx + 1}`, companyId, pName, idx + 1);
         });
-        positions = db.prepare(`
+        positions = await db.prepare(`
           SELECT p.*, COUNT(u.id) as worker_count
           FROM job_positions p
           LEFT JOIN users u ON u.position_id = p.id AND u.company_id = p.company_id
@@ -2022,42 +2066,42 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/positions' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const cleanName = String(body.name || '').trim();
       if (!cleanName) return sendJSON(res, 400, { error: '직위명을 입력하세요.' });
       if (cleanName.length > 20) return sendJSON(res, 400, { error: '직위명은 최대 20자까지 입력할 수 있습니다.' });
 
-      const dup = db.prepare('SELECT id FROM job_positions WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
+      const dup = await db.prepare('SELECT id FROM job_positions WHERE company_id = ? AND LOWER(TRIM(name)) = ?').get(companyId, cleanName.toLowerCase());
       if (dup) return sendJSON(res, 409, { error: `이미 존재하는 직위 [${cleanName}] 입니다.` });
 
       const id = 'pos_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
-      const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) as m FROM job_positions WHERE company_id = ?').get(companyId).m;
-      db.prepare('INSERT INTO job_positions (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)').run(id, companyId, cleanName, maxOrder + 1);
+      const maxOrder = await db.prepare('SELECT COALESCE(MAX(sort_order), 0) as m FROM job_positions WHERE company_id = ?').get(companyId).m;
+      await db.prepare('INSERT INTO job_positions (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)').run(id, companyId, cleanName, maxOrder + 1);
       return sendJSON(res, 201, { success: true, id, name: cleanName, message: '직위가 등록되었습니다.' });
     }
     const posMatch = pathname.match(/^\/api\/positions\/([^/]+)$/);
     if (posMatch && (method === 'PUT' || method === 'DELETE')) {
       const posId = posMatch[1];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const existing = db.prepare('SELECT * FROM job_positions WHERE id = ? AND company_id = ?').get(posId, companyId);
+      const existing = await db.prepare('SELECT * FROM job_positions WHERE id = ? AND company_id = ?').get(posId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '직위를 찾을 수 없습니다.' });
 
       if (method === 'DELETE') {
-        db.prepare('UPDATE users SET position_id = NULL, position_name = NULL WHERE position_id = ? AND company_id = ?').run(posId, companyId);
-        db.prepare('DELETE FROM job_positions WHERE id = ? AND company_id = ?').run(posId, companyId);
+        await db.prepare('UPDATE users SET position_id = NULL, position_name = NULL WHERE position_id = ? AND company_id = ?').run(posId, companyId);
+        await db.prepare('DELETE FROM job_positions WHERE id = ? AND company_id = ?').run(posId, companyId);
         return sendJSON(res, 200, { success: true, message: '직위가 삭제되었습니다.' });
       }
 
       const body = await parseBody(req);
       const cleanName = String(body.name || '').trim();
       if (!cleanName) return sendJSON(res, 400, { error: '직위명을 입력하세요.' });
-      const dup = db.prepare('SELECT id FROM job_positions WHERE company_id = ? AND LOWER(TRIM(name)) = ? AND id != ?').get(companyId, cleanName.toLowerCase(), posId);
+      const dup = await db.prepare('SELECT id FROM job_positions WHERE company_id = ? AND LOWER(TRIM(name)) = ? AND id != ?').get(companyId, cleanName.toLowerCase(), posId);
       if (dup) return sendJSON(res, 409, { error: `이미 존재하는 직위 [${cleanName}] 입니다.` });
 
-      db.prepare('UPDATE job_positions SET name = ? WHERE id = ? AND company_id = ?').run(cleanName, posId, companyId);
-      db.prepare('UPDATE users SET position_name = ? WHERE position_id = ? AND company_id = ?').run(cleanName, posId, companyId);
+      await db.prepare('UPDATE job_positions SET name = ? WHERE id = ? AND company_id = ?').run(cleanName, posId, companyId);
+      await db.prepare('UPDATE users SET position_name = ? WHERE position_id = ? AND company_id = ?').run(cleanName, posId, companyId);
       return sendJSON(res, 200, { success: true, message: '직위가 수정되었습니다.' });
     }
 
@@ -2065,10 +2109,10 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ 4-2. 현장 점검표 템플릿 및 점검 수행 이력 API
     // ==========================================
     if (pathname === '/api/inspections/templates' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const activeOnly = parsedUrl.query?.activeOnly === 'true' || parsedUrl.query?.activeOnly === '1';
-      const templates = db.prepare(`
+      const templates = await db.prepare(`
         SELECT t.*, r.name as role_display_name
         FROM inspection_templates t
         LEFT JOIN custom_roles r ON t.target_role_id = r.id
@@ -2079,13 +2123,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/inspections/templates' && method === 'POST') {
       const body = await parseBody(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const { title, target_role_id, target_role_name, building, frequency, items, description } = body;
       if (!title) return sendJSON(res, 400, { error: '점검표 명칭을 입력하세요.' });
       const id = 'tmpl_' + Date.now();
       const itemsStr = typeof items === 'object' ? JSON.stringify(items) : (items || '[]');
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO inspection_templates (id, company_id, title, target_role_id, target_role_name, building, frequency, items, description, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
@@ -2105,22 +2149,22 @@ const server = http.createServer(async (req, res) => {
     const toggleTmplMatch = pathname.match(/^\/api\/inspections\/templates\/([^/]+)\/toggle$/);
     if (toggleTmplMatch && method === 'POST') {
       const tmplId = toggleTmplMatch[1];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const row = db.prepare('SELECT id, title, COALESCE(is_active, 1) AS is_active FROM inspection_templates WHERE id = ? AND company_id = ?').get(tmplId, companyId);
+      const row = await db.prepare('SELECT id, title, COALESCE(is_active, 1) AS is_active FROM inspection_templates WHERE id = ? AND company_id = ?').get(tmplId, companyId);
       if (!row) return sendJSON(res, 404, { error: '상황일지 서식을 찾을 수 없습니다.' });
       const nextActive = row.is_active ? 0 : 1;
-      db.prepare('UPDATE inspection_templates SET is_active = ? WHERE id = ? AND company_id = ?').run(nextActive, tmplId, companyId);
+      await db.prepare('UPDATE inspection_templates SET is_active = ? WHERE id = ? AND company_id = ?').run(nextActive, tmplId, companyId);
       broadcastSSE('INSPECTION_TEMPLATE_UPDATED', { action: 'TOGGLE', id: tmplId, is_active: nextActive, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, id: tmplId, is_active: nextActive, message: nextActive ? '상황일지 서식이 활성화되었습니다.' : '상황일지 서식이 비활성화되었습니다.' });
     }
     if (pathname.match(/^\/api\/inspections\/templates\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const tmplId = pathname.split('/')[4];
       const { title, target_role_id, target_role_name, building, frequency, items, description } = await parseBody(req);
-      const tmplRow = db.prepare('SELECT company_id FROM inspection_templates WHERE id = ?').get(tmplId);
-      const companyId = (tmplRow && tmplRow.company_id) || resolveCompanyId(parsedUrl, null, req);
+      const tmplRow = await db.prepare('SELECT company_id FROM inspection_templates WHERE id = ?').get(tmplId);
+      const companyId = (tmplRow && tmplRow.company_id) || await resolveCompanyId(parsedUrl, null, req);
       const itemsStr = typeof items === 'object' ? JSON.stringify(items) : (items || '[]');
-      db.prepare(`
+      await db.prepare(`
         UPDATE inspection_templates
         SET title = ?, target_role_id = ?, target_role_name = ?, building = ?, frequency = ?, items = ?, description = ?
         WHERE id = ?
@@ -2139,10 +2183,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname.match(/^\/api\/inspections\/templates\/([^/]+)$/) && method === 'DELETE') {
       const tmplId = pathname.split('/')[4];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       try {
-        db.prepare('DELETE FROM inspection_templates WHERE id = ? AND company_id = ?').run(tmplId, companyId);
+        await db.prepare('DELETE FROM inspection_templates WHERE id = ? AND company_id = ?').run(tmplId, companyId);
       } catch (delErr) {
         return sendJSON(res, 409, { error: '점검 이력에서 참조 중인 점검표 양식은 삭제할 수 없습니다.' });
       }
@@ -2152,7 +2196,7 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 점검 일정(주기별 완료/누락 현황) API
     if (pathname === '/api/inspections/schedule' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const kstTodayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
       const dateStr = (parsedUrl.query?.date || kstTodayStr).slice(0, 10);
@@ -2165,8 +2209,8 @@ const server = http.createServer(async (req, res) => {
       const weekEnd = sunDate.toISOString().slice(0, 10);
       const monthPrefix = dateStr.slice(0, 7);
 
-      const templates = db.prepare('SELECT * FROM inspection_templates WHERE company_id = ? ORDER BY created_at DESC').all(companyId);
-      const logs = db.prepare('SELECT * FROM inspection_logs WHERE company_id = ? ORDER BY completed_at DESC').all(companyId);
+      const templates = await db.prepare('SELECT * FROM inspection_templates WHERE company_id = ? ORDER BY created_at DESC').all(companyId);
+      const logs = await db.prepare('SELECT * FROM inspection_logs WHERE company_id = ? ORDER BY completed_at DESC').all(companyId);
 
       const items = templates.map(t => {
         const freq = (t.frequency || 'DAILY').toUpperCase();
@@ -2208,7 +2252,7 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 점검표별 기간 통계 API
     if (pathname === '/api/inspections/statistics' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
       const endDate = (parsedUrl.query?.endDate || todayStr).slice(0, 10);
@@ -2216,8 +2260,8 @@ const server = http.createServer(async (req, res) => {
       const startDate = (parsedUrl.query?.startDate || startDefault).slice(0, 10);
       const templateId = parsedUrl.query?.templateId || 'ALL';
 
-      const templates = db.prepare('SELECT * FROM inspection_templates WHERE company_id = ?').all(companyId);
-      const allLogs = db.prepare(`
+      const templates = await db.prepare('SELECT * FROM inspection_templates WHERE company_id = ?').all(companyId);
+      const allLogs = await db.prepare(`
         SELECT * FROM inspection_logs
         WHERE company_id = ? AND substr(completed_at, 1, 10) >= ? AND substr(completed_at, 1, 10) <= ?
         ORDER BY completed_at DESC
@@ -2288,8 +2332,8 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ 공지사항 게시판 API (업무보고 > 공지사항 / 모바일 실무자 공지 열람)
     if (pathname === '/api/notices' && method === 'GET') {
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
       const userId = reqSession?.user?.id || '';
@@ -2297,7 +2341,7 @@ const server = http.createServer(async (req, res) => {
       const scopeFilter = (parsedUrl.query?.scope || '').trim().toUpperCase();
       const roleFilter = (parsedUrl.query?.role_id || '').trim();
 
-      let rows = db.prepare(`
+      let rows = await db.prepare(`
         SELECT n.*,
           EXISTS(SELECT 1 FROM notice_reads nr WHERE nr.notice_id = n.id AND nr.user_id = ?) AS is_read,
           (SELECT COUNT(*) FROM notice_reads nr WHERE nr.notice_id = n.id) AS read_count
@@ -2307,9 +2351,9 @@ const server = http.createServer(async (req, res) => {
       `).all(userId, companyId);
 
       if (!isManager && reqSession?.user) {
-        const dbUser = db.prepare('SELECT custom_role_id, role FROM users WHERE id = ?').get(userId);
+        const dbUser = await db.prepare('SELECT custom_role_id, role FROM users WHERE id = ?').get(userId);
         const userRoleId = dbUser?.custom_role_id || reqSession.user.custom_role_id || '';
-        const roleRow = userRoleId ? db.prepare('SELECT name FROM custom_roles WHERE id = ? AND company_id = ?').get(userRoleId, companyId) : null;
+        const roleRow = userRoleId ? await db.prepare('SELECT name FROM custom_roles WHERE id = ? AND company_id = ?').get(userRoleId, companyId) : null;
         const userRoleName = roleRow?.name || '';
         rows = rows.filter(n =>
           n.target_scope === 'ALL' ||
@@ -2329,8 +2373,8 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/notices' && method === 'POST') {
       const body = await parseBody(req);
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
       const title = String(body.title || '').trim();
@@ -2347,7 +2391,7 @@ const server = http.createServer(async (req, res) => {
       let targetRoleName = '전체';
       if (targetScope === 'GROUP') {
         if (!targetRoleId) return sendJSON(res, 400, { error: '대상 직무그룹을 선택하세요.' });
-        const roleRow = db.prepare('SELECT id, name FROM custom_roles WHERE id = ? AND company_id = ?').get(targetRoleId, companyId);
+        const roleRow = await db.prepare('SELECT id, name FROM custom_roles WHERE id = ? AND company_id = ?').get(targetRoleId, companyId);
         if (!roleRow) return sendJSON(res, 404, { error: '선택한 직무그룹을 찾을 수 없습니다.' });
         targetRoleName = roleRow.name;
       }
@@ -2357,38 +2401,38 @@ const server = http.createServer(async (req, res) => {
       const authorId = reqSession?.user?.id || 'admin';
       const authorName = reqSession?.user?.name || '관리자';
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO notices (id, company_id, title, content, target_scope, target_role_id, target_role_name, is_pinned, author_id, author_name, attachment_name, attachment_url, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, companyId, title, content, targetScope, targetRoleId, targetRoleName, isPinned, authorId, authorName, attachmentName, attachmentUrl, nowIso);
 
-      const created = db.prepare('SELECT * FROM notices WHERE id = ?').get(id);
+      const created = await db.prepare('SELECT * FROM notices WHERE id = ?').get(id);
       broadcastSSE('NOTICE_CREATED', { id, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, notice: created });
     }
 
     const noticeReadMatch = pathname.match(/^\/api\/notices\/([^/]+)\/read$/);
     if (noticeReadMatch && method === 'POST') {
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId || !reqSession?.user?.id) return sendJSON(res, 401, { error: '인증이 필요합니다.' });
       const noticeId = noticeReadMatch[1];
-      const existing = db.prepare('SELECT id FROM notices WHERE id = ? AND company_id = ?').get(noticeId, companyId);
+      const existing = await db.prepare('SELECT id FROM notices WHERE id = ? AND company_id = ?').get(noticeId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '공지사항을 찾을 수 없습니다.' });
-      db.prepare('INSERT OR IGNORE INTO notice_reads (notice_id, user_id, read_at) VALUES (?, ?, ?)').run(noticeId, reqSession.user.id, new Date().toISOString());
+      await db.prepare('INSERT OR IGNORE INTO notice_reads (notice_id, user_id, read_at) VALUES (?, ?, ?)').run(noticeId, reqSession.user.id, new Date().toISOString());
       return sendJSON(res, 200, { success: true });
     }
 
     const noticeIdMatch = pathname.match(/^\/api\/notices\/([^/]+)$/);
     if (noticeIdMatch && (method === 'PUT' || method === 'DELETE')) {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
       const noticeId = noticeIdMatch[1];
-      const existing = db.prepare('SELECT * FROM notices WHERE id = ? AND company_id = ?').get(noticeId, companyId);
+      const existing = await db.prepare('SELECT * FROM notices WHERE id = ? AND company_id = ?').get(noticeId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '공지사항을 찾을 수 없습니다.' });
 
       if (method === 'DELETE') {
-        db.prepare('DELETE FROM notices WHERE id = ? AND company_id = ?').run(noticeId, companyId);
+        await db.prepare('DELETE FROM notices WHERE id = ? AND company_id = ?').run(noticeId, companyId);
         return sendJSON(res, 200, { success: true });
       }
 
@@ -2402,26 +2446,26 @@ const server = http.createServer(async (req, res) => {
 
       let targetRoleName = '전체';
       if (targetScope === 'GROUP') {
-        const roleRow = db.prepare('SELECT id, name FROM custom_roles WHERE id = ? AND company_id = ?').get(targetRoleId, companyId);
+        const roleRow = await db.prepare('SELECT id, name FROM custom_roles WHERE id = ? AND company_id = ?').get(targetRoleId, companyId);
         if (!roleRow) return sendJSON(res, 404, { error: '선택한 직무그룹을 찾을 수 없습니다.' });
         targetRoleName = roleRow.name;
       }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE notices
         SET title = ?, content = ?, target_scope = ?, target_role_id = ?, target_role_name = ?, is_pinned = ?, updated_at = ?
         WHERE id = ? AND company_id = ?
       `).run(title, content, targetScope, targetRoleId, targetRoleName, isPinned, new Date().toISOString(), noticeId, companyId);
 
-      const updated = db.prepare('SELECT * FROM notices WHERE id = ?').get(noticeId);
+      const updated = await db.prepare('SELECT * FROM notices WHERE id = ?').get(noticeId);
       return sendJSON(res, 200, { success: true, notice: updated });
     }
 
     // ⭐️ 점검 결과 이력 API
     if (pathname === '/api/inspections/logs' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const logs = db.prepare(`
+      const logs = await db.prepare(`
         SELECT * FROM inspection_logs
         WHERE company_id = ?
         ORDER BY completed_at DESC
@@ -2430,10 +2474,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/inspections/logs' && method === 'POST') {
       const body = await parseBody(req);
-      const reqSession = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      const reqSession = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const limitCheck = checkTicketLimit(companyId);
+      const limitCheck = await checkTicketLimit(companyId);
       if (!limitCheck.allowed) {
         return sendJSON(res, 403, { error: 'LIMIT_EXCEEDED', message: limitCheck.message });
       }
@@ -2453,7 +2497,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '모든 필수 점검 항목에 응답해주세요.' });
       }
       if (template_id) {
-        const tmpl = db.prepare('SELECT items FROM inspection_templates WHERE id = ? AND company_id = ?').get(template_id, companyId);
+        const tmpl = await db.prepare('SELECT items FROM inspection_templates WHERE id = ? AND company_id = ?').get(template_id, companyId);
         if (tmpl && tmpl.items) {
           try {
             const tmplItems = JSON.parse(tmpl.items);
@@ -2478,7 +2522,7 @@ const server = http.createServer(async (req, res) => {
 
       const id = 'ins_log_' + Date.now();
       const resultsStr = JSON.stringify(parsedResults);
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO inspection_logs (id, company_id, template_id, template_title, worker_id, worker_name, role_name, building, floor, location_name, results, status, notes, photo_url, completed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
@@ -2497,31 +2541,31 @@ const server = http.createServer(async (req, res) => {
         cleanNotes,
         photo_url || ''
       );
-      consumeTicketLimit(companyId);
+      await consumeTicketLimit(companyId);
       broadcastSSE('INSPECTION_LOG_SUBMITTED', { id, worker_name: sessionWorkerName, template_title, location_name, status: computedStatus, company_id: companyId }, companyId);
       return sendJSON(res, 201, { success: true, id, status: computedStatus, message: '현장 점검 결과가 성공적으로 등록되었습니다.' });
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)$/) && method === 'GET') {
       const logId = pathname.split('/')[4];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const log = db.prepare('SELECT * FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
+      const log = await db.prepare('SELECT * FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
       if (!log) return sendJSON(res, 404, { error: '기록을 찾을 수 없습니다.' });
       return sendJSON(res, 200, log);
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)\/confirm$/) && method === 'POST') {
       const logId = pathname.split('/')[4];
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       const isManager = reqSession && (reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN');
       if (!isManager) return sendJSON(res, 403, { error: '관리자 권한이 필요합니다.' });
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const log = db.prepare('SELECT company_id, is_confirmed, worker_name FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
+      const log = await db.prepare('SELECT company_id, is_confirmed, worker_name FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
       if (!log) return sendJSON(res, 404, { error: '기록을 찾을 수 없습니다.' });
       const nextStatus = log.is_confirmed ? 0 : 1;
       const confirmerName = (reqSession.user && reqSession.user.name) || '관리자';
-      db.prepare(`
+      await db.prepare(`
         UPDATE inspection_logs
         SET is_confirmed = ?,
             confirmed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END,
@@ -2533,13 +2577,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname.match(/^\/api\/inspections\/logs\/([^/]+)$/) && (method === 'PUT' || method === 'POST')) {
       const logId = pathname.split('/')[4];
-      const reqSession = getSession(req);
+      const reqSession = await getSession(req);
       const isManager = reqSession && (reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN');
       if (!isManager) return sendJSON(res, 403, { error: '관리자 권한이 필요합니다.' });
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
 
-      const logRow = db.prepare('SELECT company_id, results, status FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
+      const logRow = await db.prepare('SELECT company_id, results, status FROM inspection_logs WHERE id = ? AND company_id = ?').get(logId, companyId);
       if (!logRow) return sendJSON(res, 404, { error: '기록을 찾을 수 없습니다.' });
 
       const { building, floor, location_name, notes, results, is_confirmed } = await parseBody(req);
@@ -2562,7 +2606,7 @@ const server = http.createServer(async (req, res) => {
         nextComputedStatus = isBad ? '불량' : (isWarn ? '주의' : '양호');
       }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE inspection_logs
         SET building = COALESCE(?, building),
             floor = COALESCE(?, floor),
@@ -2596,26 +2640,37 @@ const server = http.createServer(async (req, res) => {
       const pHits = prune(global._otpRateMap.get(phoneKey) || [], 24 * 3600 * 1000);
       const pMinHits = pHits.filter(t => nowMs - t < 60 * 1000);
       const ipMinHits = prune(global._otpRateMap.get(ipKey) || [], 60 * 1000);
-      if (pMinHits.length >= 3 || pHits.length >= 10 || ipMinHits.length >= 10) {
-        return sendJSON(res, 429, { error: 'RATE_LIMITED', message: '인증번호 요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.' });
+      if (pMinHits.length >= 1) {
+        const waitSec = Math.max(1, Math.ceil((60 * 1000 - (nowMs - pMinHits[pMinHits.length - 1])) / 1000));
+        return sendJSON(res, 429, { error: 'COOLDOWN', message: `동일 번호 재발송은 ${waitSec}초 후 가능합니다.` });
+      }
+      if (pHits.length >= 10 || ipMinHits.length >= 10) {
+        return sendJSON(res, 429, { error: 'RATE_LIMITED', message: '일일 인증번호 발송 한도를 초과했습니다. 내일 다시 시도해주세요.' });
       }
       pHits.push(nowMs);
       ipMinHits.push(nowMs);
       global._otpRateMap.set(phoneKey, pHits);
       global._otpRateMap.set(ipKey, ipMinHits);
 
-      const blocked = db.prepare('SELECT reason FROM blocked_users WHERE phone = ?').get(cleanPhone);
+      const blocked = await db.prepare('SELECT reason FROM blocked_users WHERE phone = ?').get(cleanPhone);
       if (blocked) {
         return sendJSON(res, 403, { error: 'BLOCKED', message: `신고 제한 연락처입니다: ${blocked.reason}` });
       }
       const otpCode = crypto.randomInt(100000, 999999).toString();
-      db.prepare(`
-        INSERT OR REPLACE INTO sms_otps (phone, otp_code, expires_at)
+      await db.prepare('DELETE FROM sms_otps WHERE phone = ?').run(cleanPhone);
+      await db.prepare(`
+        INSERT INTO sms_otps (phone, otp_code, expires_at)
         VALUES (?, ?, datetime('now', '+5 minutes'))
       `).run(cleanPhone, otpCode);
-      const companyId = resolveCompanyId(parsedUrl, body, req);
+      try {
+        await sendSmsOtpMessage(cleanPhone, otpCode);
+      } catch (smsErr) {
+        console.error('[SMS Send Error]:', smsErr.message);
+        return sendJSON(res, 502, { error: 'SMS_SEND_FAILED', message: smsErr.message || '문자 발송에 실패했습니다.' });
+      }
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
       if (companyId) {
-        sendMessage(companyId, {
+        await sendMessage(companyId, {
           channel: 'SMS',
           purpose: 'OTP',
           recipient_phone: cleanPhone,
@@ -2634,16 +2689,16 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: 'INVALID_PHONE', message: '올바른 휴대폰 번호를 입력해주세요.' });
       }
       // S2 & Item 4: QA 우회는 env가 명시적으로 'true'이고 DB 상의 회사 subdomain이 qa/test일 때만 허용
-      const companyId = resolveCompanyId(parsedUrl, body, req);
-      const dbComp = companyId ? db.prepare("SELECT id, subdomain FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId) : null;
+      const companyId = await resolveCompanyId(parsedUrl, body, req);
+      const dbComp = companyId ? await db.prepare("SELECT id, subdomain FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId) : null;
       const dbSlug = (dbComp && dbComp.subdomain ? dbComp.subdomain : '').toLowerCase();
       const qaBypassEnabled = process.env.ENABLE_QA_OTP_BYPASS === 'true';
       const isQaContext = qaBypassEnabled && dbSlug && (dbSlug.includes('qa') || dbSlug.includes('test'));
 
-      const issueVerifyToken = () => {
+      const issueVerifyToken = async () => {
         const token = 'qrt_' + crypto.randomBytes(24).toString('hex');
         const nowIso = new Date().toISOString();
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO qr_verify_tokens (token, company_id, phone, expires_at, created_at)
           VALUES (?, ?, ?, datetime('now', '+10 minutes'), ?)
         `).run(token, companyId || 'unknown', cleanPhone, nowIso);
@@ -2651,43 +2706,43 @@ const server = http.createServer(async (req, res) => {
       };
 
       if (isQaContext && otpVal === '000000') {
-        const token = issueVerifyToken();
+        const token = await issueVerifyToken();
         return sendJSON(res, 200, { success: true, qa_bypass: true, verification_token: token, message: 'QA 테스트 인증이 완료되었습니다.' });
       }
-      const record = db.prepare("SELECT * FROM sms_otps WHERE phone = ? AND expires_at > datetime('now')").get(cleanPhone);
+      const record = await db.prepare("SELECT * FROM sms_otps WHERE phone = ? AND expires_at > datetime('now')").get(cleanPhone);
       if (record && record.otp_code === otpVal) {
-        db.prepare('DELETE FROM sms_otps WHERE phone = ?').run(cleanPhone);
-        const token = issueVerifyToken();
+        await db.prepare('DELETE FROM sms_otps WHERE phone = ?').run(cleanPhone);
+        const token = await issueVerifyToken();
         return sendJSON(res, 200, { success: true, verification_token: token, message: '인증이 완료되었습니다.' });
       }
       return sendJSON(res, 400, { error: 'INVALID_OTP', message: '인증번호가 일치하지 않거나 만료되었습니다.' });
     }
 
     if (pathname === '/api/blocked-users' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      const blocked = db.prepare('SELECT * FROM blocked_users WHERE company_id = ?').all(companyId);
+      const blocked = await db.prepare('SELECT * FROM blocked_users WHERE company_id = ?').all(companyId);
       return sendJSON(res, 200, blocked);
     }
     if (pathname.match(/^\/api\/blocked-users\/([^/]+)$/) && method === 'DELETE') {
       const blockId = pathname.split('/')[3];
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) return sendJSON(res, 400, { error: '테넌트를 식별할 수 없습니다.' });
-      db.prepare('DELETE FROM blocked_users WHERE id = ? AND company_id = ?').run(blockId, companyId);
+      await db.prepare('DELETE FROM blocked_users WHERE id = ? AND company_id = ?').run(blockId, companyId);
       return sendJSON(res, 200, { success: true });
     }
 
     // ⭐️ [ANALYTICS] 실시간 테넌트 통계 및 보고서 API (DB 실시간 연동)
     if (pathname === '/api/analytics' && method === 'GET') {
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!companyId) {
         return sendJSON(res, 404, { error: '고객사 테넌트를 찾을 수 없습니다.' });
       }
 
-      const total = db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status != 'CANCELLED'").get(companyId).count;
-      const completed = db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status = 'COMPLETED'").get(companyId).count;
-      const inProgress = db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status = 'IN_PROGRESS'").get(companyId).count;
-      const pending = db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status = 'PENDING'").get(companyId).count;
+      const total = await db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status != 'CANCELLED'").get(companyId).count;
+      const completed = await db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status = 'COMPLETED'").get(companyId).count;
+      const inProgress = await db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status = 'IN_PROGRESS'").get(companyId).count;
+      const pending = await db.prepare("SELECT count(*) as count FROM tickets WHERE company_id = ? AND status = 'PENDING'").get(companyId).count;
 
       const completionRate = total > 0 ? Math.round((completed / total) * 1000) / 10 : 0;
 
@@ -2703,7 +2758,7 @@ const server = http.createServer(async (req, res) => {
         return `${m}분`;
       };
 
-      const stepAgg = db.prepare(`
+      const stepAgg = await db.prepare(`
         SELECT
           AVG(CASE WHEN assigned_at IS NOT NULL AND created_at IS NOT NULL AND julianday(assigned_at) > julianday(created_at)
                    THEN (julianday(assigned_at) - julianday(created_at)) * 1440.0 END) as s1_min,
@@ -2728,7 +2783,7 @@ const server = http.createServer(async (req, res) => {
       const avgHours = stepAgg.overall_n > 0 ? (avgMinutes / 60).toFixed(1) : '0.0';
 
       // 취약/다발 구역 분석 (Hotspots)
-      const hotspotsRaw = db.prepare(`
+      const hotspotsRaw = await db.prepare(`
         SELECT l.name as loc_name, l.floor, count(t.id) as count
         FROM tickets t
         LEFT JOIN locations l ON t.location_id = l.id
@@ -2745,9 +2800,9 @@ const server = http.createServer(async (req, res) => {
       }));
 
       // 직무 그룹별 처리 현황 (target_group_role_id 기준 실측 집계)
-      const roles = db.prepare('SELECT id, name, category FROM custom_roles WHERE company_id = ?').all(companyId);
-      const groupPerformance = roles.map(r => {
-        const tStats = db.prepare(`
+      const roles = await db.prepare('SELECT id, name, category FROM custom_roles WHERE company_id = ?').all(companyId);
+      const groupPerformance = await Promise.all(roles.map(async r => {
+        const tStats = await db.prepare(`
           SELECT count(*) as total,
                  SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp,
                  AVG(CASE WHEN status = 'COMPLETED' AND completed_at IS NOT NULL AND created_at IS NOT NULL AND julianday(completed_at) >= julianday(created_at)
@@ -2756,8 +2811,8 @@ const server = http.createServer(async (req, res) => {
           WHERE company_id = ? AND target_group_role_id = ? AND status != 'CANCELLED'
         `).get(companyId, r.id);
 
-        const gTotal = tStats.total || 0;
-        const gComp = tStats.comp || 0;
+        const gTotal = Number(tStats.total || 0);
+        const gComp = Number(tStats.comp || 0);
         const gRate = gTotal > 0 ? Math.round((gComp / gTotal) * 100) + '%' : '-';
         const gAvg = gComp > 0 && tStats.avg_min !== null ? formatMinutesKor(tStats.avg_min) : '-';
         return {
@@ -2767,12 +2822,12 @@ const server = http.createServer(async (req, res) => {
           avg_time: gAvg,
           rate: gRate
         };
-      });
+      }));
 
       // 실무자 개인별 조치 성과 (실측 리드타임)
-      const workers = db.prepare("SELECT id, name, role FROM users WHERE company_id = ? AND role != 'ADMIN'").all(companyId);
-      const workerPerformance = workers.map(w => {
-        const wStats = db.prepare(`
+      const workers = await db.prepare("SELECT id, name, role FROM users WHERE company_id = ? AND role != 'ADMIN'").all(companyId);
+      const workerPerformance = await Promise.all(workers.map(async w => {
+        const wStats = await db.prepare(`
           SELECT count(*) as total,
                  SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp,
                  AVG(CASE WHEN status = 'COMPLETED' AND completed_at IS NOT NULL AND created_at IS NOT NULL AND julianday(completed_at) >= julianday(created_at)
@@ -2781,8 +2836,8 @@ const server = http.createServer(async (req, res) => {
           WHERE company_id = ? AND status != 'CANCELLED' AND (assignee_id = ? OR claimed_by_name = ? OR completed_by_name = ?)
         `).get(companyId, w.id, w.name, w.name);
 
-        const wTotal = wStats.total || 0;
-        const wComp = wStats.comp || 0;
+        const wTotal = Number(wStats.total || 0);
+        const wComp = Number(wStats.comp || 0);
         const wRate = wTotal > 0 ? Math.round((wComp / wTotal) * 100) + '%' : '-';
         const wAvg = wComp > 0 && wStats.avg_min !== null ? formatMinutesKor(wStats.avg_min) : '-';
 
@@ -2797,10 +2852,10 @@ const server = http.createServer(async (req, res) => {
           avg_lead_time: wAvg,
           avg_time: wAvg
         };
-      });
+      }));
 
       // 외주 및 자체 조치 분석 (Outsourcing summary)
-      const outsourceTickets = db.prepare(`
+      const outsourceTickets = await db.prepare(`
         SELECT count(*) as total,
                SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as comp,
                SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as prog
@@ -2867,7 +2922,7 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ [SUPER ADMIN GUARD] 슈퍼 관리자 API 접근 통제
     // ==========================================
     if (pathname.startsWith('/api/super-admin/')) {
-      const session = getSession(req);
+      const session = await getSession(req);
       if (!session || session.role !== 'SUPER_ADMIN') {
         return sendJSON(res, 403, { error: '슈퍼 관리자 권한이 필요합니다.' });
       }
@@ -2875,12 +2930,12 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ [SUPER ADMIN] 1. 플랫폼 총괄 대시보드 통계 API
     if (pathname === '/api/super-admin/overview' && method === 'GET') {
-      const companies = db.prepare('SELECT * FROM companies').all();
-      const totalTickets = db.prepare('SELECT count(*) as count FROM tickets').get().count;
-      const totalUsers = db.prepare('SELECT count(*) as count FROM users').get().count;
+      const companies = await db.prepare('SELECT * FROM companies').all();
+      const totalTickets = await db.prepare('SELECT count(*) as count FROM tickets').get().count;
+      const totalUsers = await db.prepare('SELECT count(*) as count FROM users').get().count;
       let pendingApps = 0;
       try {
-        pendingApps = db.prepare("SELECT count(*) as count FROM company_applications WHERE status = 'PENDING_REVIEW'").get().count;
+        pendingApps = await db.prepare("SELECT count(*) as count FROM company_applications WHERE status = 'PENDING_REVIEW'").get().count;
       } catch (e) {}
       
       let totalStorageUsed = 0;
@@ -2908,12 +2963,12 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ [SUPER ADMIN] 2. 전체 고객사 목록 및 제어 현황 (소프트 삭제 제외)
     if (pathname === '/api/super-admin/companies' && method === 'GET') {
-      const companies = db.prepare("SELECT * FROM companies WHERE status != 'DELETED' ORDER BY created_at DESC").all();
-      return sendJSON(res, 200, companies.map(c => {
+      const companies = await db.prepare("SELECT * FROM companies WHERE status != 'DELETED' ORDER BY created_at DESC").all();
+      const enrichedCompanies = await Promise.all(companies.map(async c => {
         let features = { checklists: true, realtime_sse: true, public_qr: true, outsource: true };
         try { if (c.enabled_features) features = typeof c.enabled_features === 'string' ? JSON.parse(c.enabled_features) : c.enabled_features; } catch(e){}
-        const monthlyUsed = getMonthlyTicketCount(c.id);
-        const messageStats = getMonthlyMessageStats(c.id);
+        const monthlyUsed = await getMonthlyTicketCount(c.id);
+        const messageStats = await getMonthlyMessageStats(c.id);
         return {
           ...c,
           monthly_used_count: monthlyUsed,
@@ -2923,6 +2978,7 @@ const server = http.createServer(async (req, res) => {
           storage_pct: Math.min(100, Math.round(((c.storage_used_mb || 0) / (c.storage_limit_mb || 500)) * 100))
         };
       }));
+      return sendJSON(res, 200, enrichedCompanies);
     }
 
     // ⭐️ [SUPER ADMIN] 3. 신규 회사 등록 (모달 생성 + 즉시 프로비저닝 + 랜덤 임시 비밀번호)
@@ -2938,7 +2994,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '관리자 연락처는 010-숫자4자리-숫자4자리 형식으로 입력해주세요.' });
       }
 
-      const existing = db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
+      const existing = await db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
       if (existing) {
         return sendJSON(res, 400, { error: `서브도메인 [${slug}]은(는) 이미 사용 중입니다.` });
       }
@@ -2948,7 +3004,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: '초기 비밀번호는 최소 8자 이상이어야 합니다.' });
       }
 
-      const company = provisionTenant({
+      const company = await provisionTenant({
         name,
         subdomain: slug,
         logo_url,
@@ -2977,23 +3033,23 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ [SUPER ADMIN] 3-1. 가입 신청서 목록 조회
     if (pathname === '/api/super-admin/applications' && method === 'GET') {
-      const applications = db.prepare('SELECT * FROM company_applications ORDER BY created_at DESC').all();
+      const applications = await db.prepare('SELECT * FROM company_applications ORDER BY created_at DESC').all();
       return sendJSON(res, 200, applications);
     }
 
     // ⭐️ [SUPER ADMIN] 3-2. 가입 신청 승인 (프로비저닝 실행)
     if (pathname.match(/^\/api\/super-admin\/applications\/([^/]+)\/approve$/) && method === 'POST') {
       const appId = pathname.split('/')[4];
-      const app = db.prepare('SELECT * FROM company_applications WHERE id = ?').get(appId);
+      const app = await db.prepare('SELECT * FROM company_applications WHERE id = ?').get(appId);
       if (!app) return sendJSON(res, 404, { error: '신청서를 찾을 수 없습니다.' });
       if (app.status === 'APPROVED') return sendJSON(res, 400, { error: '이미 승인된 신청서입니다.' });
 
       const slug = app.requested_slug;
-      const existing = db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
+      const existing = await db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
       if (existing) return sendJSON(res, 400, { error: `이미 해당 서브도메인 [${slug}]을 사용하는 회사가 존재합니다.` });
 
-      const session = getSession(req);
-      const company = provisionTenant({
+      const session = await getSession(req);
+      const company = await provisionTenant({
         name: app.company_name,
         subdomain: slug,
         admin_name: app.admin_name,
@@ -3002,7 +3058,7 @@ const server = http.createServer(async (req, res) => {
         password_hash: app.password_hash
       });
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE company_applications
         SET status = 'APPROVED', reviewer_id = ?, company_id = ?, reviewed_at = datetime('now')
         WHERE id = ?
@@ -3024,11 +3080,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/super-admin\/applications\/([^/]+)\/reject$/) && method === 'POST') {
       const appId = pathname.split('/')[4];
       const { reason } = await parseBody(req);
-      const app = db.prepare('SELECT * FROM company_applications WHERE id = ?').get(appId);
+      const app = await db.prepare('SELECT * FROM company_applications WHERE id = ?').get(appId);
       if (!app) return sendJSON(res, 404, { error: '신청서를 찾을 수 없습니다.' });
 
-      const session = getSession(req);
-      db.prepare(`
+      const session = await getSession(req);
+      await db.prepare(`
         UPDATE company_applications
         SET status = 'REJECTED', review_note = ?, reviewer_id = ?, reviewed_at = datetime('now')
         WHERE id = ?
@@ -3043,7 +3099,7 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const { plan, monthly_ticket_limit, status, storage_limit_mb, enabled_features } = body;
 
-      const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
+      const company = await db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
       if (!company) return sendJSON(res, 404, { error: '고객사를 찾을 수 없습니다.' });
 
       const featStr = enabled_features ? JSON.stringify(enabled_features) : company.enabled_features;
@@ -3052,7 +3108,7 @@ const server = http.createServer(async (req, res) => {
       const newStatus = status || company.status;
       const newStorage = storage_limit_mb !== undefined ? parseInt(storage_limit_mb, 10) : company.storage_limit_mb;
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE companies 
         SET 
           plan = ?, 
@@ -3069,22 +3125,22 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ [SUPER ADMIN] 5. 원클릭 +100건 리포트 충전 API (회사 존재 검증 + 감사 로그)
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)\/charge-100$/) && method === 'POST') {
       const companyId = pathname.split('/')[4];
-      const session = getSession(req);
-      const comp = db.prepare("SELECT id, name, monthly_ticket_limit FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
+      const session = await getSession(req);
+      const comp = await db.prepare("SELECT id, name, monthly_ticket_limit FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '고객사를 찾을 수 없습니다.' });
 
-      db.exec('BEGIN');
+      await db.exec('BEGIN');
       try {
-        db.prepare('UPDATE companies SET monthly_ticket_limit = monthly_ticket_limit + 100 WHERE id = ?').run(companyId);
-        db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        await db.prepare('UPDATE companies SET monthly_ticket_limit = monthly_ticket_limit + 100 WHERE id = ?').run(companyId);
+        await db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
           .run(companyId, session ? session.user.id : 'super_admin', 'SUPER_ADMIN', 'CHARGE_REPORT_100', 'COMPANY', companyId, '+100 리포트 한도 충전', new Date().toISOString());
-        db.exec('COMMIT');
+        await db.exec('COMMIT');
       } catch (err) {
-        try { db.exec('ROLLBACK'); } catch (e) {}
+        try { await db.exec('ROLLBACK'); } catch (e) {}
         throw err;
       }
 
-      const updated = db.prepare('SELECT monthly_ticket_limit, monthly_used_count FROM companies WHERE id = ?').get(companyId);
+      const updated = await db.prepare('SELECT monthly_ticket_limit, monthly_used_count FROM companies WHERE id = ?').get(companyId);
       return sendJSON(res, 200, {
         success: true,
         message: `[${comp.name}] +100건이 즉시 충전되었습니다. (총 한도: ${updated.monthly_ticket_limit}건)`,
@@ -3096,13 +3152,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)\/charge-messages$/) && method === 'POST') {
       const companyId = pathname.split('/')[4];
       const body = await parseBody(req);
-      const session = getSession(req);
-      const comp = db.prepare("SELECT id, name, message_monthly_limit, message_extra_credit, message_enabled FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
+      const session = await getSession(req);
+      const comp = await db.prepare("SELECT id, name, message_monthly_limit, message_extra_credit, message_enabled FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '고객사를 찾을 수 없습니다.' });
 
       if (body.message_enabled !== undefined) {
         const nextEnabled = body.message_enabled ? 1 : 0;
-        db.prepare('UPDATE companies SET message_enabled = ? WHERE id = ?').run(nextEnabled, companyId);
+        await db.prepare('UPDATE companies SET message_enabled = ? WHERE id = ?').run(nextEnabled, companyId);
         return sendJSON(res, 200, { success: true, message: `문자/알림톡 발송 기능이 ${nextEnabled ? '활성화' : '비활성화'}되었습니다.` });
       }
 
@@ -3113,19 +3169,19 @@ const server = http.createServer(async (req, res) => {
 
       const reason = (body.reason || '').trim() || `슈퍼관리자 추가 크레딧 ${delta > 0 ? '+' : ''}${delta}건`;
       const nowIso = new Date().toISOString();
-      db.exec('BEGIN');
+      await db.exec('BEGIN');
       try {
-        db.prepare('UPDATE companies SET message_extra_credit = COALESCE(message_extra_credit, 0) + ? WHERE id = ?').run(delta, companyId);
-        db.prepare('INSERT INTO message_credit_logs (company_id, delta, reason, created_by, created_at) VALUES (?, ?, ?, ?, ?)').run(
+        await db.prepare('UPDATE companies SET message_extra_credit = COALESCE(message_extra_credit, 0) + ? WHERE id = ?').run(delta, companyId);
+        await db.prepare('INSERT INTO message_credit_logs (company_id, delta, reason, created_by, created_at) VALUES (?, ?, ?, ?, ?)').run(
           companyId, delta, reason, session ? session.user.email : 'super_admin', nowIso
         );
-        db.exec('COMMIT');
+        await db.exec('COMMIT');
       } catch (err) {
-        try { db.exec('ROLLBACK'); } catch (e) {}
+        try { await db.exec('ROLLBACK'); } catch (e) {}
         throw err;
       }
 
-      const stats = getMonthlyMessageStats(companyId);
+      const stats = await getMonthlyMessageStats(companyId);
       return sendJSON(res, 200, {
         success: true,
         message: `[${comp.name}] 문자/알림톡 크레딧 ${delta > 0 ? '+' : ''}${delta}건이 반영되었습니다. (월 총 한도: ${stats.total_limit}건)`,
@@ -3137,11 +3193,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)\/messages$/) && method === 'GET') {
       const companyId = pathname.split('/')[4];
       const month = getMonthPrefix(parsedUrl.query && parsedUrl.query.month);
-      const comp = db.prepare('SELECT id, name, subdomain FROM companies WHERE id = ?').get(companyId);
+      const comp = await db.prepare('SELECT id, name, subdomain FROM companies WHERE id = ?').get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '고객사를 찾을 수 없습니다.' });
 
-      const stats = getMonthlyMessageStats(companyId, month);
-      const rawLogs = db.prepare(`
+      const stats = await getMonthlyMessageStats(companyId, month);
+      const rawLogs = await db.prepare(`
         SELECT id, company_id, channel, purpose, recipient_phone, template_code, content_preview, provider, provider_msg_id, status, fail_reason, cost_units, created_at
         FROM message_logs
         WHERE company_id = ? AND substr(created_at, 1, 7) = ?
@@ -3149,7 +3205,7 @@ const server = http.createServer(async (req, res) => {
         LIMIT 200
       `).all(companyId, month);
 
-      const creditLogs = db.prepare(`
+      const creditLogs = await db.prepare(`
         SELECT id, delta, reason, created_by, created_at
         FROM message_credit_logs
         WHERE company_id = ?
@@ -3190,12 +3246,12 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: `[${slug}]은(는) 시스템 예약어로 사용할 수 없습니다. 다른 서브도메인을 입력해주세요.` });
       }
 
-      const existing = db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
+      const existing = await db.prepare('SELECT id FROM companies WHERE subdomain = ?').get(slug);
       if (existing) {
         return sendJSON(res, 400, { error: `입력하신 서브도메인 [${slug}]은(는) 이미 다른 고객사가 사용 중입니다. 다른 이름을 입력해주세요.` });
       }
 
-      const pendingApp = db.prepare("SELECT id FROM company_applications WHERE requested_slug = ? AND status = 'PENDING_REVIEW'").get(slug);
+      const pendingApp = await db.prepare("SELECT id FROM company_applications WHERE requested_slug = ? AND status = 'PENDING_REVIEW'").get(slug);
       if (pendingApp) {
         return sendJSON(res, 400, { error: `서브도메인 [${slug}]에 대한 가입 신청이 이미 접수되어 심사 중입니다.` });
       }
@@ -3203,7 +3259,7 @@ const server = http.createServer(async (req, res) => {
       const autoApprove = process.env.AUTO_APPROVE_SIGNUP !== 'false';
 
       if (autoApprove) {
-        const company = provisionTenant({
+        const company = await provisionTenant({
           name: company_name,
           subdomain: slug,
           admin_name,
@@ -3216,7 +3272,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const appId = 'app_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
           const pwdHash = hashPassword(password || '1234');
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO company_applications (
               id, company_name, requested_slug, admin_name, admin_email, admin_phone,
               password_hash, status, created_at, reviewed_at, review_note
@@ -3225,14 +3281,14 @@ const server = http.createServer(async (req, res) => {
         } catch(e) {}
 
         // 회원가입 직후 해당 관리자로 즉시 로그인 세션 발급
-        const adminUser = db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(company.id);
+        const adminUser = await db.prepare("SELECT id FROM users WHERE company_id = ? AND role = 'ADMIN'").get(company.id);
         let cookieHeader = '';
         if (adminUser) {
-          const session = createSession(adminUser.id, 'SITE_MANAGER', company.id);
-          cookieHeader = `fielder_session=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
+          const session = await createSession(adminUser.id, 'SITE_MANAGER', company.id);
+          cookieHeader = buildSessionCookie('fielder_session', session.sessionId, req);
         }
 
-        const baseOrigin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ('localhost:' + PORT)}`;
+        const baseOrigin = getBaseOrigin(req);
         return sendJSON(res, 201, {
           success: true,
           pending: false,
@@ -3247,7 +3303,7 @@ const server = http.createServer(async (req, res) => {
       } else {
         const appId = 'app_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
         const pwdHash = hashPassword(password || '1234');
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO company_applications (
             id, company_name, requested_slug, admin_name, admin_email, admin_phone,
             password_hash, status, created_at
@@ -3307,8 +3363,8 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, 401, { error: '이메일 또는 비밀번호가 일치하지 않습니다.' });
         }
         clearLoginFailures(rateKey);
-        const session = createSession('super_admin', 'SUPER_ADMIN', null);
-        const cookieHeader = `fielder_session=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
+        const session = await createSession('super_admin', 'SUPER_ADMIN', null);
+        const cookieHeader = buildSessionCookie('fielder_session', session.sessionId, req);
         return sendJSON(res, 200, {
           success: true,
           role: 'SUPER_ADMIN',
@@ -3324,7 +3380,7 @@ const server = http.createServer(async (req, res) => {
       // 특정 회사(tenant)가 지정된 경우 해당 회사 ID 확인
       let tenantComp = null;
       if (tenant && tenant !== 'null' && tenant !== 'undefined') {
-        tenantComp = db.prepare('SELECT id, name, subdomain FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
+        tenantComp = await db.prepare('SELECT id, name, subdomain FROM companies WHERE subdomain = ? OR id = ?').get(tenant, tenant);
       }
 
       // 2) 회사 관리자 / 실무자 통합 조회 (이메일 또는 실무자 이름 기준 — 테넌트 지정 시 타사 폴백 금지)
@@ -3332,14 +3388,14 @@ const server = http.createServer(async (req, res) => {
       const cleanNameLookup = rawIdentifier.trim().toLowerCase();
       if (tenantComp) {
         if (looksLikeEmail) {
-          user = db.prepare(`
+          user = await db.prepare(`
             SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
             FROM users u
             LEFT JOIN companies c ON u.company_id = c.id
             WHERE u.company_id = ? AND LOWER(u.email) = ?
           `).get(tenantComp.id, email);
         } else {
-          user = db.prepare(`
+          user = await db.prepare(`
             SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
             FROM users u
             LEFT JOIN companies c ON u.company_id = c.id
@@ -3348,14 +3404,14 @@ const server = http.createServer(async (req, res) => {
         }
       } else if (!tenant || tenant === 'null' || tenant === 'undefined') {
         if (looksLikeEmail) {
-          user = db.prepare(`
+          user = await db.prepare(`
             SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
             FROM users u
             LEFT JOIN companies c ON u.company_id = c.id
             WHERE LOWER(u.email) = ?
           `).get(email);
         } else {
-          const matches = db.prepare(`
+          const matches = await db.prepare(`
             SELECT u.*, c.name as company_name, c.subdomain, c.status as company_status
             FROM users u
             LEFT JOIN companies c ON u.company_id = c.id
@@ -3395,11 +3451,11 @@ const server = http.createServer(async (req, res) => {
       const nowIso = new Date().toISOString();
       if (!user.password || !user.password.includes(':')) {
         try {
-          db.prepare("UPDATE users SET password = ?, last_login_at = ? WHERE id = ?").run(hashPassword(password), nowIso, user.id);
+          await db.prepare("UPDATE users SET password = ?, last_login_at = ? WHERE id = ?").run(hashPassword(password), nowIso, user.id);
         } catch(e) {}
       } else {
         try {
-          db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(nowIso, user.id);
+          await db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?").run(nowIso, user.id);
         } catch(e) {}
       }
 
@@ -3407,9 +3463,9 @@ const server = http.createServer(async (req, res) => {
       const isCsAgent = user.role === 'CS_AGENT';
       const isMobileClient = isMobileClientRequest(req, body);
       const roleName = isAdmin ? 'SITE_MANAGER' : (isCsAgent ? 'CS_AGENT' : 'WORKER');
-      const session = createSession(user.id, roleName, user.company_id);
+      const session = await createSession(user.id, roleName, user.company_id);
       const cookieName = isMobileClient ? 'fielder_mobile_session' : 'fielder_session';
-      const cookieHeader = `${cookieName}=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
+      const cookieHeader = buildSessionCookie(cookieName, session.sessionId, req);
 
       const targetSlug = user.subdomain && user.subdomain !== 'null' && user.subdomain !== 'undefined' ? user.subdomain : '';
       const redirectUrl = (isMobileClient || (!isAdmin && !isCsAgent)) ? `/mobile?tenant=${targetSlug}` : `/?tenant=${targetSlug}`;
@@ -3434,7 +3490,7 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ [AUTH] 7-0. 본인 비밀번호 변경 API (첫 로그인 강제 변경 포함)
     if (pathname === '/api/change-password' && method === 'POST') {
-      const session = getSession(req);
+      const session = await getSession(req);
       if (!session || session.role === 'SUPER_ADMIN') {
         return sendJSON(res, 401, { error: '로그인이 필요합니다.' });
       }
@@ -3442,28 +3498,28 @@ const server = http.createServer(async (req, res) => {
       if (!newPassword || newPassword.trim().length < 8) {
         return sendJSON(res, 400, { error: '새 비밀번호는 최소 8자 이상이어야 합니다.' });
       }
-      db.prepare('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?').run(hashPassword(newPassword.trim()), session.user.id);
+      await db.prepare('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?').run(hashPassword(newPassword.trim()), session.user.id);
       return sendJSON(res, 200, { success: true, message: '비밀번호가 안전하게 변경되었습니다.' });
     }
 
     // ⭐️ [AUTH] 7-1. 현재 로그인 사용자 세션 조회 API
     if (pathname === '/api/me' && method === 'GET') {
-      const session = getSession(req);
+      const session = await getSession(req);
       if (!session) {
         return sendJSON(res, 401, { logged_in: false, error: '로그인 세션이 없습니다.' });
       }
 
       let companyInfo = null;
       if (session.companyId) {
-        companyInfo = db.prepare('SELECT id, name, subdomain, plan, status FROM companies WHERE id = ?').get(session.companyId);
+        companyInfo = await db.prepare('SELECT id, name, subdomain, plan, status FROM companies WHERE id = ?').get(session.companyId);
       }
 
       let impersonating = false;
       let targetCompany = null;
       if (session.role === 'SUPER_ADMIN') {
-        const targetCid = resolveCompanyId(parsedUrl, null, req);
+        const targetCid = await resolveCompanyId(parsedUrl, null, req);
         if (targetCid) {
-          const tc = db.prepare("SELECT id, name, subdomain FROM companies WHERE id = ? AND status != 'DELETED'").get(targetCid);
+          const tc = await db.prepare("SELECT id, name, subdomain FROM companies WHERE id = ? AND status != 'DELETED'").get(targetCid);
           if (tc) {
             impersonating = true;
             targetCompany = tc;
@@ -3495,14 +3551,14 @@ const server = http.createServer(async (req, res) => {
 
     // ⭐️ [AUTH] 7-1b. 실무자 근무 상태 서버 영속화 API
     if (pathname === '/api/me/work-status' && method === 'PATCH') {
-      const session = getSession(req);
+      const session = await getSession(req);
       if (!session || !session.user) return sendJSON(res, 401, { error: '로그인이 필요합니다.' });
       const body = await parseBody(req);
       const nextStatus = String(body.work_status || '').trim().toUpperCase();
       if (!['WORKING', 'REST', 'OFF'].includes(nextStatus)) {
         return sendJSON(res, 400, { error: '유효하지 않은 근무 상태입니다. (WORKING, REST, OFF)' });
       }
-      db.prepare('UPDATE users SET work_status = ? WHERE id = ?').run(nextStatus, session.user.id);
+      await db.prepare('UPDATE users SET work_status = ? WHERE id = ?').run(nextStatus, session.user.id);
       broadcastSSE('WORK_STATUS_UPDATED', { user_id: session.user.id, work_status: nextStatus, company_id: session.companyId }, session.companyId);
       return sendJSON(res, 200, { success: true, work_status: nextStatus });
     }
@@ -3510,17 +3566,17 @@ const server = http.createServer(async (req, res) => {
     // ⭐️ [CS] 민원 상담 이력 및 회신 메모 기록 API (CS_AGENT 또는 관리자)
     if (pathname.match(/^\/api\/tickets\/([^/]+)\/cs-memo$/) && method === 'POST') {
       const ticketId = pathname.split('/')[3];
-      const session = getSession(req);
-      const companyId = resolveCompanyId(parsedUrl, null, req);
+      const session = await getSession(req);
+      const companyId = await resolveCompanyId(parsedUrl, null, req);
       if (!session || !companyId) return sendJSON(res, 401, { error: '인증이 필요합니다.' });
       const body = await parseBody(req);
       const memo = String(body.cs_memo || '').trim();
       if (!memo) return sendJSON(res, 400, { error: '상담 이력 및 회신 내용을 입력하세요.' });
-      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      const ticketRow = await db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!ticketRow) return sendJSON(res, 404, { error: '해당 민원/작업지시를 찾을 수 없습니다.' });
       const nowIso = new Date().toISOString();
       const agentName = session.user?.name || '상담자';
-      db.prepare('UPDATE tickets SET cs_memo = ?, cs_updated_at = ?, cs_agent_name = ? WHERE id = ? AND company_id = ?')
+      await db.prepare('UPDATE tickets SET cs_memo = ?, cs_updated_at = ?, cs_agent_name = ? WHERE id = ? AND company_id = ?')
         .run(memo, nowIso, agentName, ticketId, companyId);
       broadcastSSE('TICKET_UPDATED', { ticket_id: ticketId, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, cs_memo: memo, cs_agent_name: agentName, cs_updated_at: nowIso });
@@ -3530,9 +3586,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/logout' && method === 'POST') {
       const body = await parseBody(req);
       const isMobile = isMobileClientRequest(req, body);
-      deleteSession(req, isMobile ? 'mobile' : 'console');
+      await deleteSession(req, isMobile ? 'mobile' : 'console');
       const cookieName = isMobile ? 'fielder_mobile_session' : 'fielder_session';
-      const cookieClear = `${cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax`;
+      const cookieClear = clearSessionCookie(cookieName, req);
       return sendJSON(res, 200, { success: true, message: '로그아웃되었습니다.' }, cookieClear);
     }
 
@@ -3541,7 +3597,7 @@ const server = http.createServer(async (req, res) => {
       const companyId = pathname.split('/')[4];
       const { name } = await parseBody(req);
       if (!name) return sendJSON(res, 400, { error: '회사명을 입력해주세요.' });
-      db.prepare('UPDATE companies SET name = ? WHERE id = ?').run(name.trim(), companyId);
+      await db.prepare('UPDATE companies SET name = ? WHERE id = ?').run(name.trim(), companyId);
       return sendJSON(res, 200, { success: true, message: '팀(회사) 이름이 변경되었습니다.' });
     }
 
@@ -3551,24 +3607,24 @@ const server = http.createServer(async (req, res) => {
       const slug = (subdomain || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
       if (!slug) return sendJSON(res, 400, { error: '유효한 서브도메인을 입력해주세요.' });
 
-      const dup = db.prepare('SELECT id FROM companies WHERE subdomain = ? AND id != ?').get(slug, companyId);
+      const dup = await db.prepare('SELECT id FROM companies WHERE subdomain = ? AND id != ?').get(slug, companyId);
       if (dup) return sendJSON(res, 400, { error: '이미 사용 중인 서브도메인입니다.' });
 
-      db.prepare('UPDATE companies SET subdomain = ? WHERE id = ?').run(slug, companyId);
+      await db.prepare('UPDATE companies SET subdomain = ? WHERE id = ?').run(slug, companyId);
       return sendJSON(res, 200, { success: true, message: '팀 도메인이 변경되었습니다.', subdomain: slug });
     }
 
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)\/reset-password$/) && method === 'POST') {
       const companyId = pathname.split('/')[4];
       const { new_password } = await parseBody(req);
-      const comp = db.prepare('SELECT admin_email, name FROM companies WHERE id = ?').get(companyId);
+      const comp = await db.prepare('SELECT admin_email, name FROM companies WHERE id = ?').get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '회사를 찾을 수 없습니다.' });
 
       const rawPwd = (new_password && new_password.trim()) ? new_password.trim() : generateTempPassword(10);
       if (rawPwd.length < 8) {
         return sendJSON(res, 400, { error: '비밀번호는 최소 8자 이상이어야 합니다.' });
       }
-      db.prepare("UPDATE users SET password = ?, must_change_password = 1 WHERE company_id = ? AND (role = 'ADMIN' OR email = ?)").run(hashPassword(rawPwd), companyId, comp.admin_email);
+      await db.prepare("UPDATE users SET password = ?, must_change_password = 1 WHERE company_id = ? AND (role = 'ADMIN' OR email = ?)").run(hashPassword(rawPwd), companyId, comp.admin_email);
       return sendJSON(res, 200, { success: true, temp_password: rawPwd, message: `[${comp.name}] 마스터 관리자 임시 비밀번호가 발급되었습니다.` });
     }
 
@@ -3576,8 +3632,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/api\/super-admin\/companies\/([^/]+)$/) && method === 'DELETE') {
       const companyId = pathname.split('/')[4];
       const body = await parseBody(req);
-      const session = getSession(req);
-      const comp = db.prepare("SELECT id, name, subdomain, status FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
+      const session = await getSession(req);
+      const comp = await db.prepare("SELECT id, name, subdomain, status FROM companies WHERE id = ? AND status != 'DELETED'").get(companyId);
       if (!comp) return sendJSON(res, 404, { error: '회사를 찾을 수 없습니다.' });
       if (comp.id === 'comp_central_tower' || comp.subdomain === 'central') {
         return sendJSON(res, 403, { error: '기본 데모 테넌트(central)는 삭제할 수 없습니다.' });
@@ -3589,16 +3645,16 @@ const server = http.createServer(async (req, res) => {
       }
 
       const nowIso = new Date().toISOString();
-      db.exec('BEGIN');
+      await db.exec('BEGIN');
       try {
-        db.prepare("UPDATE companies SET status = 'DELETED', deleted_at = ?, subdomain = ? WHERE id = ?")
+        await db.prepare("UPDATE companies SET status = 'DELETED', deleted_at = ?, subdomain = ? WHERE id = ?")
           .run(nowIso, `${comp.subdomain}__deleted_${Date.now()}`, companyId);
-        db.prepare("UPDATE users SET is_active = 0 WHERE company_id = ?").run(companyId);
-        db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        await db.prepare("UPDATE users SET is_active = 0 WHERE company_id = ?").run(companyId);
+        await db.prepare('INSERT INTO audit_logs (company_id, actor_id, actor_role, action, target_type, target_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
           .run(companyId, session ? session.user.id : 'super_admin', 'SUPER_ADMIN', 'COMPANY_SOFT_DELETE', 'COMPANY', companyId, `소프트 삭제 확인: ${comp.name}`, nowIso);
-        db.exec('COMMIT');
+        await db.exec('COMMIT');
       } catch (err) {
-        try { db.exec('ROLLBACK'); } catch (e) {}
+        try { await db.exec('ROLLBACK'); } catch (e) {}
         throw err;
       }
 
@@ -3610,7 +3666,7 @@ const server = http.createServer(async (req, res) => {
     // ==========================================
     const tenantPathMatch = pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/?$/);
     if (pathname === '/' || pathname === '/admin' || pathname === '/index.html' || tenantPathMatch) {
-      const session = getSession(req);
+      const session = await getSession(req);
       const queryTenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       const targetTenant = (tenantPathMatch && tenantPathMatch[1] ? tenantPathMatch[1].toLowerCase() : '') || queryTenant;
       if (!session) {
@@ -3637,7 +3693,7 @@ const server = http.createServer(async (req, res) => {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'report.html'));
     }
     if (pathname === '/super-admin' || pathname === '/super-admin/') {
-      const session = getSession(req);
+      const session = await getSession(req);
       if (!session || session.role !== 'SUPER_ADMIN') {
         res.writeHead(302, { Location: '/login?redirect=/super-admin' });
         return res.end();
@@ -3657,7 +3713,7 @@ const server = http.createServer(async (req, res) => {
       const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       let appName = 'Fielder 현장앱';
       if (tenant) {
-        const comp = db.prepare("SELECT name FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
+        const comp = await db.prepare("SELECT name FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
         if (comp && comp.name) appName = `${comp.name} 현장앱`;
       }
       const startUrl = tenant
@@ -3706,6 +3762,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 엔터프라이즈 FMS 서버 정상 가동 중 (PORT: ${PORT})`);
+initDatabase().then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 엔터프라이즈 FMS 서버 정상 가동 중 (PORT: ${PORT})`);
+  });
+}).catch((err) => {
+  console.error("❌ DB 초기화 실패:", err);
+  process.exit(1);
 });
