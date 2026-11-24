@@ -330,6 +330,10 @@ function initDatabase() {
   try { db.exec("ALTER TABLE companies ADD COLUMN deleted_at TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN floors TEXT DEFAULT '[\"B2\", \"B1\", \"1F\", \"2F\", \"3F\", \"4F\", \"5F\", \"6F\", \"7F\", \"8F\"]';"); } catch (e) {}
   try { db.exec("ALTER TABLE companies ADD COLUMN buildings_config TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN work_status TEXT DEFAULT 'WORKING';"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN cs_memo TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN cs_updated_at TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN cs_agent_name TEXT;"); } catch (e) {}
 
   // ⭐️ comp_central_tower 서브도메인 'central' 보장 (/?tenant=null 버그 원천 방지)
   try {

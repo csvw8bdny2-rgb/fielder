@@ -464,7 +464,7 @@
             <span id="sms-badge" class="text-xs text-[#6D6E6F]">인증 대기</span>
           </div>
           <div class="flex space-x-1.5">
-            <input type="tel" id="sms-phone" placeholder="휴대폰 번호 (- 없이 입력)" class="flex-1 h-10 border border-[#EDECEB] bg-white rounded-lg px-3 text-sm outline-none">
+            <input type="tel" id="sms-phone" oninput="resetSmsVerification()" placeholder="휴대폰 번호 (예: 010-1234-5678)" class="flex-1 h-10 border border-[#EDECEB] bg-white rounded-lg px-3 text-sm outline-none">
             <button onclick="sendSmsOtp()" class="px-3 h-10 bg-[#1E1F21] text-white rounded-lg text-xs font-semibold whitespace-nowrap">인증번호 전송</button>
           </div>
           <div id="otp-group" class="hidden flex space-x-1.5 pt-1">
@@ -474,9 +474,9 @@
         </div>
 
         <div>
-          <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">현장 사진 촬영</span>
-          <div onclick="simulateReportPhoto()" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] cursor-pointer text-sm">
-            <div class="font-medium text-[#1E1F21]" id="qr-photo-status">사진 촬영 / 추가</div>
+          <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">현장 사진 촬영 / 첨부</span>
+          <div id="dropzone-qr-photo" onclick="simulateReportPhoto()" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] hover:border-[#13B5EA] cursor-pointer text-sm transition">
+            <div class="font-medium text-[#1E1F21]" id="qr-photo-status">사진 촬영 / 추가 (클릭 또는 드래그)</div>
           </div>
         </div>
 
@@ -486,10 +486,12 @@
           <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">상세 내용</span>
           <textarea id="qr-desc" rows="3" class="w-full border border-[#EDECEB] rounded-xl p-3 text-sm outline-none" placeholder="고장 및 불편 사항을 입력하세요"></textarea>
         </div>
+
+        <div id="qr-submit-result" class="hidden p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs space-y-1"></div>
       </div>
 
-      <div class="p-4 border-t border-[#EDECEB]">
-        <button onclick="submitQrTicket()" class="w-full py-3.5 bg-[#1E1F21] hover:bg-black text-white rounded-xl font-bold text-sm shadow-md">
+      <div class="p-4 border-t border-[#EDECEB] bg-white sticky bottom-0">
+        <button id="btn-submit-qr-ticket" onclick="submitQrTicket()" class="w-full py-3.5 bg-[#1E1F21] hover:bg-black text-white rounded-xl font-bold text-sm shadow-md">
           정비 요청 접수하기
         </button>
       </div>
@@ -605,7 +607,8 @@
     }
 
     async function logoutMobile() {
-      if (!confirm('로그아웃하시겠습니까?')) return;
+      const ok = await openMobileConfirm('로그아웃하시겠습니까?', '로그아웃');
+      if (!ok) return;
       try { await fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: 'mobile' }) }); } catch(e){}
       const tenant = new URLSearchParams(window.location.search).get('tenant') || '';
       location.href = '/login?client=mobile' + (tenant ? '&tenant=' + encodeURIComponent(tenant) : '');
@@ -658,6 +661,7 @@
           if (groupLabel) groupLabel.innerText = `${window.currentMobileCompanyName} · ${currentWorkerGroupName}`;
           const compEl = document.getElementById('profile-company-name');
           if (compEl) compEl.innerText = window.currentMobileCompanyName;
+          applyWorkStatusUI(meData.user.work_status || 'WORKING', true);
         } catch (err) {
           location.href = '/login?client=mobile';
           return;
@@ -694,27 +698,46 @@
       // 4. QR 모드 전달 시 자동 전환
       if (mode === 'qr') {
         setMobileMode('qr');
+        await loadLocations(true, tenant, urlParams.get('locId'));
       } else {
         connectMobileSSE(tenant);
+        await loadLocations(false, tenant, urlParams.get('locId'));
+        await loadWorkerTasks();
+        await loadMobileNotices();
       }
-
-      await loadLocations();
-      await loadWorkerTasks();
-      await loadMobileNotices();
       bindMobilePhotoDropZones();
     }
 
-    async function loadLocations() {
-      const res = await fetch('/api/locations');
-      const locs = await res.json();
+    async function loadLocations(isQr = false, tenant = '', targetLocId = '') {
       const select = document.getElementById('qr-target-location');
-      select.innerHTML = '';
-      locs.forEach(l => {
-        const opt = document.createElement('option');
-        opt.value = l.id;
-        opt.innerText = l.name;
-        select.appendChild(opt);
-      });
+      if (!select) return;
+      try {
+        const url = isQr && tenant
+          ? `/api/public/locations?tenant=${encodeURIComponent(tenant)}`
+          : '/api/locations';
+        const res = await fetch(url);
+        if (!res.ok) {
+          select.innerHTML = '<option value="">구역 정보를 불러오지 못했습니다</option>';
+          return;
+        }
+        const locs = await res.json();
+        select.innerHTML = '';
+        if (!Array.isArray(locs) || locs.length === 0) {
+          select.innerHTML = '<option value="">등록된 구역이 없습니다</option>';
+          return;
+        }
+        locs.forEach(l => {
+          const opt = document.createElement('option');
+          opt.value = l.id;
+          opt.innerText = l.name;
+          select.appendChild(opt);
+        });
+        if (targetLocId && Array.from(select.options).some(o => o.value === targetLocId)) {
+          select.value = targetLocId;
+        }
+      } catch (e) {
+        select.innerHTML = '<option value="">구역 조회 오류</option>';
+      }
     }
 
     async function loadWorkerTasks() {
@@ -1002,6 +1025,7 @@
       bindPhotoDropZone(document.getElementById('dropzone-photo-unresolved'), (f) => handleMobilePhotoFile('unresolved', f));
       bindPhotoDropZone(document.getElementById('dropzone-photo-outsource'), (f) => handleMobilePhotoFile('outsource', f));
       bindPhotoDropZone(document.getElementById('dropzone-staff-report-photo'), (f) => handleStaffReportPhotoFile(f));
+      bindPhotoDropZone(document.getElementById('dropzone-qr-photo'), (f) => handleQrPhotoFile(f));
     }
 
     // 최종 보고 제출 (해결 가능 vs 해결 불가능 vs 외주 의뢰 API 분기 호출)
@@ -1043,7 +1067,7 @@
         const reason = document.getElementById('outsource-reason').value.trim();
         const estDate = document.getElementById('outsource-estimated-date').value.trim();
 
-        await fetch(`/api/tickets/${id}/outsource`, {
+        const res = await fetch(`/api/tickets/${id}/outsource`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1052,108 +1076,196 @@
             partner_name: partner,
             outsource_reason: reason || '자체 수리 불가 전문 영역',
             estimated_date: estDate,
-            photo_url: capturedMobilePhotos.outsource || 'outsource_guide.jpg'
+            photo_url: capturedMobilePhotos.outsource || ''
           })
         });
-
-        alert(`외주 및 아웃소싱 의뢰가 접수되었습니다.\n협력사: ${partner}\n(관리자 및 관제 콘솔에 외주 진행중으로 등록)`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showMobileToast(data.error || data.message || '외주 의뢰 등록에 실패했습니다.', true);
+          return;
+        }
+        showMobileToast(`외주 및 아웃소싱 의뢰가 접수되었습니다. (${partner})`);
       } else {
         // [해결 불가능 경로 - 미해결 계속 대기]
         const catReason = document.getElementById('unresolved-category').value;
         const textReason = document.getElementById('report-notes-unresolved').value.trim();
         const fullReason = textReason ? `[${catReason}] ${textReason}` : catReason;
 
-        await fetch(`/api/tickets/${id}/unresolved`, {
+        const res = await fetch(`/api/tickets/${id}/unresolved`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             worker_id: currentWorkerId,
             worker_name: workerName,
             unresolved_reason: fullReason,
-            unresolved_photo_url: capturedMobilePhotos.unresolved || 'unresolved.jpg'
+            unresolved_photo_url: capturedMobilePhotos.unresolved || ''
           })
         });
-
-        alert(`현장 해결 불가 사유가 등록되었습니다.\n(관리자 진행프로세스에 '미해결 계속 대기'로 잔류합니다)`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showMobileToast(data.error || data.message || '미해결 보고 등록에 실패했습니다.', true);
+          return;
+        }
+        showMobileToast('현장 미해결 사유가 등록되었습니다. (관리자 확인 대기)');
       }
 
       closeWorkerDetail();
       await loadWorkerTasks();
     }
 
+    let qrVerifyToken = '';
+    let capturedQrPhotoData = '';
+
+    function resetSmsVerification() {
+      if (isSmsVerified || qrVerifyToken) {
+        isSmsVerified = false;
+        qrVerifyToken = '';
+        const badge = document.getElementById('sms-badge');
+        if (badge) {
+          badge.innerText = '인증 대기 (번호 변경됨)';
+          badge.className = 'text-xs text-[#E5983B] font-semibold';
+        }
+      }
+    }
+
     // SMS 인증 로직
     async function sendSmsOtp() {
       const phone = document.getElementById('sms-phone').value.trim();
-      if (!phone) { alert('휴대폰 번호를 입력하세요.'); return; }
+      if (!phone) { showMobileToast('휴대폰 번호를 입력하세요.', true); return; }
+      const tenant = new URLSearchParams(window.location.search).get('tenant') || '';
       const res = await fetch('/api/auth/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone, tenant })
       });
-      const data = await res.json();
-      if (!res.ok) { alert(data.message || '인증번호 발송 실패'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showMobileToast(data.message || data.error || '인증번호 발송 실패', true); return; }
       document.getElementById('otp-group').classList.remove('hidden');
-      alert(data.message || '인증번호 6자리가 발송되었습니다.');
+      showMobileToast(data.message || '인증번호 6자리가 발송되었습니다.');
     }
 
     async function verifySmsOtp() {
       const phone = document.getElementById('sms-phone').value.trim();
       const otp = document.getElementById('sms-otp').value.trim();
+      const tenant = new URLSearchParams(window.location.search).get('tenant') || '';
       const res = await fetch('/api/auth/sms/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp })
+        body: JSON.stringify({ phone, otp, tenant })
       });
-      const data = await res.json();
-      if (!res.ok) { alert(data.message || '인증번호 오류'); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showMobileToast(data.message || data.error || '인증번호 오류', true); return; }
       isSmsVerified = true;
-      document.getElementById('sms-badge').innerText = '인증 완료';
-      document.getElementById('sms-badge').className = 'text-[10px] text-[#34A853] font-bold';
-      alert('문자 인증이 완료되었습니다.');
+      qrVerifyToken = data.verification_token || '';
+      const badge = document.getElementById('sms-badge');
+      if (badge) {
+        badge.innerText = '인증 완료';
+        badge.className = 'text-xs text-[#34A853] font-bold';
+      }
+      showMobileToast('문자 인증이 완료되었습니다.');
+    }
+
+    async function handleQrPhotoFile(file) {
+      if (!file || !String(file.type || '').startsWith('image/')) return;
+      if (file.size > 10 * 1024 * 1024) {
+        showMobileToast('사진 파일은 10MB 이하만 첨부할 수 있습니다.', true);
+        return;
+      }
+      let infoText = file.name;
+      if (window.compressImageFile) {
+        try {
+          const res = await window.compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.78 });
+          capturedQrPhotoData = res.dataUrl;
+          infoText = `${res.originalKB}KB -> ${res.compressedKB}KB`;
+        } catch (e) {}
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => { capturedQrPhotoData = ev.target.result || ''; };
+        reader.readAsDataURL(file);
+      }
+      hasReportPhoto = true;
+      document.getElementById('qr-photo-status').innerHTML = `<span class="text-[#34A853] font-bold">현장 사진 등록됨 (${infoText})</span>`;
+      showMobileToast('현장 사진이 첨부되었습니다.');
     }
 
     function simulateReportPhoto() {
-      hasReportPhoto = true;
-      document.getElementById('qr-photo-status').innerHTML = '<span class="text-[#34A853] font-bold">현장 사진 등록됨 (1장)</span>';
-      alert('현장 사진 첨부가 완료되었습니다.');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment';
+      input.onchange = async () => {
+        const file = input.files && input.files[0];
+        if (file) await handleQrPhotoFile(file);
+      };
+      input.click();
     }
 
     async function submitQrTicket() {
-      if (!isSmsVerified) { alert('먼저 휴대폰 문자 인증을 완료해 주세요.'); return; }
+      if (!isSmsVerified || !qrVerifyToken) { showMobileToast('먼저 휴대폰 문자 인증을 완료해 주세요.', true); return; }
       const title = document.getElementById('qr-title').value.trim();
-      if (!title) { alert('신고 제목을 입력하세요.'); return; }
+      if (!title) { showMobileToast('신고 제목을 입력하세요.', true); return; }
       const locId = document.getElementById('qr-target-location').value;
       const cat = document.getElementById('qr-category-select').value;
       const desc = document.getElementById('qr-desc').value.trim();
       const phone = document.getElementById('sms-phone').value.trim();
+      const tenant = new URLSearchParams(window.location.search).get('tenant') || '';
 
-      const res = await fetch('/api/tickets/qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location_id: locId, category: cat, title, description: desc, phone })
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.message || '신고 접수 실패'); return; }
+      const btn = document.getElementById('btn-submit-qr-ticket');
+      if (btn) { btn.disabled = true; btn.innerText = '접수 처리 중...'; }
+      try {
+        const res = await fetch('/api/tickets/qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant,
+            location_id: locId,
+            category: cat,
+            title,
+            description: desc,
+            phone,
+            photo_url: capturedQrPhotoData || '',
+            qr_verify_token: qrVerifyToken
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showMobileToast(data.message || data.error || '신고 접수 실패', true);
+          return;
+        }
 
-      alert(`[접수 완료] 시설관리 관제센터에 정상적으로 등록되었습니다.`);
-      document.getElementById('qr-title').value = '';
-      document.getElementById('qr-desc').value = '';
-      document.getElementById('qr-photo-status').innerText = '사진 촬영 / 추가';
-      hasReportPhoto = false;
+        const resultBox = document.getElementById('qr-submit-result');
+        if (resultBox) {
+          resultBox.innerHTML = `<div class="font-bold">접수 완료 (접수번호: ${data.ticket_no || '-'})</div><div>시설관리 관제센터에 정상 등록되었습니다.</div>`;
+          resultBox.classList.remove('hidden');
+        }
+        showMobileToast(`접수 완료 (${data.ticket_no || ''})`);
+        document.getElementById('qr-title').value = '';
+        document.getElementById('qr-desc').value = '';
+        document.getElementById('qr-photo-status').innerText = '사진 촬영 / 추가 (클릭 또는 드래그)';
+        hasReportPhoto = false;
+        capturedQrPhotoData = '';
+        resetSmsVerification();
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '정비 요청 접수하기'; }
+      }
     }
 
     function setMobileMode(m) {
+      const vw = document.getElementById('view-worker');
+      const vq = document.getElementById('view-qr');
+      const bw = document.getElementById('btn-mode-worker');
+      const bq = document.getElementById('btn-mode-qr');
       if (m === 'worker') {
-        document.getElementById('view-worker').classList.remove('hidden');
-        document.getElementById('view-qr').classList.add('hidden');
-        document.getElementById('btn-mode-worker').className = 'px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition';
-        document.getElementById('btn-mode-qr').className = 'px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition';
+        if (vw) vw.classList.remove('hidden');
+        if (vq) vq.classList.add('hidden');
+        if (bw) bw.className = 'px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition';
+        if (bq) bq.className = 'px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition';
         loadWorkerTasks();
       } else {
-        document.getElementById('view-worker').classList.add('hidden');
-        document.getElementById('view-qr').classList.remove('hidden');
-        document.getElementById('btn-mode-qr').className = 'px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition';
-        document.getElementById('btn-mode-worker').className = 'px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition';
+        if (vw) vw.classList.add('hidden');
+        if (vq) vq.classList.remove('hidden');
+        if (bq) bq.className = 'px-3.5 py-1.5 rounded-lg font-semibold bg-[#1E1F21] text-white transition';
+        if (bw) bw.className = 'px-3.5 py-1.5 rounded-lg font-medium text-[#6D6E6F] hover:text-[#1E1F21] transition';
       }
     }
 
@@ -1208,9 +1320,9 @@
         return;
       }
       if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        alert('아이폰(Safari): 화면 아래 공유 버튼(□↑)을 누른 뒤 [홈 화면에 추가]를 선택해주세요.');
+        showMobileToast('아이폰(Safari): 공유(□↑) → [홈 화면에 추가]를 선택해주세요.');
       } else {
-        alert('브라우저 우측 상단 메뉴(⋮)에서 [홈 화면에 추가] 또는 [앱 설치]를 선택해주세요.');
+        showMobileToast('브라우저 우측 상단 메뉴(⋮)에서 [홈 화면에 추가]를 선택해주세요.');
       }
     }
 
@@ -1307,20 +1419,34 @@
     }
 
     let staffReportPhotoData = '';
-    function handleStaffReportPhotoFile(file) {
+    async function handleStaffReportPhotoFile(file) {
       if (!file || !String(file.type || '').startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        staffReportPhotoData = e.target.result || '';
-        const img = document.getElementById('staff-report-photo-preview');
-        if (img) {
-          img.src = staffReportPhotoData;
-          img.classList.remove('hidden');
-        }
-        const st = document.getElementById('staff-report-photo-status');
-        if (st) st.innerHTML = `<span class="text-[#34A853] font-bold">사진 첨부됨 (${file.name})</span>`;
-      };
-      reader.readAsDataURL(file);
+      if (file.size > 10 * 1024 * 1024) {
+        showMobileToast('사진 파일은 10MB 이하만 첨부할 수 있습니다.', true);
+        return;
+      }
+      let infoText = file.name;
+      if (window.compressImageFile) {
+        try {
+          const res = await window.compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.78 });
+          staffReportPhotoData = res.dataUrl || '';
+          infoText = `${res.originalKB}KB -> ${res.compressedKB}KB`;
+        } catch (e) {}
+      }
+      if (!staffReportPhotoData) {
+        await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => { staffReportPhotoData = e.target.result || ''; resolve(); };
+          reader.readAsDataURL(file);
+        });
+      }
+      const img = document.getElementById('staff-report-photo-preview');
+      if (img && staffReportPhotoData) {
+        img.src = staffReportPhotoData;
+        img.classList.remove('hidden');
+      }
+      const st = document.getElementById('staff-report-photo-status');
+      if (st) st.innerHTML = `<span class="text-[#34A853] font-bold">사진 첨부됨 (${infoText})</span>`;
     }
     function handleStaffReportPhoto(input) {
       const file = input && input.files && input.files[0];
@@ -1410,6 +1536,9 @@
       if (!bodyEl) return;
 
       if (tmplId === 'DEFAULT' || !tmplId) {
+        const bldgSel = document.getElementById('patrol-building');
+        if (bldgSel) bldgSel.onchange = () => onMobileBuildingChange('patrol');
+        populateMobileBuildingDropdowns('patrol');
         if (titleEl) titleEl.innerText = '필수 순찰 점검 체크리스트';
         bodyEl.innerHTML = `
           <label class="flex items-center space-x-2.5 text-[13px] p-3 bg-[#FAF9F8] rounded-xl cursor-pointer leading-snug">
@@ -1748,12 +1877,24 @@
       const compEl = document.getElementById('profile-company-name');
       if (compEl) compEl.innerText = window.currentMobileCompanyName || '-';
 
-      // 통계 계산
+      // 통계 계산 (KST 기준 당일)
       try {
+        const kstToday = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+        const toKstDate = (ts) => {
+          if (!ts) return '';
+          const s = String(ts).trim();
+          if (s.includes('T') && s.endsWith('Z')) {
+            return new Date(new Date(s).getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+          }
+          if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+            return new Date(new Date(s.replace(' ', 'T') + 'Z').getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+          }
+          return s.slice(0, 10);
+        };
         const res = await fetch('/api/tickets');
         const tickets = await res.json();
-        const assigned = tickets.filter(t => t.assignee_id === currentWorkerId || t.claimed_by_name === workerName).length;
-        const completed = tickets.filter(t => t.completed_by_name === workerName && (t.status === 'COMPLETED' || t.status === 'WAITING_APPROVAL')).length;
+        const assigned = tickets.filter(t => (t.assignee_id === currentWorkerId || t.claimed_by_name === workerName) && toKstDate(t.assigned_at || t.started_at || t.created_at) === kstToday).length;
+        const completed = tickets.filter(t => t.completed_by_name === workerName && (t.status === 'COMPLETED' || t.status === 'WAITING_APPROVAL') && toKstDate(t.completed_at || t.updated_at || t.created_at) === kstToday).length;
 
         const statAssigned = document.getElementById('profile-stat-assigned');
         const statCompleted = document.getElementById('profile-stat-completed');
@@ -1762,31 +1903,48 @@
 
         const patrolRes = await fetch('/api/patrol');
         const patrols = await patrolRes.json();
-        const myPatrols = patrols.filter(p => p.user_id === currentWorkerId || p.worker_name === workerName).length;
+        const myPatrols = (Array.isArray(patrols) ? patrols : []).filter(p => (p.user_id === currentWorkerId || p.worker_name === workerName) && toKstDate(p.created_at) === kstToday).length;
         const statPatrol = document.getElementById('profile-stat-patrol');
         if (statPatrol) statPatrol.innerText = myPatrols;
       } catch (e) {}
     }
 
-    // ⭐️ [신규] 근무 상태 토글
-    function setWorkStatus(st) {
+    function applyWorkStatusUI(st, silent = false) {
       const btnWorking = document.getElementById('btn-status-working');
       const btnRest = document.getElementById('btn-status-rest');
       const btnOff = document.getElementById('btn-status-off');
+      if (!btnWorking || !btnRest || !btnOff) return;
 
-      btnWorking.className = 'py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
-      btnRest.className = 'py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
-      btnOff.className = 'py-2 rounded-lg font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
+      btnWorking.className = 'py-2.5 rounded-xl font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
+      btnRest.className = 'py-2.5 rounded-xl font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
+      btnOff.className = 'py-2.5 rounded-xl font-medium bg-[#FAF9F8] border border-[#EDECEB] text-[#6D6E6F] transition';
 
       if (st === 'WORKING') {
-        btnWorking.className = 'py-2 rounded-lg font-bold bg-[#34A853] text-white transition';
-        showMobileToast('근무 상태: 🟢 현장근무 중');
+        btnWorking.className = 'py-2.5 rounded-xl font-bold bg-[#34A853] text-white transition';
+        if (!silent) showMobileToast('근무 상태: 🟢 현장근무 중');
       } else if (st === 'REST') {
-        btnRest.className = 'py-2 rounded-lg font-bold bg-[#E5983B] text-white transition';
-        showMobileToast('근무 상태: ⚪ 휴게/점심시간');
+        btnRest.className = 'py-2.5 rounded-xl font-bold bg-[#E5983B] text-white transition';
+        if (!silent) showMobileToast('근무 상태: ⚪ 휴게/점심시간');
       } else {
-        btnOff.className = 'py-2 rounded-lg font-bold bg-[#F06A6A] text-white transition';
-        showMobileToast('근무 상태: 🔴 퇴근/대기');
+        btnOff.className = 'py-2.5 rounded-xl font-bold bg-[#F06A6A] text-white transition';
+        if (!silent) showMobileToast('근무 상태: 🔴 퇴근/대기');
+      }
+    }
+
+    // ⭐️ [신규] 근무 상태 서버 영속화 토글
+    async function setWorkStatus(st) {
+      applyWorkStatusUI(st, false);
+      try {
+        const res = await fetch('/api/me/work-status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ work_status: st })
+        });
+        if (!res.ok) {
+          showMobileToast('근무 상태 서버 저장에 실패했습니다.', true);
+        }
+      } catch (e) {
+        showMobileToast('근무 상태 저장 중 네트워크 오류가 발생했습니다.', true);
       }
     }
 

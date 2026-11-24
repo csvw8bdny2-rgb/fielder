@@ -66,7 +66,7 @@ function getSession(req, forceClientType = null) {
       };
     } else {
       user = db.prepare(`
-        SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.is_active, u.must_change_password, u.custom_role_id, r.name as role_name
+        SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.is_active, u.must_change_password, COALESCE(u.work_status, 'WORKING') as work_status, u.custom_role_id, r.name as role_name
         FROM users u
         LEFT JOIN custom_roles r ON u.custom_role_id = r.id
         WHERE u.id = ?
@@ -613,15 +613,19 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 403, { error: '슈퍼 관리자 권한이 필요합니다.' });
       }
       const isManagerOrSuper = reqSession.role === 'SITE_MANAGER' || reqSession.role === 'ADMIN' || reqSession.role === 'SUPER_ADMIN';
+      const isCsOrManager = isManagerOrSuper || reqSession.role === 'CS_AGENT';
       const isTicketAdminEndpoint =
         pathname === '/api/tickets/direct-dispatch' ||
         (pathname.match(/^\/api\/tickets\/[^/]+$/) && (method === 'PUT' || method === 'DELETE')) ||
-        (pathname.match(/^\/api\/tickets\/[^/]+\/(close-direct|assign|approve|reject|cancel)$/) && method === 'POST');
+        (pathname.match(/^\/api\/tickets\/[^/]+\/(close-direct|approve|reject|cancel)$/) && method === 'POST');
+      const isTicketAssignEndpoint = pathname.match(/^\/api\/tickets\/[^/]+\/assign$/) && method === 'POST';
+      const isCsMemoEndpoint = pathname.match(/^\/api\/tickets\/[^/]+\/cs-memo$/) && method === 'POST';
       const isAdminOnlyEndpoint =
         isTicketAdminEndpoint ||
-        pathname.startsWith('/api/users') ||
-        pathname.startsWith('/api/roles') ||
-        pathname.startsWith('/api/positions') ||
+        (pathname.startsWith('/api/users') && method !== 'GET') ||
+        (pathname === '/api/users' && method === 'GET' && !isCsOrManager) ||
+        (pathname.startsWith('/api/roles') && method !== 'GET') ||
+        (pathname.startsWith('/api/positions') && method !== 'GET') ||
         pathname.startsWith('/api/blocked-users') ||
         pathname === '/api/analytics' ||
         pathname === '/api/inspections/stats' ||
@@ -630,6 +634,9 @@ const server = http.createServer(async (req, res) => {
         (pathname.startsWith('/api/locations') && method !== 'GET') ||
         (pathname.startsWith('/api/inspections/templates') && method !== 'GET') ||
         (pathname.startsWith('/api/notices') && method !== 'GET' && !pathname.endsWith('/read'));
+      if ((isTicketAssignEndpoint || isCsMemoEndpoint) && !isCsOrManager) {
+        return sendJSON(res, 403, { error: '관리자 또는 민원 상담자 권한이 필요합니다.' });
+      }
       if (isAdminOnlyEndpoint && !isManagerOrSuper) {
         return sendJSON(res, 403, { error: '회사 관리자 권한이 필요합니다.' });
       }
@@ -652,7 +659,7 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, comp);
     }
 
-    // ⭐️ 공개 구역 단건/목록 조회 (비로그인 시 locId 지정 단건만 허용해 전체 구역 열거 차단)
+    // ⭐️ 공개 구역 단건/목록 조회 (QR 민원 접수 시 테넌트 구역 드롭다운 제공)
     if (pathname === '/api/public/locations' && method === 'GET') {
       const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
       const locId = (parsedUrl.query?.locId || parsedUrl.query?.location || '').trim();
@@ -662,10 +669,6 @@ const server = http.createServer(async (req, res) => {
       if (locId) {
         const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? AND id = ?').all(comp.id, locId);
         return sendJSON(res, 200, locs);
-      }
-      const reqSession = getSession(req);
-      if (!reqSession || (reqSession.role !== 'SUPER_ADMIN' && reqSession.companyId !== comp.id)) {
-        return sendJSON(res, 200, []);
       }
       const locs = db.prepare('SELECT id, building, floor, name, category FROM locations WHERE company_id = ? ORDER BY building ASC, floor ASC, name ASC').all(comp.id);
       return sendJSON(res, 200, locs);
@@ -1569,6 +1572,7 @@ const server = http.createServer(async (req, res) => {
       const users = db.prepare(`
         SELECT u.id, u.company_id, u.role, u.name, u.phone, u.email, u.custom_role_id, u.position_id,
                COALESCE(p.name, u.position_name, '') as position_name,
+               COALESCE(u.work_status, 'WORKING') as work_status,
                u.is_active, u.must_change_password, u.created_at, u.last_login_at, r.name as role_name 
         FROM users u 
         LEFT JOIN custom_roles r ON u.custom_role_id = r.id 
@@ -3147,8 +3151,8 @@ const server = http.createServer(async (req, res) => {
       if (admin_phone && !isValidPhone(admin_phone)) {
         return sendJSON(res, 400, { error: '올바른 휴대폰 번호 형식을 입력해주세요. (예: 010-1234-5678)' });
       }
-      if (!password || String(password).trim().length < 8) {
-        return sendJSON(res, 400, { error: '비밀번호는 최소 8자 이상으로 설정해주세요.' });
+      if (!password || !/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(String(password).trim())) {
+        return sendJSON(res, 400, { error: '비밀번호는 영문, 숫자, 특수문자를 모두 포함하여 최소 8자 이상이어야 합니다.' });
       }
 
       const reservedSlugs = ['www', 'admin', 'super', 'superadmin', 'api', 'login', 'signup', 'app', 'system', 'root'];
@@ -3370,18 +3374,19 @@ const server = http.createServer(async (req, res) => {
       }
 
       const isAdmin = user.role === 'ADMIN';
+      const isCsAgent = user.role === 'CS_AGENT';
       const isMobileClient = isMobileClientRequest(req, body);
-      const roleName = isAdmin ? 'SITE_MANAGER' : 'WORKER';
+      const roleName = isAdmin ? 'SITE_MANAGER' : (isCsAgent ? 'CS_AGENT' : 'WORKER');
       const session = createSession(user.id, roleName, user.company_id);
       const cookieName = isMobileClient ? 'fielder_mobile_session' : 'fielder_session';
       const cookieHeader = `${cookieName}=${session.sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`;
 
       const targetSlug = user.subdomain && user.subdomain !== 'null' && user.subdomain !== 'undefined' ? user.subdomain : '';
-      const redirectUrl = (isMobileClient || !isAdmin) ? `/mobile?tenant=${targetSlug}` : `/?tenant=${targetSlug}`;
+      const redirectUrl = (isMobileClient || (!isAdmin && !isCsAgent)) ? `/mobile?tenant=${targetSlug}` : `/?tenant=${targetSlug}`;
 
       return sendJSON(res, 200, {
         success: true,
-        role: isAdmin ? 'COMPANY_ADMIN' : 'WORKER',
+        role: isAdmin ? 'COMPANY_ADMIN' : (isCsAgent ? 'CS_AGENT' : 'WORKER'),
         must_change_password: !!user.must_change_password,
         user: {
           id: user.id,
@@ -3446,15 +3451,49 @@ const server = http.createServer(async (req, res) => {
           email: session.user.email,
           phone: session.user.phone || '',
           role: session.role,
+          work_status: session.user.work_status || 'WORKING',
           must_change_password: !!session.user.must_change_password,
           custom_role_id: session.user.custom_role_id || null,
           role_name: session.user.role_name || '',
           company_id: session.companyId,
           company_name: targetCompany ? targetCompany.name : (companyInfo ? companyInfo.name : '플랫폼 본부'),
           subdomain: targetCompany ? targetCompany.subdomain : (companyInfo ? (companyInfo.subdomain || 'central') : 'central'),
-          role_title: session.role === 'SUPER_ADMIN' ? '슈퍼관리자' : (session.user.role_title || '')
+          role_title: session.role === 'SUPER_ADMIN' ? '슈퍼관리자' : (session.role === 'CS_AGENT' ? '민원 상담자' : (session.user.role_title || ''))
         }
       });
+    }
+
+    // ⭐️ [AUTH] 7-1b. 실무자 근무 상태 서버 영속화 API
+    if (pathname === '/api/me/work-status' && method === 'PATCH') {
+      const session = getSession(req);
+      if (!session || !session.user) return sendJSON(res, 401, { error: '로그인이 필요합니다.' });
+      const body = await parseBody(req);
+      const nextStatus = String(body.work_status || '').trim().toUpperCase();
+      if (!['WORKING', 'REST', 'OFF'].includes(nextStatus)) {
+        return sendJSON(res, 400, { error: '유효하지 않은 근무 상태입니다. (WORKING, REST, OFF)' });
+      }
+      db.prepare('UPDATE users SET work_status = ? WHERE id = ?').run(nextStatus, session.user.id);
+      broadcastSSE('WORK_STATUS_UPDATED', { user_id: session.user.id, work_status: nextStatus, company_id: session.companyId }, session.companyId);
+      return sendJSON(res, 200, { success: true, work_status: nextStatus });
+    }
+
+    // ⭐️ [CS] 민원 상담 이력 및 회신 메모 기록 API (CS_AGENT 또는 관리자)
+    if (pathname.match(/^\/api\/tickets\/([^/]+)\/cs-memo$/) && method === 'POST') {
+      const ticketId = pathname.split('/')[3];
+      const session = getSession(req);
+      const companyId = resolveCompanyId(parsedUrl, null, req);
+      if (!session || !companyId) return sendJSON(res, 401, { error: '인증이 필요합니다.' });
+      const body = await parseBody(req);
+      const memo = String(body.cs_memo || '').trim();
+      if (!memo) return sendJSON(res, 400, { error: '상담 이력 및 회신 내용을 입력하세요.' });
+      const ticketRow = db.prepare('SELECT id FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+      if (!ticketRow) return sendJSON(res, 404, { error: '해당 민원/작업지시를 찾을 수 없습니다.' });
+      const nowIso = new Date().toISOString();
+      const agentName = session.user?.name || '상담자';
+      db.prepare('UPDATE tickets SET cs_memo = ?, cs_updated_at = ?, cs_agent_name = ? WHERE id = ? AND company_id = ?')
+        .run(memo, nowIso, agentName, ticketId, companyId);
+      broadcastSSE('TICKET_UPDATED', { ticket_id: ticketId, company_id: companyId }, companyId);
+      return sendJSON(res, 200, { success: true, cs_memo: memo, cs_agent_name: agentName, cs_updated_at: nowIso });
     }
 
     // ⭐️ [AUTH] 7-2. 로그아웃 API (세션 삭제 및 쿠키 만료)

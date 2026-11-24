@@ -1579,6 +1579,7 @@
               <label class="block text-[#1E1F21] font-bold text-xs mb-1.5">권한 <span class="text-[#F06A6A]">*</span></label>
               <select id="new-user-role" class="w-full h-11 border border-[#D5D3CF] rounded-lg px-3 text-sm bg-white outline-none font-semibold text-[#1E1F21] focus:border-[#0084B4]">
                 <option value="WORKER">실무자 (현장 앱)</option>
+                <option value="CS_AGENT">민원 상담자 (CS)</option>
                 <option value="ADMIN">관리자 (관제 콘솔)</option>
               </select>
             </div>
@@ -2576,6 +2577,13 @@
           const targetTenant = tParam || meData.user.subdomain || '';
           location.href = '/mobile' + (targetTenant ? `?tenant=${encodeURIComponent(targetTenant)}` : '');
           return;
+        }
+        window.currentConsoleRole = meData.user.role;
+        if (meData.user.role === 'CS_AGENT') {
+          document.getElementById('nav-settings')?.classList.add('hidden');
+          document.getElementById('mob-nav-settings')?.classList.add('hidden');
+          document.getElementById('nav-analytics')?.classList.add('hidden');
+          document.getElementById('mob-nav-analytics')?.classList.add('hidden');
         }
         // 슈퍼관리자가 테넌트 없이 / 에 진입한 경우 즉시 슈퍼관리자 센터로 이동 (회사명 undefined 방지)
         if (meData.user.role === 'SUPER_ADMIN' && !meData.impersonating) {
@@ -4935,18 +4943,27 @@
         const posBadge = u.position_name
           ? `<span class="px-2 py-0.5 rounded text-xs font-bold bg-[#FAF9F8] border border-[#D5D3CF] text-[#1E1F21]">${esc(u.position_name)}</span>`
           : `<span class="text-[#A0A1A2]">-</span>`;
+        const wsMap = {
+          WORKING: '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-[#0F9D58] border border-emerald-200">🟢 근무</span>',
+          REST: '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-[#D97706] border border-amber-200">⚪ 휴게</span>',
+          OFF: '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-[#C53030] border border-rose-200">🔴 퇴근</span>'
+        };
+        const wsBadge = u.role === 'WORKER' ? (wsMap[u.work_status || 'WORKING'] || wsMap.WORKING) : '';
+        const roleBadgeCls = u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : (u.role === 'CS_AGENT' ? 'bg-teal-50 text-teal-700' : 'bg-[#4573D2]/10 text-[#4573D2]');
+        const roleLabel = u.role === 'ADMIN' ? '관리자' : (u.role === 'CS_AGENT' ? '민원 상담자' : '실무자');
         tr.innerHTML = `
           <td class="px-3.5 py-2.5 font-bold text-[#1E1F21] cursor-pointer hover:text-[#0084B4] whitespace-nowrap" onclick="editUser('${u.id}')" title="클릭하여 사용자 정보 수정">
             <span class="inline-flex items-center space-x-1">
               <span>${esc(u.name)}</span>
+              ${wsBadge}
               ${isInactive ? '<span class="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px]">비활성</span>' : ''}
             </span>
           </td>
           <td class="px-3.5 py-2.5 whitespace-nowrap">${posBadge}</td>
           <td class="px-3.5 py-2.5 font-medium text-[#1E1F21] whitespace-nowrap">${u.role_name ? esc(u.role_name) : '<span class="text-[#A0A1A2]">전체 총괄</span>'}</td>
           <td class="px-3.5 py-2.5 whitespace-nowrap">
-            <span class="px-2 py-0.5 rounded text-xs font-semibold ${u.role === 'ADMIN' ? 'bg-[#8250DF]/10 text-[#8250DF]' : 'bg-[#4573D2]/10 text-[#4573D2]'}">
-              ${u.role === 'ADMIN' ? '관리자' : '실무자'}
+            <span class="px-2 py-0.5 rounded text-xs font-semibold ${roleBadgeCls}">
+              ${roleLabel}
             </span>
           </td>
           <td class="px-3.5 py-2.5 text-[#6D6E6F] whitespace-nowrap font-mono">${esc(u.phone || '-')}</td>
@@ -5343,6 +5360,9 @@
         };
 
         sseSource.addEventListener('TICKET_CREATED', onEvent);
+        sseSource.addEventListener('WORK_STATUS_UPDATED', () => {
+          if (typeof loadUsers === 'function') loadUsers();
+        });
         sseSource.addEventListener('TICKET_UPDATED', onEvent);
         sseSource.addEventListener('TICKET_CLAIMED', onEvent);
         sseSource.addEventListener('TICKET_ASSIGNED', onEvent);

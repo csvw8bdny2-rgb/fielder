@@ -213,7 +213,7 @@
                 <input type="checkbox" id="agree-terms" onchange="checkIndividual()" class="w-4 h-4 rounded accent-[#0084B4] cursor-pointer">
                 <span>[필수] 서비스 이용 약관</span>
               </label>
-              <button type="button" onclick="alert('Fielder 이용약관: 데이터 보안 및 서비스 품질 준수.')" class="text-[#005B82] font-semibold underline hover:text-[#002B41]">보기</button>
+              <button type="button" onclick="openTermsModal('terms')" class="text-[#005B82] font-semibold underline hover:text-[#002B41]">보기</button>
             </div>
 
             <div class="flex items-center justify-between">
@@ -221,7 +221,7 @@
                 <input type="checkbox" id="agree-privacy" onchange="checkIndividual()" class="w-4 h-4 rounded accent-[#0084B4] cursor-pointer">
                 <span>[필수] 개인정보 수집 및 이용 동의</span>
               </label>
-              <button type="button" onclick="alert('개인정보 수집 동의: 안전한 보안 관리 준수.')" class="text-[#005B82] font-semibold underline hover:text-[#002B41]">보기</button>
+              <button type="button" onclick="openTermsModal('privacy')" class="text-[#005B82] font-semibold underline hover:text-[#002B41]">보기</button>
             </div>
 
             <div class="flex items-center justify-between">
@@ -229,7 +229,7 @@
                 <input type="checkbox" id="agree-age" onchange="checkIndividual()" class="w-4 h-4 rounded accent-[#0084B4] cursor-pointer">
                 <span>[필수] 만 14세 이상입니다.</span>
               </label>
-              <button type="button" onclick="alert('만 14세 이상 관리자용 시스템입니다.')" class="text-[#005B82] font-semibold underline hover:text-[#002B41]">보기</button>
+              <button type="button" onclick="openTermsModal('age')" class="text-[#005B82] font-semibold underline hover:text-[#002B41]">보기</button>
             </div>
           </div>
         </div>
@@ -250,6 +250,8 @@
           <p class="text-[13px] text-[#4B5563]">관리자 계정으로 사용할 정보를 입력하세요.</p>
         </div>
 
+        <div id="signup-step2-error" class="hidden px-3.5 py-2.5 rounded-xl bg-[#FEF2F2] border border-[#FCA5A5] text-[#991B1B] text-xs font-medium"></div>
+
         <form onsubmit="handleStep2Submit(event)" class="space-y-4">
           <div class="space-y-1 text-left">
             <label for="user-name" class="block text-[13px] font-semibold text-[#4B5563]">성명</label>
@@ -263,8 +265,13 @@
 
           <div class="space-y-1 text-left">
             <label for="user-password" class="block text-[13px] font-semibold text-[#4B5563]">비밀번호</label>
-            <input type="password" id="user-password" required minlength="8" placeholder="비밀번호 (최소 8자 이상)" class="w-full h-11 border border-[#D1D5DB] rounded-xl px-4 text-sm font-medium outline-none bg-white text-[#1E1F21] placeholder:text-[#6B7280] transition-colors">
-            <p class="text-xs text-[#4B5563] mt-1">• 영문/숫자/특수문자 조합 최소 8자 이상 입력해주세요.</p>
+            <input type="password" id="user-password" required minlength="8" oninput="checkSignupPasswordPolicy()" placeholder="영문/숫자/특수문자 조합 8자 이상" class="w-full h-11 border border-[#D1D5DB] rounded-xl px-4 text-sm font-medium outline-none bg-white text-[#1E1F21] placeholder:text-[#6B7280] transition-colors">
+            <div id="pw-policy-checklist" class="flex flex-wrap gap-2 text-xs text-[#6B7280] mt-1">
+              <span id="pw-chk-len">✗ 8자 이상</span>
+              <span id="pw-chk-alpha">✗ 영문</span>
+              <span id="pw-chk-num">✗ 숫자</span>
+              <span id="pw-chk-spec">✗ 특수문자</span>
+            </div>
           </div>
 
           <div class="space-y-1 text-left">
@@ -288,6 +295,8 @@
           <h1 class="text-2xl font-semibold text-[#002B41] tracking-tight">회사 및 도메인 설정</h1>
           <p class="text-[13px] text-[#4B5563]">독립된 관제 시스템 도메인이 자동 생성되며 100건 한도가 부여됩니다.</p>
         </div>
+
+        <div id="signup-step3-error" class="hidden px-3.5 py-2.5 rounded-xl bg-[#FEF2F2] border border-[#FCA5A5] text-[#991B1B] text-xs font-medium"></div>
 
         <form onsubmit="handleFinalSignup(event)" class="space-y-4">
           <div class="space-y-1 text-left">
@@ -462,23 +471,76 @@
       window.scrollTo(0, 0);
     }
 
+    function showSignupError(step, msg) {
+      const box = document.getElementById(`signup-step${step}-error`);
+      if (!box) return;
+      if (!msg) { box.classList.add('hidden'); box.textContent = ''; return; }
+      box.textContent = msg;
+      box.classList.remove('hidden');
+    }
+
+    function checkSignupPasswordPolicy() {
+      const pwd = document.getElementById('user-password')?.value || '';
+      const setItem = (id, ok, label) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = `${ok ? '✓' : '✗'} ${label}`;
+        el.className = ok ? 'text-[#0F9D58] font-bold' : 'text-[#6B7280]';
+      };
+      setItem('pw-chk-len', pwd.length >= 8, '8자 이상');
+      setItem('pw-chk-alpha', /[A-Za-z]/.test(pwd), '영문');
+      setItem('pw-chk-num', /\d/.test(pwd), '숫자');
+      setItem('pw-chk-spec', /[^A-Za-z0-9]/.test(pwd), '특수문자');
+    }
+
+    function openTermsModal(kind) {
+      const titles = {
+        terms: '서비스 이용 약관',
+        privacy: '개인정보 수집 및 이용 동의',
+        age: '만 14세 이상 확인'
+      };
+      const bodies = {
+        terms: 'Fielder 시설관리운영시스템은 고객사의 시설 점검, 민원 접수, 작업지시 이력을 안전하게 보관하며 서비스 안정성 및 데이터 보안을 준수합니다.',
+        privacy: '서비스 제공 및 본인 식별을 위해 성명, 이메일, 휴대폰 번호를 수집하며 목적 달성 후 관련 법령에 따라 안전하게 파기합니다.',
+        age: '본 서비스는 사업장 시설관리 담당자 및 만 14세 이상 이용자를 대상으로 제공됩니다.'
+      };
+      let modal = document.getElementById('signup-terms-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'signup-terms-modal';
+        modal.className = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs';
+        modal.innerHTML = `
+          <div class="bg-white border border-[#E5E7EB] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <h3 id="terms-modal-title" class="text-base font-bold text-[#002B41]"></h3>
+            <p id="terms-modal-body" class="text-xs text-[#4B5563] leading-relaxed"></p>
+            <button type="button" onclick="document.getElementById('signup-terms-modal').classList.add('hidden')" class="btn-sky w-full py-2.5 rounded-xl text-xs">확인</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+      document.getElementById('terms-modal-title').textContent = titles[kind] || '안내';
+      document.getElementById('terms-modal-body').textContent = bodies[kind] || '';
+      modal.classList.remove('hidden');
+    }
+
     function handleStep2Submit(e) {
       e.preventDefault();
+      showSignupError(2, '');
       const name = document.getElementById('user-name').value.trim();
       const email = document.getElementById('user-email').value.trim();
       const pwd = document.getElementById('user-password').value;
       const pwdConfirm = document.getElementById('user-password-confirm').value;
 
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        alert('올바른 이메일 주소를 입력해주세요.');
+        showSignupError(2, '올바른 이메일 주소를 입력해주세요.');
         return;
       }
-      if (pwd.length < 8) {
-        alert('비밀번호는 최소 8자 이상이어야 합니다.');
+      if (!/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(pwd)) {
+        showSignupError(2, '비밀번호는 영문, 숫자, 특수문자를 모두 포함하여 최소 8자 이상이어야 합니다.');
         return;
       }
       if (pwd !== pwdConfirm) {
-        alert('비밀번호가 일치하지 않습니다.');
+        showSignupError(2, '비밀번호가 일치하지 않습니다.');
         return;
       }
 
@@ -503,12 +565,13 @@
 
     async function handleFinalSignup(e) {
       e.preventDefault();
+      showSignupError(3, '');
       const companyName = document.getElementById('company-name').value.trim();
       const subdomain = document.getElementById('subdomain').value.trim().toLowerCase();
       const phone = document.getElementById('admin-phone').value.trim();
 
       if (phone && !/^010-\d{4}-\d{4}$/.test(phone)) {
-        alert('연락처는 010-0000-0000 형식의 숫자만 입력할 수 있습니다.');
+        showSignupError(3, '연락처는 010-0000-0000 형식의 숫자만 입력할 수 있습니다.');
         return;
       }
 
@@ -536,7 +599,7 @@
 
         const data = await res.json();
         if (!res.ok) {
-          alert('가입 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'));
+          showSignupError(3, '가입 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'));
           btn.disabled = false;
           btn.textContent = '100건 무료로 Fielder 시작하기';
           return;
@@ -580,7 +643,7 @@
 
         goToStep(4);
       } catch (err) {
-        alert('서버 오류: ' + err.message);
+        showSignupError(3, '서버 오류: ' + err.message);
         btn.disabled = false;
         btn.textContent = '100건 무료로 Fielder 시작하기';
       }
