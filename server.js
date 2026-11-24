@@ -329,18 +329,19 @@ function generateTempPassword(len = 10) {
   return crypto.randomBytes(8).toString('base64url').slice(0, len);
 }
 
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const loginAttemptMap = new Map();
-function checkLoginRateLimit(key) {
+function checkLoginRateLimit(key, maxAttempts = 10) {
   const now = Date.now();
   const rec = loginAttemptMap.get(key);
   if (!rec) return { blocked: false };
-  if (now - rec.firstAttempt > 5 * 60 * 1000) {
+  if (now - rec.firstAttempt > LOGIN_LOCKOUT_MS) {
     loginAttemptMap.delete(key);
     return { blocked: false };
   }
-  if (rec.count >= 5) {
-    const remainSec = Math.ceil((5 * 60 * 1000 - (now - rec.firstAttempt)) / 1000);
-    return { blocked: true, message: `로그인 시도가 너무 많습니다. ${remainSec}초 후 다시 시도해주세요.` };
+  if (rec.count >= maxAttempts) {
+    const remainMin = Math.max(1, Math.ceil((LOGIN_LOCKOUT_MS - (now - rec.firstAttempt)) / 60000));
+    return { blocked: true, message: `로그인 시도가 너무 많습니다. 약 ${remainMin}분 후 다시 시도해주세요.` };
   }
   return { blocked: false };
 }
@@ -348,7 +349,7 @@ function checkLoginRateLimit(key) {
 function recordLoginFailure(key) {
   const now = Date.now();
   const rec = loginAttemptMap.get(key);
-  if (!rec || now - rec.firstAttempt > 5 * 60 * 1000) {
+  if (!rec || now - rec.firstAttempt > LOGIN_LOCKOUT_MS) {
     loginAttemptMap.set(key, { count: 1, firstAttempt: now });
   } else {
     rec.count += 1;
@@ -357,6 +358,35 @@ function recordLoginFailure(key) {
 
 function clearLoginFailures(key) {
   loginAttemptMap.delete(key);
+}
+
+function getAllowedCorsOrigin(req) {
+  const reqOrigin = String(req?.headers?.origin || '').trim();
+  if (APP_BASE_URL) {
+    try {
+      const allowed = new URL(APP_BASE_URL).origin;
+      return reqOrigin === allowed ? allowed : allowed;
+    } catch (e) {}
+  }
+  if (reqOrigin) {
+    try {
+      const host = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '');
+      if (host && new URL(reqOrigin).host === host) return reqOrigin;
+    } catch (e) {}
+  }
+  return APP_BASE_URL || (req?.headers?.host ? `${isSecureRequest(req) ? 'https' : 'http'}://${req.headers.host}` : '');
+}
+
+function applySecurityHeaders(headers, req) {
+  headers['X-Content-Type-Options'] = 'nosniff';
+  headers['X-Frame-Options'] = 'SAMEORIGIN';
+  headers['Referrer-Policy'] = 'strict-origin-when-cross-origin';
+  headers['Permissions-Policy'] = 'camera=(self), microphone=(), geolocation=()';
+  headers['Cross-Origin-Opener-Policy'] = 'same-origin';
+  if (isSecureRequest(req)) {
+    headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+  }
+  return headers;
 }
 
 function parseBody(req) {
@@ -374,14 +404,15 @@ function parseBody(req) {
   });
 }
 
-function sendJSON(res, status, data, cookieHeader = null) {
-  const headers = {
+function sendJSON(res, status, data, cookieHeader = null, req = null) {
+  const origin = getAllowedCorsOrigin(req);
+  const headers = applySecurityHeaders({
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-  };
+    ...(origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : {}),
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Type'
+  }, req);
   if (cookieHeader) {
     headers['Set-Cookie'] = cookieHeader;
   }
@@ -402,14 +433,17 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
-function serveStaticFile(res, filePath, contentType) {
+function serveStaticFile(res, filePath, contentType, req = null) {
   if (fs.existsSync(filePath)) {
     const ext = path.extname(filePath).toLowerCase();
     const mime = contentType || MIME_TYPES[ext] || 'text/html';
-    res.writeHead(200, { 'Content-Type': mime + (mime.startsWith('text/') || mime.includes('javascript') || mime.includes('json') ? '; charset=utf-8' : '') });
+    const headers = applySecurityHeaders({
+      'Content-Type': mime + (mime.startsWith('text/') || mime.includes('javascript') || mime.includes('json') ? '; charset=utf-8' : '')
+    }, req);
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   } else {
-    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.writeHead(404, applySecurityHeaders({ 'Content-Type': 'text/plain; charset=utf-8' }, req));
     res.end('404 Not Found');
   }
 }
@@ -602,11 +636,12 @@ const server = http.createServer(async (req, res) => {
   const method = req.method;
 
   if (method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    });
+    const origin = getAllowedCorsOrigin(req);
+    res.writeHead(204, applySecurityHeaders({
+      ...(origin ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : {}),
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Type'
+    }, req));
     return res.end();
   }
 
@@ -2639,18 +2674,19 @@ const server = http.createServer(async (req, res) => {
       const ipKey = `ip:${clientIp}`;
       const pHits = prune(global._otpRateMap.get(phoneKey) || [], 24 * 3600 * 1000);
       const pMinHits = pHits.filter(t => nowMs - t < 60 * 1000);
-      const ipMinHits = prune(global._otpRateMap.get(ipKey) || [], 60 * 1000);
+      const ipHourKey = `iph:${clientIp}`;
+      const ipHourHits = prune(global._otpRateMap.get(ipHourKey) || [], 60 * 60 * 1000);
       if (pMinHits.length >= 1) {
         const waitSec = Math.max(1, Math.ceil((60 * 1000 - (nowMs - pMinHits[pMinHits.length - 1])) / 1000));
         return sendJSON(res, 429, { error: 'COOLDOWN', message: `동일 번호 재발송은 ${waitSec}초 후 가능합니다.` });
       }
-      if (pHits.length >= 10 || ipMinHits.length >= 10) {
-        return sendJSON(res, 429, { error: 'RATE_LIMITED', message: '일일 인증번호 발송 한도를 초과했습니다. 내일 다시 시도해주세요.' });
+      if (pHits.length >= 10 || ipHourHits.length >= 20) {
+        return sendJSON(res, 429, { error: 'RATE_LIMITED', message: '인증번호 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.' });
       }
       pHits.push(nowMs);
-      ipMinHits.push(nowMs);
+      ipHourHits.push(nowMs);
       global._otpRateMap.set(phoneKey, pHits);
-      global._otpRateMap.set(ipKey, ipMinHits);
+      global._otpRateMap.set(ipHourKey, ipHourHits);
 
       const blocked = await db.prepare('SELECT reason FROM blocked_users WHERE phone = ?').get(cleanPhone);
       if (blocked) {
@@ -3335,7 +3371,11 @@ const server = http.createServer(async (req, res) => {
       const clientIp = getClientIp(req);
       const rateKey = `${clientIp}:${email}`;
 
-      const rl = checkLoginRateLimit(rateKey);
+      const isMobileClientReq = isMobileClientRequest(req, body);
+      const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'admin@fielder.kr').toLowerCase();
+      const isStrictAccount = email === superAdminEmail || (!isMobileClientReq && rawIdentifier.includes('@'));
+      const maxLoginAttempts = isStrictAccount ? 5 : 10;
+      const rl = checkLoginRateLimit(rateKey, maxLoginAttempts);
       if (rl.blocked) {
         return sendJSON(res, 429, { error: rl.message });
       }
@@ -3352,7 +3392,6 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 1) 슈퍼 관리자 계정 체크 (환경변수 필수 - 기본 비밀번호 미사용)
-      const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || 'admin@fielder.kr').toLowerCase();
       if (email === superAdminEmail) {
         const superAdminPw = process.env.SUPER_ADMIN_PASSWORD;
         if (!superAdminPw) {
@@ -3707,7 +3746,19 @@ const server = http.createServer(async (req, res) => {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'signup.html'));
     }
     if (pathname === '/mobile' || pathname === '/mobile/') {
-      return serveStaticFile(res, path.join(PUBLIC_DIR, 'mobile.html'));
+      const mode = String(parsedUrl.query?.mode || '').trim().toLowerCase();
+      if (mode === 'qr') {
+        return serveStaticFile(res, path.join(PUBLIC_DIR, 'mobile_qr.html'), null, req);
+      }
+      const mobSession = await getSession(req, 'mobile') || await getSession(req);
+      if (!mobSession) {
+        const tenant = String(parsedUrl.query?.tenant || '').trim().toLowerCase();
+        const redirectTarget = encodeURIComponent(u.pathname + u.search);
+        const loginLoc = `/login?client=mobile&redirect=${redirectTarget}${tenant ? '&tenant=' + encodeURIComponent(tenant) : ''}`;
+        res.writeHead(302, applySecurityHeaders({ Location: loginLoc, 'Cache-Control': 'no-store' }, req));
+        return res.end();
+      }
+      return serveStaticFile(res, path.join(PUBLIC_DIR, 'mobile.html'), null, req);
     }
     if (pathname === '/manifest.json') {
       const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();

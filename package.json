@@ -4,7 +4,7 @@
   "description": "Fielder - 시설관리운영시스템 (Facility Management System)",
   "main": "server.js",
   "scripts": {
-    "build": "npx tailwindcss -i ./src/input.css -o ./public/assets/app.css --minify",
+    "build": "npx tailwindcss -i ./src/input.css -o ./public/assets/app.css --minify && npx esbuild public/ui-enhance.js --minify --outfile=public/assets/ui-enhance.min.js && npx esbuild src/mobile-qr.js --minify --outfile=public/assets/mobile-qr.min.js",
     "start": "node server.js"
   },
   "keywords": [
@@ -24,6 +24,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "tailwindcss": "^3.4.19"
   }
 }
