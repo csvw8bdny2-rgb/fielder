@@ -4901,7 +4901,8 @@
         currentUsers.filter(u => u.role === 'WORKER').forEach(w => {
           const opt = document.createElement('option');
           opt.value = w.id;
-          opt.innerText = `${w.name} (${w.role_name || '일반'}) - ${w.email || ''}`;
+          const wsLabel = w.work_status === 'REST' ? '휴게중' : (w.work_status === 'OFF' ? '퇴근/대기' : '근무중');
+          opt.innerText = `[${wsLabel}] ${w.name} (${w.role_name || '일반'}) - ${w.email || ''}`;
           woWorkerSelect.appendChild(opt);
         });
       }

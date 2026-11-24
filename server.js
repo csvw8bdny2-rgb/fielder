@@ -1208,13 +1208,13 @@ const server = http.createServer(async (req, res) => {
       const existing = db.prepare('SELECT company_id, assignee_id, started_at, claimed_by_name FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
       if (!existing) return sendJSON(res, 404, { error: '해당 회사의 작업지시를 찾을 수 없습니다.' });
       if (existing.started_at && existing.assignee_id && existing.assignee_id !== effWorkerId) {
-        return sendJSON(res, 400, {
+        return sendJSON(res, 409, {
           error: 'ALREADY_CLAIMED',
           message: `이미 다른 실무자(${existing.claimed_by_name || '동료 실무자'})가 접수한 작업입니다.`
         });
       }
 
-      db.prepare(`
+      const claimUpd = db.prepare(`
         UPDATE tickets 
         SET 
           status = 'IN_PROGRESS',
@@ -1222,11 +1222,41 @@ const server = http.createServer(async (req, res) => {
           claimed_by_name = ?,
           completed_by_name = ?,
           started_at = datetime('now')
-        WHERE id = ? AND company_id = ?
-      `).run(effWorkerId, effWorkerName, effWorkerName, ticketId, companyId);
+        WHERE id = ? AND company_id = ? AND (started_at IS NULL OR assignee_id IS NULL OR assignee_id = ?)
+      `).run(effWorkerId, effWorkerName, effWorkerName, ticketId, companyId, effWorkerId);
+
+      if (!claimUpd || claimUpd.changes === 0) {
+        const latest = db.prepare('SELECT claimed_by_name FROM tickets WHERE id = ? AND company_id = ?').get(ticketId, companyId);
+        return sendJSON(res, 409, {
+          error: 'ALREADY_CLAIMED',
+          message: `이미 다른 담당자(${latest?.claimed_by_name || '동료 실무자'})가 접수했습니다.`
+        });
+      }
 
       broadcastSSE('TICKET_CLAIMED', { ticket_id: ticketId, worker_name: effWorkerName, company_id: companyId }, companyId);
       return sendJSON(res, 200, { success: true, message: `${effWorkerName}님이 작업을 정상 접수하였습니다. 현장 조치를 시작하세요.` });
+    }
+
+    // ⭐️ [POST] /api/tickets/:id/unclaim (실무자 접수 취소 -> 팀 풀로 복귀)
+    if (pathname.match(/^\/api\/tickets\/([^/]+)\/unclaim$/) && method === 'POST') {
+      const ticketId = pathname.split('/')[3];
+      const body = await parseBody(req);
+      const reqSession = getSession(req);
+      const companyId = resolveCompanyId(parsedUrl, body, req);
+      if (!companyId || !reqSession?.user) return sendJSON(res, 401, { error: '인증이 필요합니다.' });
+
+      const effWorkerId = reqSession.user.id;
+      const upd = db.prepare(`
+        UPDATE tickets
+        SET status = 'PENDING', assignee_id = NULL, claimed_by_name = NULL, completed_by_name = NULL, started_at = NULL
+        WHERE id = ? AND company_id = ? AND target_type = 'GROUP' AND status = 'IN_PROGRESS' AND assignee_id = ?
+      `).run(ticketId, companyId, effWorkerId);
+
+      if (!upd || upd.changes === 0) {
+        return sendJSON(res, 400, { error: '접수 취소할 수 없는 작업지시입니다. (본인이 접수한 진행중 팀 작업만 취소 가능)' });
+      }
+      broadcastSSE('TICKET_UPDATED', { ticket_id: ticketId, company_id: companyId }, companyId);
+      return sendJSON(res, 200, { success: true, message: '접수가 취소되어 팀 작업 목록으로 복귀되었습니다.' });
     }
 
     // [POST] /api/tickets/:id/assign (작업 지시 발송)

@@ -474,7 +474,10 @@
         </div>
 
         <div>
-          <span class="block text-xs text-[#6D6E6F] mb-1.5 font-medium">현장 사진 촬영 / 첨부</span>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="block text-xs text-[#6D6E6F] font-medium">현장 사진 촬영 / 첨부</span>
+            <button type="button" id="btn-clear-qr-photo" onclick="clearQrPhoto()" class="hidden text-xs font-bold text-[#F06A6A] hover:underline">첨부 삭제</button>
+          </div>
           <div id="dropzone-qr-photo" onclick="simulateReportPhoto()" class="border border-dashed border-[#EDECEB] rounded-xl p-4 text-center bg-[#FAF9F8] hover:border-[#13B5EA] cursor-pointer text-sm transition">
             <div class="font-medium text-[#1E1F21]" id="qr-photo-status">사진 촬영 / 추가 (클릭 또는 드래그)</div>
           </div>
@@ -587,6 +590,7 @@
       });
     }
 
+    let sseOpenedOnce = false;
     function connectMobileSSE(tenant) {
       if (mobileSse) {
         try { mobileSse.close(); } catch (e) {}
@@ -594,6 +598,13 @@
       const qs = new URLSearchParams({ client: 'mobile' });
       if (tenant) qs.set('tenant', tenant);
       mobileSse = new EventSource(`/api/events?${qs.toString()}`);
+      mobileSse.onopen = () => {
+        if (sseOpenedOnce) {
+          loadWorkerTasks();
+          loadMobileNotices();
+        }
+        sseOpenedOnce = true;
+      };
       ['TICKET_CREATED', 'TICKET_UPDATED', 'TICKET_ASSIGNED', 'TICKET_CLAIMED', 'COMPANY_UPDATED'].forEach(evt => {
         mobileSse.addEventListener(evt, () => {
           loadWorkerTasks();
@@ -809,6 +820,17 @@
               </button>
             </div>
           `;
+        } else if (isGroupTask && isClaimedByMe && !isWaitingApproval) {
+          actionButtonHtml = `
+            <div class="flex items-center space-x-2">
+              <button onclick="unclaimWorkerTask('${t.id}')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#4B5563] text-xs font-bold rounded-xl whitespace-nowrap">
+                접수취소
+              </button>
+              <button onclick="openWorkerDetail('${t.id}', '${escapedTitle}', true, 'RESOLVED')" class="px-3.5 py-2 bg-[#1E1F21] hover:bg-black text-white text-[13px] font-bold rounded-xl shadow-sm whitespace-nowrap">
+                조치 보고
+              </button>
+            </div>
+          `;
         } else {
           // 개인으로 내려왔거나 본인이 이미 접수한 경우 [조치 보고] 버튼만 표시 (외주/아웃소싱 버튼 삭제)
           actionButtonHtml = `
@@ -910,6 +932,23 @@
         return;
       }
       showMobileToast('작업이 접수되었습니다. 현장 조치 후 [조치 보고]를 등록하세요.');
+      await loadWorkerTasks();
+    }
+
+    async function unclaimWorkerTask(ticketId) {
+      const ok = await openMobileConfirm('접수를 취소하고 팀 작업 목록으로 되돌리시겠습니까?', '접수 취소');
+      if (!ok) return;
+      const res = await fetch(`/api/tickets/${ticketId}/unclaim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showMobileToast(data.error || data.message || '접수 취소에 실패했습니다.', true);
+        return;
+      }
+      showMobileToast('접수가 취소되어 팀 목록으로 복귀되었습니다.');
       await loadWorkerTasks();
     }
 
@@ -1016,7 +1055,13 @@
       });
       el.addEventListener('drop', (e) => {
         const files = e.dataTransfer && e.dataTransfer.files;
-        if (files && files[0]) onFile(files[0]);
+        if (files && files[0]) {
+          if (!String(files[0].type || '').startsWith('image/')) {
+            showMobileToast('이미지 파일(JPG, PNG 등)만 첨부할 수 있습니다.', true);
+            return;
+          }
+          onFile(files[0]);
+        }
       });
     }
 
@@ -1166,7 +1211,10 @@
     }
 
     async function handleQrPhotoFile(file) {
-      if (!file || !String(file.type || '').startsWith('image/')) return;
+      if (!file || !String(file.type || '').startsWith('image/')) {
+        showMobileToast('이미지 파일(JPG, PNG 등)만 첨부할 수 있습니다.', true);
+        return;
+      }
       if (file.size > 10 * 1024 * 1024) {
         showMobileToast('사진 파일은 10MB 이하만 첨부할 수 있습니다.', true);
         return;
@@ -1185,7 +1233,15 @@
       }
       hasReportPhoto = true;
       document.getElementById('qr-photo-status').innerHTML = `<span class="text-[#34A853] font-bold">현장 사진 등록됨 (${infoText})</span>`;
+      document.getElementById('btn-clear-qr-photo')?.classList.remove('hidden');
       showMobileToast('현장 사진이 첨부되었습니다.');
+    }
+
+    function clearQrPhoto() {
+      hasReportPhoto = false;
+      capturedQrPhotoData = '';
+      document.getElementById('qr-photo-status').innerText = '사진 촬영 / 추가 (클릭 또는 드래그)';
+      document.getElementById('btn-clear-qr-photo')?.classList.add('hidden');
     }
 
     function simulateReportPhoto() {
@@ -1235,15 +1291,14 @@
 
         const resultBox = document.getElementById('qr-submit-result');
         if (resultBox) {
-          resultBox.innerHTML = `<div class="font-bold">접수 완료 (접수번호: ${data.ticket_no || '-'})</div><div>시설관리 관제센터에 정상 등록되었습니다.</div>`;
+          const nowStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+          resultBox.innerHTML = `<div class="font-bold">접수 완료 (접수번호: ${data.ticket_no || '-'} · ${nowStr})</div><div>시설관리 관제센터에 정상 등록되었습니다. 중복 접수하지 않으셔도 됩니다.</div>`;
           resultBox.classList.remove('hidden');
         }
         showMobileToast(`접수 완료 (${data.ticket_no || ''})`);
         document.getElementById('qr-title').value = '';
         document.getElementById('qr-desc').value = '';
-        document.getElementById('qr-photo-status').innerText = '사진 촬영 / 추가 (클릭 또는 드래그)';
-        hasReportPhoto = false;
-        capturedQrPhotoData = '';
+        clearQrPhoto();
         resetSmsVerification();
       } finally {
         if (btn) { btn.disabled = false; btn.innerText = '정비 요청 접수하기'; }
