@@ -2588,7 +2588,7 @@
         }
         // 슈퍼관리자가 테넌트 없이 / 에 진입한 경우 즉시 슈퍼관리자 센터로 이동 (회사명 undefined 방지)
         if (meData.user.role === 'SUPER_ADMIN' && !meData.impersonating) {
-          location.href = '/super-admin';
+          location.href = meData.super_admin_path || '/super-admin';
           return;
         }
         // 테넌트가 없는 일반 접근 차단
@@ -2611,7 +2611,7 @@
             leftSpan.appendChild(strongEl);
             leftSpan.appendChild(document.createTextNode(' 회사 콘솔 (쓰기 작업은 감사 로그에 기록됩니다)'));
             const backLink = document.createElement('a');
-            backLink.href = '/super-admin';
+            backLink.href = meData.super_admin_path || '/super-admin';
             backLink.className = 'px-3 py-1 rounded bg-amber-900 text-white hover:bg-black text-[11px] font-bold whitespace-nowrap';
             backLink.textContent = '슈퍼관리자 센터로 돌아가기';
             banner.appendChild(leftSpan);

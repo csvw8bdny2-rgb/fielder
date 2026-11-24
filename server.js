@@ -11,6 +11,8 @@ const { sendSmsOtpMessage, isLiveSmsConfigured } = require('./sms.js');
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const APP_BASE_URL = String(process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+const RAW_SA_PATH = String(process.env.SUPER_ADMIN_PATH || '/super-admin').trim();
+const SUPER_ADMIN_PATH = (RAW_SA_PATH.startsWith('/') ? RAW_SA_PATH : '/' + RAW_SA_PATH).replace(/\/+$/, '') || '/super-admin';
 
 function isSecureRequest(req) {
   const proto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
@@ -3412,7 +3414,7 @@ const server = http.createServer(async (req, res) => {
             email: superAdminEmail,
             role_title: '슈퍼관리자'
           },
-          redirect_url: '/super-admin'
+          redirect_url: SUPER_ADMIN_PATH
         }, cookieHeader);
       }
 
@@ -3570,6 +3572,7 @@ const server = http.createServer(async (req, res) => {
         logged_in: true,
         impersonating,
         target_company: targetCompany,
+        ...(session.role === 'SUPER_ADMIN' ? { super_admin_path: SUPER_ADMIN_PATH } : {}),
         user: {
           id: session.user.id,
           name: session.user.name,
@@ -3716,7 +3719,7 @@ const server = http.createServer(async (req, res) => {
         return res.end();
       }
       if (session.role === 'SUPER_ADMIN' && !targetTenant) {
-        res.writeHead(302, { Location: '/super-admin', 'Cache-Control': 'no-store' });
+        res.writeHead(302, { Location: SUPER_ADMIN_PATH, 'Cache-Control': 'no-store' });
         return res.end();
       }
       if (session.role === 'WORKER') {
@@ -3731,13 +3734,17 @@ const server = http.createServer(async (req, res) => {
     if (pathname.match(/^\/t\/([a-zA-Z0-9_-]+)\/(report|qr)\/?$/)) {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'report.html'));
     }
-    if (pathname === '/super-admin' || pathname === '/super-admin/') {
+    if (SUPER_ADMIN_PATH !== '/super-admin' && (pathname === '/super-admin' || pathname === '/super-admin/')) {
+      res.writeHead(404, applySecurityHeaders({ 'Content-Type': 'text/plain; charset=utf-8' }, req));
+      return res.end('Not Found');
+    }
+    if (pathname === SUPER_ADMIN_PATH || pathname === SUPER_ADMIN_PATH + '/') {
       const session = await getSession(req);
       if (!session || session.role !== 'SUPER_ADMIN') {
-        res.writeHead(302, { Location: '/login?redirect=/super-admin' });
+        res.writeHead(302, { Location: `/login?redirect=${encodeURIComponent(SUPER_ADMIN_PATH)}`, 'Cache-Control': 'no-store' });
         return res.end();
       }
-      return serveStaticFile(res, path.join(PUBLIC_DIR, 'super_admin.html'));
+      return serveStaticFile(res, path.join(PUBLIC_DIR, 'super_admin.html'), null, req);
     }
     if (pathname === '/login' || pathname === '/login/') {
       return serveStaticFile(res, path.join(PUBLIC_DIR, 'login.html'));

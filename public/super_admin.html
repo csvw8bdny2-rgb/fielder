@@ -1589,7 +1589,7 @@
       try {
         const res = await fetch('/api/me');
         if (!res.ok) {
-          location.href = '/login?redirect=/super-admin';
+          location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
           return false;
         }
         const data = await res.json();
@@ -1600,7 +1600,7 @@
         }
         return true;
       } catch (e) {
-        location.href = '/login?redirect=/super-admin';
+        location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
         return false;
       }
     }
