@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>회원가입 - Fielder 종합 관제 센터</title>
+  <title>회원가입 - Fieldon 종합 관제 센터</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap">
   <style>
@@ -163,12 +164,10 @@
   <header class="w-full bg-[#002B41] border-b border-[#001F30] py-3.5 px-4 sm:px-10">
     <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
       <div class="flex items-center space-x-3 cursor-pointer min-w-0" onclick="location.href='/'">
-        <span style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">
-          Fielder
-        </span>
+        <img src="/assets/brand/fieldon-horizontal-dark.svg" alt="Fieldon" class="h-8 w-auto shrink-0">
         <div class="leading-tight min-w-0">
           <div class="flex items-center space-x-1 font-bold text-sm sm:text-base text-white">
-            <span id="signup-header-title">Fielder 통합시설운영본부</span>
+            <span id="signup-header-title">Fieldon 통합시설운영본부</span>
             <span class="text-xs text-[#13B5EA] shrink-0">▾</span>
           </div>
           <span id="signup-header-subtitle" class="text-xs text-[#B8D9E8] font-medium">종합 관제 센터</span>
@@ -323,7 +322,7 @@
           </div>
 
           <button type="submit" id="btn-submit-signup" class="btn-sky w-full h-11 rounded-xl text-sm flex items-center justify-center mt-3">
-            100건 무료로 Fielder 시작하기
+            100건 무료로 Fieldon 시작하기
           </button>
         </form>
 
@@ -376,7 +375,7 @@
   <!-- 3. 푸터 (A안 브랜드 남색 푸터 유지) -->
   <footer class="w-full bg-[#002B41] border-t border-[#001F30] py-4 px-6 text-center text-xs text-[#B8D9E8]">
     <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-      <div>© Fielder 시설관리운영시스템</div>
+      <div>© Fieldon 시설관리운영시스템</div>
       <div class="flex space-x-3">
         <a href="/login" class="hover:text-white">로그인</a>
         <span>·</span>
@@ -500,7 +499,7 @@
         age: '만 14세 이상 확인'
       };
       const bodies = {
-        terms: 'Fielder 시설관리운영시스템은 고객사의 시설 점검, 민원 접수, 작업지시 이력을 안전하게 보관하며 서비스 안정성 및 데이터 보안을 준수합니다.',
+        terms: 'Fieldon 시설관리운영시스템은 고객사의 시설 점검, 민원 접수, 작업지시 이력을 안전하게 보관하며 서비스 안정성 및 데이터 보안을 준수합니다.',
         privacy: '서비스 제공 및 본인 식별을 위해 성명, 이메일, 휴대폰 번호를 수집하며 목적 달성 후 관련 법령에 따라 안전하게 파기합니다.',
         age: '본 서비스는 사업장 시설관리 담당자 및 만 14세 이상 이용자를 대상으로 제공됩니다.'
       };
@@ -601,7 +600,7 @@
         if (!res.ok) {
           showSignupError(3, '가입 실패: ' + (data.error || '잠시 후 다시 시도해주세요.'));
           btn.disabled = false;
-          btn.textContent = '100건 무료로 Fielder 시작하기';
+          btn.textContent = '100건 무료로 Fieldon 시작하기';
           return;
         }
 
@@ -645,7 +644,7 @@
       } catch (err) {
         showSignupError(3, '서버 오류: ' + err.message);
         btn.disabled = false;
-        btn.textContent = '100건 무료로 Fielder 시작하기';
+        btn.textContent = '100건 무료로 Fieldon 시작하기';
       }
     }
 

@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Fielder - 시설관리 종합 관제 시스템</title>
+  <title>Fieldon - 시설관리 종합 관제 시스템</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <script src="/ui-enhance.js"></script>
@@ -25,10 +26,10 @@
       <div class="flex items-center space-x-3 lg:space-x-5 min-w-0 flex-1">
         <!-- 일반 프로젝트 로고 & 회사명 (클릭 시 실시간 모니터링 메뉴로 전환) -->
         <div class="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group py-1.5 pr-2 pl-0 rounded-lg hover:bg-white/10 transition min-w-0 flex-shrink" onclick="navTo('monitoring')" title="실시간 모니터링 메뉴로 이동">
-          <span id="header-company-logo" style="color: #FFFFFF !important;" class="min-w-[32px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-md whitespace-nowrap flex-shrink-0">Fielder</span>
+          <span id="header-company-logo" class="flex items-center shrink-0"><img src="/assets/brand/fieldon-horizontal-dark.svg" alt="Fieldon" class="h-8 w-auto"></span>
           <div class="min-w-0 leading-tight">
             <div class="flex items-center space-x-1">
-              <span class="font-bold text-sm sm:text-base text-white group-hover:text-[#13B5EA] transition truncate whitespace-nowrap max-w-[160px] sm:max-w-[220px]" id="header-company-name">Fielder 통합시설운영본부</span>
+              <span class="font-bold text-sm sm:text-base text-white group-hover:text-[#13B5EA] transition truncate whitespace-nowrap max-w-[160px] sm:max-w-[220px]" id="header-company-name">Fieldon 통합시설운영본부</span>
             </div>
             <span class="text-xs text-slate-300 font-medium leading-tight block mt-0.5 truncate">실시간 관제 대시보드</span>
           </div>
@@ -5067,7 +5068,7 @@
       if (!u) return;
 
       const tenant = getTenantParam() || 'central';
-      const compName = document.getElementById('header-company-name')?.innerText || 'Fielder';
+      const compName = document.getElementById('header-company-name')?.innerText || 'Fieldon';
       const loginIdText = u.email || '-';
       const phoneDigits = (u.phone || '').replace(/\D/g, '');
       const pwHint = u.must_change_password ? '발급된 임시 비밀번호 (첫 로그인 시 변경 필수)' : '설정된 개인 비밀번호';
@@ -5116,7 +5117,7 @@
       if (navigator.share) {
         try {
           await navigator.share({
-            title: 'Fielder 현장 접속 안내',
+            title: 'Fieldon 현장 접속 안내',
             text: msg,
             url: url
           });
@@ -5819,7 +5820,7 @@
           <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #002B41;padding-bottom:12px;margin-bottom:20px;">
             <div>
               <div style="font-size:20px;font-weight:800;color:#002B41;">${compName} · 시설관리 운영 보고서</div>
-              <div style="font-size:12px;color:#64748B;margin-top:2px;">Fielder 통합 관제 리포트</div>
+              <div style="font-size:12px;color:#64748B;margin-top:2px;">Fieldon 통합 관제 리포트</div>
             </div>
             <div style="font-size:11px;color:#64748B;">출력일시: ${nowStr}</div>
           </div>

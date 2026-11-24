@@ -600,7 +600,7 @@ async function provisionTenant({ name, company_name, subdomain, adminName, admin
       storage_limit_mb, storage_used_mb, enabled_features,
       admin_name, admin_email, admin_phone,
       buildings, floors, buildings_config
-    ) VALUES (?, ?, ?, 'Fielder', ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, 'Fieldon', ?, 'ACTIVE', ?, 0, 500, 5, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, companyName, slug, plan || 'FREE', limit, featStr,
     adminN, adminE || `admin@${slug}.fielder.kr`, adminP,
@@ -2710,7 +2710,7 @@ const server = http.createServer(async (req, res) => {
           channel: 'SMS',
           purpose: 'OTP',
           recipient_phone: cleanPhone,
-          content_preview: '[Fielder] 본인확인 인증번호 6자리 발송'
+          content_preview: '[Fieldon] 본인확인 인증번호 6자리 발송'
         });
       }
       console.log(`[SMS OTP] phone=${maskPhone(cleanPhone)} issued=true`);
@@ -3762,7 +3762,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/manifest.json') {
       const tenant = (parsedUrl.query?.tenant || '').trim().toLowerCase();
-      let appName = 'Fielder 현장앱';
+      let appName = 'Fieldon 현장앱';
       if (tenant) {
         const comp = await db.prepare("SELECT name FROM companies WHERE (LOWER(subdomain) = ? OR id = ?) AND status != 'DELETED'").get(tenant, tenant);
         if (comp && comp.name) appName = `${comp.name} 현장앱`;
@@ -3786,9 +3786,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (pathname === '/icon-192.svg') {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#13B5EA"/><stop offset="100%" stop-color="#0084B4"/></linearGradient></defs><rect width="192" height="192" rx="40" fill="#002B41"/><rect x="24" y="24" width="144" height="144" rx="28" fill="url(#g)"/><text x="96" y="114" text-anchor="middle" font-family="sans-serif" font-weight="900" font-size="38" fill="#FFFFFF">Fielder</text></svg>`;
-      res.writeHead(200, { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
-      return res.end(svg);
+      return serveStaticFile(res, path.join(PUBLIC_DIR, 'icon-192.svg'), 'image/svg+xml', req);
     }
     if (pathname === '/sw.js') {
       const sw = `self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));\nself.addEventListener('fetch', () => {});`;

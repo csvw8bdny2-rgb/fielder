@@ -2,13 +2,14 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Fielder 모바일 현장 콘솔</title>
+  <title>Fieldon 모바일 현장 콘솔</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <link id="mobile-pwa-manifest" rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#002B41">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Fielder 현장앱">
+  <meta name="apple-mobile-web-app-title" content="Fieldon 현장앱">
   <link rel="apple-touch-icon" href="/icon-192.svg">
   <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
@@ -30,7 +31,7 @@
       <!-- 상단 헤더 (로그인된 본인 계정 전용) -->
       <div class="bg-[#002B41] px-4 py-3.5 border-b border-[#001F30] text-white flex items-center justify-between gap-2 shrink-0">
         <div class="flex items-center space-x-2.5 min-w-0 flex-1">
-          <span id="mobile-header-logo" style="color: #FFFFFF !important;" class="min-w-[36px] h-8 px-2.5 rounded-lg bg-gradient-to-br from-[#13B5EA] to-[#0084B4] text-white font-black text-xs flex items-center justify-center tracking-wider shadow-sm whitespace-nowrap flex-shrink-0">Fielder</span>
+          <span id="mobile-header-logo" class="flex items-center shrink-0"><img src="/assets/brand/fieldon-horizontal-dark.svg" alt="Fieldon" class="h-7 w-auto"></span>
           <div class="min-w-0 flex-1">
             <span class="text-xs text-slate-300 block leading-tight truncate" id="worker-group-label">소속 확인 중...</span>
             <span id="worker-name-display" class="text-[15px] font-bold text-white block leading-tight truncate">로그인 확인 중...</span>
@@ -663,7 +664,7 @@
           currentWorkerPhone = meData.user.phone || '';
           currentWorkerGroupId = meData.user.custom_role_id || '';
           currentWorkerGroupName = meData.user.role_name || (meData.user.role === 'SITE_MANAGER' ? '관제 관리자' : '현장 실무팀');
-          window.currentMobileCompanyName = meData.user.company_name || 'Fielder';
+          window.currentMobileCompanyName = meData.user.company_name || 'Fieldon';
           if (!tenant && meData.user.subdomain) tenant = meData.user.subdomain;
 
           const nameDisplay = document.getElementById('worker-name-display');

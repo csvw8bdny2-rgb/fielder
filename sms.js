@@ -22,7 +22,7 @@ function isLiveSmsConfigured() {
 
 async function sendSmsOtpMessage(phone, otpCode) {
   const cfg = getSmsConfig();
-  const text = `[Fielder] 본인확인 인증번호는 [${otpCode}]입니다. (5분 내 입력)`;
+  const text = `[Fieldon] 본인확인 인증번호는 [${otpCode}]입니다. (5분 내 입력)`;
   const cleanReceiver = String(phone || '').replace(/\D/g, '');
   const cleanSender = cfg.sender.replace(/\D/g, '');
 
